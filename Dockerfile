@@ -32,17 +32,17 @@ ENV TMOD_SHUTDOWN_MESSAGE="Server is shutting down NOW!"
 # The autosave feature will save the world periodically. The interval is in minutes.
 ENV TMOD_AUTOSAVE_INTERVAL="10"
 
-# Mods which should be downloaded from Steam upon starting the server.
+# Workshop mods to keep current and enable when the server starts.
 # Example format: 2824688072,2824688266,2835214226
+ENV TMOD_MODS=""
+
+# Deprecated compatibility variables. TMOD_MODS takes precedence when non-empty.
 ENV TMOD_AUTODOWNLOAD=""
+ENV TMOD_ENABLEDMODS=""
 
 # Retry transient Steam Workshop failures before aborting startup.
 ENV TMOD_DOWNLOAD_RETRIES="3"
 ENV TMOD_DOWNLOAD_RETRY_DELAY="10"
-
-# The mods we want to enable on the server on startup. Any omitted mods will not be loaded.
-# Example format: 2824688072,2824688266,2835214226
-ENV TMOD_ENABLEDMODS=""
 
 # If you want to specify your own config, set the following to "Yes".
 ENV TMOD_USECONFIGFILE="No"
@@ -128,6 +128,8 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         bash \
         ca-certificates \
+        curl \
+        jq \
         libc6 \
         libgcc-s1 \
         libgssapi-krb5-2 \
@@ -158,24 +160,28 @@ RUN wget --no-verbose --output-document=tModLoader.zip \
     && unzip -o tModLoader.zip \
     && rm tModLoader.zip
 
-COPY DotNetInstall.sh ./LaunchUtils
 COPY entrypoint.sh .
+COPY manage-mods.sh .
 COPY inject.sh /usr/local/bin/inject
 COPY autosave.sh .
 COPY prepare-config.sh .
 
-RUN chmod 755 ./LaunchUtils/DotNetInstall.sh \
-    && chmod 755 ./LaunchUtils/ScriptCaller.sh \
+RUN find ./LaunchUtils -type f -name '*.sh' -exec chmod 755 {} + \
     && chmod 755 ./entrypoint.sh \
+    && chmod 755 ./manage-mods.sh \
     && chmod 755 ./autosave.sh \
     && chmod 755 /usr/local/bin/inject \
     && chmod 755 ./prepare-config.sh \
     && chmod 755 ./start-tModLoaderServer.sh
 
-RUN ./LaunchUtils/DotNetInstall.sh \
-    && dotnet_executable="$(find ./dotnet -type f -name dotnet -print -quit)" \
-    && test -n "$dotnet_executable" \
-    && "$dotnet_executable" --info
+RUN bash -c 'set -Eeo pipefail; \
+        cd ./LaunchUtils; \
+        . ./BashUtils.sh; \
+        LogFile=/tmp/dotnet-install.log; \
+        . ./DotNetVersion.sh; \
+        run_script ./InstallDotNet.sh' \
+    && test -x ./dotnet/dotnet \
+    && ./dotnet/dotnet --info
 
 STOPSIGNAL SIGTERM
 

@@ -89,36 +89,20 @@ Steam Workshop content is stored within `steamMods`.
 The server's Mod Configurations, Mod directory and World directories are stored within `tModLoader`.
 
 
-## Downloading Mods
+## Managing Mods
 Every Workshop item on Steam has a unique identifier which can be found by visiting the store page directly. For example, for the [Calamity Mod](https://steamcommunity.com/sharedfiles/filedetails/?id=2824688072), you can find the Workshop ID from the URL. In this case, **2824688072** is the ID. This Docker container is capable of downloading tModLoader mods directly from the Steam Workshop to streamline the setup process.
 
-In the environment variables passed to the container at runtime, specify the `TMOD_AUTODOWNLOAD` variable with a value of a comma separated list of the Mod IDs you wish to download.
-
-For example, to tell the container to download Calamity and the Calamity Mod Music, specify the following variable:
-```bash
--e TMOD_AUTODOWNLOAD=2824688072,2824688266
-```
-
----
-## Enabling Mods
-To successfully run this container, it is important to understand the difference between **downloading mods** and **enabling mods**.
-
-**Downloading** a mod simply stores it in the Steam Workshop cache, which is stored in the `/data/mods` directory. When mapping `/data` to a HOST directory, this will allow for persistence between container restarts.
-
-**Enabling** a mod tells the container to write the Mod's name to the `enabled.json` file, which tModLoader reads during startup. A Mod must first be downloaded with the `TMOD_AUTODOWNLOAD` variable to be eligible to be enabled.
-
-To enable a mod on the server, specify the `TMOD_ENABLEDMODS` environment variabe with a value of a comma separated list of the Mod IDs you wish to enable. 
+Set `TMOD_MODS` to one comma-separated list of the Workshop IDs the server should keep current **and** enable:
 
 ```bash
--e TMOD_ENABLEDMODS=2824688072,2824688266
+-e TMOD_MODS=2824688072,2824688266
 ```
----
-## Mod Considerations
-There is no need to repeatedly download mods each time you start the container. For this reason, once you have downloaded the mods you want to include on your server, it is safe to **remove** the `TMOD_AUTODOWNLOAD` environment variable, whilst maintaining the `TMOD_ENABLEDMODS` variable to enable them during runtime. Doing so will greatly improve the startup time of the Docker container.
 
-If mods receive updates you wish to download, include the Mod ID again in the `TMOD_AUTODOWNLOAD` variable to download the update. The next time tModLoader starts, the mod will be updated.
+On each start, the container compares the installed Workshop content manifest with Steam's current content manifest. SteamCMD runs only for missing or outdated items. If Steam's metadata endpoint is temporarily unavailable, SteamCMD checks the requested items itself instead of assuming the cache is current. The resolved `.tmod` names are then written atomically to `/data/tModLoader/Mods/enabled.json`.
 
-Additionally, you may at any time remove a mod from the `TMOD_ENABLEDMODS` variable to disable it, though this may cause problems with a world which has modded content.
+Removing an ID from `TMOD_MODS` disables it at the next start but leaves its Workshop files cached. If `TMOD_MODS` is empty, the container leaves the existing Workshop cache and `enabled.json` unchanged.
+
+`TMOD_AUTODOWNLOAD` and `TMOD_ENABLEDMODS` remain available for compatibility with existing deployments, but they are deprecated. A non-empty `TMOD_MODS` value takes precedence over both.
 
 # Environment Variables
 The following are all of the environment variables that are supported by the container. These handle server functionality and Terraria server configurations.
@@ -127,10 +111,11 @@ The following are all of the environment variables that are supported by the con
 | ----------- | ----------- | ----------- |
 | TMOD_SHUTDOWN_MESSAGE | Server is shutting down NOW! | The message which will be sent to the in-game chat upon container shutdown.
 | TMOD_AUTOSAVE_INTERVAL   | 10 | The autosave interval (in minutes) in which the World will be saved.
-| TMOD_AUTODOWNLOAD | N/A | A Comma Separated list of Workshop Mod IDs to download from Steam upon container startup.
+| TMOD_MODS | N/A | A comma-separated list of Workshop Mod IDs to keep current and enable on startup.
 | TMOD_DOWNLOAD_RETRIES | 3 | Number of SteamCMD download attempts before startup fails.
 | TMOD_DOWNLOAD_RETRY_DELAY | 10 | Seconds to wait between SteamCMD download attempts.
-| TMOD_ENABLEDMODS | N/A | A Comma Separated list of Workshop Mod IDs to enable on the tModLoader server upon startup.
+| TMOD_AUTODOWNLOAD | N/A | Deprecated compatibility variable for IDs to download or update.
+| TMOD_ENABLEDMODS | N/A | Deprecated compatibility variable for IDs to enable.
 | TMOD_USECONFIGFILE | No | Set to `Yes` to use a file mounted at `/terraria-server/customconfig.txt` instead of generated environment-variable settings.
 | TMOD_MOTD | A tModLoader server powered by Docker! | The Message of the Day which prints in the chat upon joining the server.
 | TMOD_PASS | docker | The password players must supply to join the server. Set this variable to "N/A" to disable requiring a password on join. (Not Recommended)
@@ -181,8 +166,7 @@ docker run -p 7777:7777 --name tmodloader --rm \
   -v /path/to/data:/data \
   -e TMOD_SHUTDOWN_MESSAGE='Goodbye!' \
   -e TMOD_AUTOSAVE_INTERVAL='15' \
-  -e TMOD_AUTODOWNLOAD='2824688072,2824688266' \
-  -e TMOD_ENABLEDMODS='2824688072,2824688266' \
+  -e TMOD_MODS='2824688072,2824688266' \
   -e TMOD_MOTD='Welcome to my tModLoader Server!' \
   -e TMOD_PASS='secret' \
   -e TMOD_MAXPLAYERS='16' \
