@@ -1,15 +1,24 @@
 # Container Changelog
 
 This changelog records changes made by this maintained container fork. It does
-not reproduce the tModLoader release notes. Image tags such as
-`v2026.07.3.0` identify the bundled upstream tModLoader release; the same tag
-can be rebuilt when this container receives a fix. An image digest is the
-immutable identifier.
+not reproduce the tModLoader release notes. `VERSION` contains the container's
+SemVer core, while each GitHub Release and exact image tag also identifies its
+bundled tModLoader version and release channel. An image digest remains the
+immutable deployment identifier.
 
 ## Unreleased
 
+No unreleased container changes.
+
+## 1.0.0 - 2026-09-08
+
 ### Added
 
+- A container SemVer source of truth in `VERSION`.
+- Composite GitHub Release and Docker tags that identify the container version,
+  tModLoader version, and stable/preview channel.
+- Automated GitHub Releases with the matching container changelog, exact and
+  immutable image references, validation summary, and upstream release link.
 - Real dedicated-server smoke tests in pull-request and publishing workflows.
 - Docker health status based on the server session, startup log, and TCP port.
 - Persistent tModLoader logs under `/data/tModLoader/Logs`.
@@ -18,6 +27,12 @@ immutable identifier.
 - Cached collection membership and `use-cache`/`strict` offline policies.
 - `TMOD_PASS_FILE` support and a configurable graceful-shutdown timeout.
 - Generated-configuration and Workshop regression tests.
+- Automated stable and preview release discovery and publishing to GHCR.
+- A manual workflow for building an exact upstream tModLoader release.
+- `TMOD_MODS` as one source of truth for downloading, updating, and enabling
+  Workshop mods.
+- Workshop manifest comparison so SteamCMD runs only for missing or outdated
+  mods.
 
 ### Changed
 
@@ -29,17 +44,6 @@ immutable identifier.
 - Compose now separates the host port from the container port and sources
   routine settings from `.env`.
 - Scheduled autosave commands can be disabled with an interval of `0`.
-
-## 2026-09-08 - Maintained fork baseline
-
-### Added
-
-- Automated stable and preview release discovery and publishing to GHCR.
-- A manual workflow for building an exact upstream tModLoader release.
-- `TMOD_MODS` as one source of truth for downloading, updating, and enabling
-  Workshop mods.
-- Workshop manifest comparison so SteamCMD runs only for missing or outdated
-  mods.
 
 ### Fixed
 

@@ -5,18 +5,22 @@ on:
     branches-ignore:
       - master
     paths:
+      - VERSION
+      - CHANGELOG.md
       - Dockerfile
       - "*.sh"
       - "tests/**"
       - docker-compose.yml
-      - .github/workflows/docker-ci.yml
+      - ".github/workflows/*.yml"
   pull_request:
     paths:
+      - VERSION
+      - CHANGELOG.md
       - Dockerfile
       - "*.sh"
       - "tests/**"
       - docker-compose.yml
-      - .github/workflows/docker-ci.yml
+      - ".github/workflows/*.yml"
   workflow_dispatch:
 
 permissions:
@@ -33,7 +37,10 @@ jobs:
         run: bash -n ./*.sh tests/*.sh
 
       - name: Lint runtime scripts
-        run: shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh manage-mods.sh prepare-config.sh run-server.sh tests/*.sh
+        run: shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh tests/*.sh
+
+      - name: Test release metadata and notes
+        run: bash tests/release-metadata-test.sh
 
       - name: Validate Compose configuration
         run: docker compose config --quiet

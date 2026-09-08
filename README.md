@@ -5,6 +5,7 @@
 
 [GitHub repository](https://github.com/Crosis47/tmodloader) |
 [GHCR images](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader) |
+[Releases](https://github.com/Crosis47/tmodloader/releases) |
 [Container changelog](CHANGELOG.md) |
 [Contributing](CONTRIBUTING.md) |
 [Security](SECURITY.md)
@@ -316,14 +317,28 @@ The supplied Compose file uses `pull_policy: always`, but an already-created
 container is not replaced merely because a registry tag moved. Running `up -d`
 after `pull` performs that replacement while retaining `./data`.
 
-Available tags:
+The container and tModLoader are versioned independently. `VERSION` is the
+container's SemVer core. The bundled tModLoader version and channel are added to
+each exact release:
 
-- `latest`: newest supported stable tModLoader release.
-- `preview`: newest prerelease when stable and prerelease differ.
-- `vYYYY.MM.X.Y`: a specific upstream tModLoader release.
+| Purpose | Example | Behavior |
+| --- | --- | --- |
+| GitHub Release tag | `1.0.0+tml.v2026.07.3.0.stable` | Strict SemVer using build metadata for the bundled dependency. |
+| Exact Docker tag | `1.0.0-tml-v2026-07-3-0-stable` | Docker-safe SemVer spelling; release workflows refuse to reuse it. |
+| tModLoader lookup | `tml-v2026.07.3.0-stable` | Moves when that tModLoader release receives a newer container build. |
+| Stable channel | `latest` or `stable` | Newest verified stable combination. |
+| Preview channel | `preview` | Newest verified preview combination. |
+| Compatibility | `v2026.07.3.0` | Legacy upstream-only alias retained during migration. |
 
-A version tag can be rebuilt when this container receives a fix. Use the digest
-shown by GHCR when the complete image must be immutable:
+Docker registries do not accept `+` in a tag, so the exact Docker form uses one
+hyphenated prerelease identifier. The terminal `stable` or `preview` text is the
+actual channel; the hyphen is a registry-safe representation of dependency
+metadata rather than a statement that every Docker image is unstable.
+
+Each exact combination also receives a GitHub Release containing its container
+changelog, tModLoader release link, published tags, tested digest, and validation
+summary. Use the digest shown in that release when the complete image must be
+immutable:
 
 ```yaml
 image: ghcr.io/crosis47/tmodloader@sha256:replace-with-reviewed-digest
@@ -383,10 +398,13 @@ change.
 ## Image automation
 
 The publisher checks official tModLoader releases daily and can also build an
-exact release on demand. It builds an untagged candidate digest, runs Bash and
-configuration tests, starts and stops a real dedicated server, and only then
-assigns the public GHCR version and channel tags. A failed candidate cannot move
-`latest`, `preview`, or a version tag.
+exact release on demand. It combines the repository's container `VERSION` with
+the discovered tModLoader version, builds an untagged candidate digest, runs
+Bash and configuration tests, starts and stops a real dedicated server, and
+only then assigns the public GHCR tags and creates the corresponding GitHub
+Release. Release notes are rendered from the matching version section in
+`CHANGELOG.md` and include the exact tested digest. A failed candidate cannot
+move a public tag or create a release.
 
 Images are published to GitHub Container Registry. Docker Hub credentials are
 not required for this repository's release workflow.

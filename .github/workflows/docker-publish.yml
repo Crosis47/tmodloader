@@ -1,20 +1,17 @@
-name: Publish tModLoader images
+name: Publish tModLoader images and releases
 
 on:
   push:
     branches:
       - master
     paths:
+      - VERSION
       - Dockerfile
       - "*.sh"
       - .github/workflows/docker-publish.yml
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:
-
-permissions:
-  contents: read
-  packages: write
 
 concurrency:
   group: publish-tmodloader-images
@@ -24,6 +21,8 @@ jobs:
   releases:
     name: Resolve upstream releases
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       image: ${{ steps.resolve.outputs.image }}
       matrix: ${{ steps.resolve.outputs.matrix }}
@@ -51,9 +50,9 @@ jobs:
               --arg stable "$stable" \
               --arg preview "$preview" \
               '{include: [
-                  {channel: "stable", version: $stable, floating: "latest"},
+                  {channel: "stable", tml_version: $stable},
                   (if $preview != $stable then
-                    {channel: "preview", version: $preview, floating: "preview"}
+                    {channel: "preview", tml_version: $preview}
                   else empty end)
                 ]}'
           )"
@@ -65,16 +64,28 @@ jobs:
           echo "Newest release: $preview"
 
   publish:
-    name: Publish ${{ matrix.channel }} (${{ matrix.version }})
+    name: Publish ${{ matrix.channel }} (${{ matrix.tml_version }})
     needs: releases
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    permissions:
+      contents: write
+      packages: write
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.releases.outputs.matrix) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: Resolve composite release metadata
+        id: metadata
+        env:
+          CHANNEL: ${{ matrix.channel }}
+          TMODLOADER_VERSION: ${{ matrix.tml_version }}
+        run: |
+          container_version="$(tr -d '\r\n' < VERSION)"
+          bash release-metadata.sh "$container_version" "$TMODLOADER_VERSION" "$CHANNEL"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -86,25 +97,47 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check whether scheduled version is already published
+      - name: Protect exact release tags
         id: publication
         env:
+          DOCKER_TAG: ${{ steps.metadata.outputs.docker_tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE: ${{ needs.releases.outputs.image }}
-          VERSION: ${{ matrix.version }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]] && \
-             docker buildx imagetools inspect "$IMAGE:$VERSION" >/dev/null 2>&1; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "$IMAGE:$VERSION already exists; skipping the scheduled rebuild."
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          image_exists=false
+          release_exists=false
+
+          if docker buildx imagetools inspect "$IMAGE:$DOCKER_TAG" >/dev/null 2>&1; then
+            image_exists=true
           fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            release_exists=true
+          fi
+
+          if [[ "$image_exists" == true && "$release_exists" == true ]]; then
+            if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              echo "$RELEASE_TAG is already complete; skipping the scheduled build."
+              exit 0
+            fi
+            echo "Exact release $RELEASE_TAG already exists. Bump VERSION for container changes." >&2
+            exit 1
+          fi
+          if [[ "$image_exists" != "$release_exists" ]]; then
+            echo "Incomplete prior publication for $RELEASE_TAG; reconcile its image and GitHub Release before retrying." >&2
+            exit 1
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
 
       - name: Validate repository
         if: steps.publication.outputs.publish == 'true'
         run: |
           bash -n ./*.sh tests/*.sh
-          shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh manage-mods.sh prepare-config.sh run-server.sh tests/*.sh
+          shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh tests/*.sh
+          bash tests/release-metadata-test.sh
           docker compose config --quiet
 
       - name: Build and publish untagged candidate
@@ -115,13 +148,16 @@ jobs:
           context: .
           platforms: linux/amd64
           build-args: |
-            TMOD_VERSION=${{ matrix.version }}
+            TMOD_VERSION=${{ matrix.tml_version }}
           outputs: type=image,name=${{ needs.releases.outputs.image }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ matrix.version }}
+            org.opencontainers.image.version=${{ steps.metadata.outputs.release_tag }}
             org.opencontainers.image.title=tModLoader dedicated server
+            io.github.crosis47.container.version=${{ steps.metadata.outputs.container_version }}
+            io.github.crosis47.tmodloader.version=${{ matrix.tml_version }}
+            io.github.crosis47.release.channel=${{ matrix.channel }}
           cache-from: type=gha,scope=${{ matrix.channel }}
           cache-to: type=gha,mode=max,scope=${{ matrix.channel }}
           provenance: mode=max
@@ -149,15 +185,68 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: bash tests/server-smoke-test.sh "$IMAGE@$DIGEST"
 
-      - name: Publish verified tags
+      - name: Publish verified image tags
         if: steps.publication.outputs.publish == 'true'
         env:
-          IMAGE: ${{ needs.releases.outputs.image }}
+          CHANNEL: ${{ matrix.channel }}
           DIGEST: ${{ steps.build.outputs.digest }}
-          VERSION: ${{ matrix.version }}
-          FLOATING: ${{ matrix.floating }}
-        run: >-
-          docker buildx imagetools create
-          --tag "$IMAGE:$VERSION"
-          --tag "$IMAGE:$FLOATING"
-          "$IMAGE@$DIGEST"
+          DOCKER_TAG: ${{ steps.metadata.outputs.docker_tag }}
+          IMAGE: ${{ needs.releases.outputs.image }}
+          LEGACY_TAG: ${{ steps.metadata.outputs.legacy_tag }}
+          TMODLOADER_TAG: ${{ steps.metadata.outputs.tml_tag }}
+        run: |
+          tag_args=(
+            --tag "$IMAGE:$DOCKER_TAG"
+            --tag "$IMAGE:$TMODLOADER_TAG"
+            --tag "$IMAGE:$LEGACY_TAG"
+          )
+          if [[ "$CHANNEL" == stable ]]; then
+            tag_args+=(--tag "$IMAGE:latest" --tag "$IMAGE:stable")
+          else
+            tag_args+=(--tag "$IMAGE:preview")
+          fi
+          docker buildx imagetools create "${tag_args[@]}" "$IMAGE@$DIGEST"
+
+      - name: Render GitHub Release notes
+        if: steps.publication.outputs.publish == 'true'
+        env:
+          CHANNEL: ${{ matrix.channel }}
+          CONTAINER_VERSION: ${{ steps.metadata.outputs.container_version }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          DOCKER_TAG: ${{ steps.metadata.outputs.docker_tag }}
+          IMAGE: ${{ needs.releases.outputs.image }}
+          TMODLOADER_TAG: ${{ steps.metadata.outputs.tml_tag }}
+          TMODLOADER_VERSION: ${{ matrix.tml_version }}
+        run: |
+          bash release-notes.sh \
+            "$CONTAINER_VERSION" \
+            "$TMODLOADER_VERSION" \
+            "$CHANNEL" \
+            "$IMAGE" \
+            "$DIGEST" \
+            "$DOCKER_TAG" \
+            "$TMODLOADER_TAG" \
+            true \
+            > "$RUNNER_TEMP/release-notes.md"
+
+      - name: Create GitHub Release
+        if: steps.publication.outputs.publish == 'true'
+        env:
+          CHANNEL: ${{ matrix.channel }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
+          RELEASE_TITLE: ${{ steps.metadata.outputs.release_title }}
+        run: |
+          release_args=(
+            "$RELEASE_TAG"
+            --repo "$GITHUB_REPOSITORY"
+            --target "$GITHUB_SHA"
+            --title "$RELEASE_TITLE"
+            --notes-file "$RUNNER_TEMP/release-notes.md"
+          )
+          if [[ "$CHANNEL" == preview ]]; then
+            release_args+=(--prerelease --latest=false)
+          else
+            release_args+=(--latest)
+          fi
+          gh release create "${release_args[@]}"

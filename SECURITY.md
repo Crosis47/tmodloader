@@ -15,9 +15,11 @@ here as well.
 ## Supported images
 
 Security fixes are applied to images built from the current `master` branch.
-The `latest`, `preview`, and upstream-version tags can be rebuilt as this
-container changes. Pin an image digest when an immutable deployment is needed.
-Older image digests do not receive in-place updates.
+The release workflows refuse to reuse exact composite container/tModLoader
+tags. The `latest`, `stable`, `preview`, tModLoader lookup, and legacy
+upstream-only compatibility aliases can move as the container changes. Pin an
+image digest when an immutable deployment is needed. Older image digests do not
+receive in-place updates.
 
 ## Reporting a vulnerability
 

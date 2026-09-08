@@ -75,10 +75,28 @@ requests.
 - Update `README.md`, `.env.example`, and `CHANGELOG.md` when behavior or
   configuration changes.
 
+## Versioning and changelog
+
+`VERSION` contains the container's `MAJOR.MINOR.PATCH` SemVer core:
+
+- Increment `MAJOR` for incompatible configuration, data-layout, or operational
+  changes.
+- Increment `MINOR` for backward-compatible container features.
+- Increment `PATCH` for backward-compatible fixes and security updates.
+
+A newly discovered tModLoader release does not require a container version bump
+when the container contract is unchanged; its version is recorded separately in
+the composite release tag. Before merging a container change that should publish
+a release, increment `VERSION`, add a matching `## X.Y.Z - YYYY-MM-DD` section
+to `CHANGELOG.md`, and return `## Unreleased` to an empty state. The release
+workflow refuses to reuse an existing composite release tag.
+
 ## Pull requests and publishing
 
 Use an imperative commit subject and explain the user-visible result, risks,
 compatibility impact, and validation in the pull request. Do not manually move
 public image tags as part of a contribution. After changes reach `master`, the
 publisher builds and tests an untagged candidate digest before updating GHCR
-tags.
+tags. It then creates a GitHub Release from the matching versioned changelog
+section. The automation refuses to reuse exact composite tags; only documented
+channel and compatibility aliases move.

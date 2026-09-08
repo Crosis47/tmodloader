@@ -1,25 +1,25 @@
-name: Publish a custom tModLoader release
+name: Publish an exact tModLoader image and release
 
 on:
   workflow_dispatch:
     inputs:
-      release:
+      tmodloader_version:
         description: Exact tModLoader release tag, such as v2026.07.3.0
         required: true
         type: string
-      floating_tag:
-        description: Optionally move a floating tag to this release
+      channel:
+        description: Release channel represented by this build
         required: true
-        default: version-only
+        default: stable
         type: choice
         options:
-          - version-only
-          - latest
+          - stable
           - preview
-
-permissions:
-  contents: read
-  packages: write
+      update_channel_aliases:
+        description: Move latest/stable or preview to this verified build
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: publish-tmodloader-images
@@ -29,36 +29,35 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    permissions:
+      contents: write
+      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Validate release and prepare tags
-        id: release
+      - name: Validate tModLoader release and resolve metadata
+        id: metadata
         env:
-          RELEASE: ${{ inputs.release }}
-          FLOATING_TAG: ${{ inputs.floating_tag }}
+          CHANNEL: ${{ inputs.channel }}
+          TMODLOADER_VERSION: ${{ inputs.tmodloader_version }}
         run: |
           set -euo pipefail
-
-          if [[ ! "$RELEASE" =~ ^v[0-9]{4}\.[0-9]{1,2}\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid tModLoader release tag: $RELEASE" >&2
-            exit 1
-          fi
+          container_version="$(tr -d '\r\n' < VERSION)"
+          bash release-metadata.sh "$container_version" "$TMODLOADER_VERSION" "$CHANNEL"
 
           curl --fail --silent --show-error --location --head \
-            "https://github.com/tModLoader/tModLoader/releases/download/${RELEASE}/tModLoader.zip" \
+            "https://github.com/tModLoader/tModLoader/releases/download/${TMODLOADER_VERSION}/tModLoader.zip" \
             >/dev/null
 
           owner="${GITHUB_REPOSITORY_OWNER,,}"
-          image="ghcr.io/${owner}/tmodloader"
-          echo "image=$image" >> "$GITHUB_OUTPUT"
-          echo "floating=$FLOATING_TAG" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${owner}/tmodloader" >> "$GITHUB_OUTPUT"
 
       - name: Validate repository
         run: |
           bash -n ./*.sh tests/*.sh
-          shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh manage-mods.sh prepare-config.sh run-server.sh tests/*.sh
+          shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh tests/*.sh
+          bash tests/release-metadata-test.sh
           docker compose config --quiet
 
       - name: Set up Docker Buildx
@@ -71,6 +70,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Protect exact release tags
+        env:
+          DOCKER_TAG: ${{ steps.metadata.outputs.docker_tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ steps.metadata.outputs.image }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if docker buildx imagetools inspect "$IMAGE:$DOCKER_TAG" >/dev/null 2>&1; then
+            echo "Exact image tag already exists: $IMAGE:$DOCKER_TAG" >&2
+            exit 1
+          fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Exact GitHub Release already exists: $RELEASE_TAG" >&2
+            exit 1
+          fi
+
       - name: Build and publish untagged candidate
         id: build
         uses: docker/build-push-action@v7
@@ -78,13 +94,16 @@ jobs:
           context: .
           platforms: linux/amd64
           build-args: |
-            TMOD_VERSION=${{ inputs.release }}
-          outputs: type=image,name=${{ steps.release.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+            TMOD_VERSION=${{ inputs.tmodloader_version }}
+          outputs: type=image,name=${{ steps.metadata.outputs.image }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ inputs.release }}
+            org.opencontainers.image.version=${{ steps.metadata.outputs.release_tag }}
             org.opencontainers.image.title=tModLoader dedicated server
+            io.github.crosis47.container.version=${{ steps.metadata.outputs.container_version }}
+            io.github.crosis47.tmodloader.version=${{ inputs.tmodloader_version }}
+            io.github.crosis47.release.channel=${{ inputs.channel }}
           cache-from: type=gha,scope=custom
           cache-to: type=gha,mode=max,scope=custom
           provenance: mode=max
@@ -92,8 +111,8 @@ jobs:
 
       - name: Test candidate scripts
         env:
-          IMAGE: ${{ steps.release.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE: ${{ steps.metadata.outputs.image }}
         run: |
           docker run --rm --entrypoint bash \
             --mount type=bind,source="$PWD",target=/repo,readonly \
@@ -106,19 +125,76 @@ jobs:
 
       - name: Smoke-test candidate server
         env:
-          IMAGE: ${{ steps.release.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE: ${{ steps.metadata.outputs.image }}
         run: bash tests/server-smoke-test.sh "$IMAGE@$DIGEST"
 
-      - name: Publish verified tags
+      - name: Publish verified image tags
         env:
-          IMAGE: ${{ steps.release.outputs.image }}
+          CHANNEL: ${{ inputs.channel }}
           DIGEST: ${{ steps.build.outputs.digest }}
-          RELEASE: ${{ inputs.release }}
-          FLOATING: ${{ steps.release.outputs.floating }}
+          DOCKER_TAG: ${{ steps.metadata.outputs.docker_tag }}
+          IMAGE: ${{ steps.metadata.outputs.image }}
+          LEGACY_TAG: ${{ steps.metadata.outputs.legacy_tag }}
+          TMODLOADER_TAG: ${{ steps.metadata.outputs.tml_tag }}
+          UPDATE_CHANNEL_ALIASES: ${{ inputs.update_channel_aliases }}
         run: |
-          tag_args=(--tag "$IMAGE:$RELEASE")
-          if [[ "$FLOATING" != "version-only" ]]; then
-            tag_args+=(--tag "$IMAGE:$FLOATING")
+          tag_args=(
+            --tag "$IMAGE:$DOCKER_TAG"
+            --tag "$IMAGE:$TMODLOADER_TAG"
+            --tag "$IMAGE:$LEGACY_TAG"
+          )
+          if [[ "$UPDATE_CHANNEL_ALIASES" == true ]]; then
+            if [[ "$CHANNEL" == stable ]]; then
+              tag_args+=(--tag "$IMAGE:latest" --tag "$IMAGE:stable")
+            else
+              tag_args+=(--tag "$IMAGE:preview")
+            fi
           fi
           docker buildx imagetools create "${tag_args[@]}" "$IMAGE@$DIGEST"
+
+      - name: Render GitHub Release notes
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          CONTAINER_VERSION: ${{ steps.metadata.outputs.container_version }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          DOCKER_TAG: ${{ steps.metadata.outputs.docker_tag }}
+          IMAGE: ${{ steps.metadata.outputs.image }}
+          TMODLOADER_TAG: ${{ steps.metadata.outputs.tml_tag }}
+          TMODLOADER_VERSION: ${{ inputs.tmodloader_version }}
+          UPDATE_CHANNEL_ALIASES: ${{ inputs.update_channel_aliases }}
+        run: |
+          bash release-notes.sh \
+            "$CONTAINER_VERSION" \
+            "$TMODLOADER_VERSION" \
+            "$CHANNEL" \
+            "$IMAGE" \
+            "$DIGEST" \
+            "$DOCKER_TAG" \
+            "$TMODLOADER_TAG" \
+            "$UPDATE_CHANNEL_ALIASES" \
+            > "$RUNNER_TEMP/release-notes.md"
+
+      - name: Create GitHub Release
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
+          RELEASE_TITLE: ${{ steps.metadata.outputs.release_title }}
+          UPDATE_CHANNEL_ALIASES: ${{ inputs.update_channel_aliases }}
+        run: |
+          release_args=(
+            "$RELEASE_TAG"
+            --repo "$GITHUB_REPOSITORY"
+            --target "$GITHUB_SHA"
+            --title "$RELEASE_TITLE"
+            --notes-file "$RUNNER_TEMP/release-notes.md"
+          )
+          if [[ "$CHANNEL" == preview ]]; then
+            release_args+=(--prerelease --latest=false)
+          elif [[ "$UPDATE_CHANNEL_ALIASES" == true ]]; then
+            release_args+=(--latest)
+          else
+            release_args+=(--latest=false)
+          fi
+          gh release create "${release_args[@]}"
