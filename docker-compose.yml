@@ -1,20 +1,20 @@
-version: '3'
 services:
   tmodloader:
-    image: 'jacobsmile/tmodloader1.4:latest'
-    container_name: 'tmodloader'
+    image: ghcr.io/crosis47/tmodloader:latest
+    pull_policy: always
+    container_name: tmodloader
+    restart: unless-stopped
+    stop_grace_period: 2m
     ports:
-      - "7777:7777"
-    expose:
-      - "7777"
+      - "7777:7777/tcp"
     environment:
-      # Download the Calamity mod and CalamityMusic mod.
-      - "TMOD_AUTODOWNLOAD=2824688072,2824688266"
-      # Enable the Calamity mod and CalamityMusic mod.
-      - "TMOD_ENABLEDMODS=2824688072,2824688266"
+      # Keep the Calamity mod and CalamityMusic mod current and enabled.
+      - "TMOD_MODS=2824688072,2824688266"
       # Shutdown Message and Autosave Interval (In Minutes)
       - "TMOD_SHUTDOWN_MESSAGE=Goodbye!"
       - "TMOD_AUTOSAVE_INTERVAL=15"
+      - "TMOD_DOWNLOAD_RETRIES=3"
+      - "TMOD_DOWNLOAD_RETRY_DELAY=10"
       # Server Settings
       - "TMOD_MOTD=Welcome to my tModLoader Server!"
       - "TMOD_PASS=secret"
@@ -24,12 +24,12 @@ services:
       - "TMOD_WORLDSIZE=2"
       - "TMOD_WORLDSEED=not the bees!"
       - "TMOD_DIFFICULTY=3"
-      # (Deprecated) If TMOD_USECONFIGFILE is set to "Yes", it is expected to have a serverconfig.txt mapped. The Server Settings above will be ignored.
+      # If TMOD_USECONFIGFILE is "Yes", customconfig.txt is used and the settings above are ignored.
       - "TMOD_USECONFIGFILE=No"
       - "UPDATE_NOTICE=false"
 
     volumes:
-    ##### By default, the below setting will create a data directory on your host where this compose file lives.
+      ##### By default, the below setting will create a data directory on your host where this compose file lives.
       - "./data:/data"
-      # Uncomment the below line if you plan to use a mapped config file. 
-      # - "/path/to/config/config.txt:/root/terraria-server/serverconfig.txt"
+      # Uncomment the below line if you plan to use a mapped config file.
+      # - "/path/to/config/config.txt:/terraria-server/customconfig.txt:ro"
