@@ -126,6 +126,10 @@ jobs:
             --mount type=bind,source="$PWD",target=/repo,readonly \
             "$IMAGE@$DIGEST" \
             /repo/tests/log-filter-test.sh /terraria-server/log-filter.sh /terraria-server/run-server.sh
+          docker run --rm --entrypoint bash \
+            --mount type=bind,source="$PWD",target=/repo,readonly \
+            "$IMAGE@$DIGEST" \
+            /repo/tests/runtime-control-test.sh /usr/local/bin/inject
 
       - name: Smoke-test candidate server
         env:

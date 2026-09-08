@@ -7,6 +7,8 @@ timeout_seconds="${TMOD_SMOKE_TIMEOUT:-600}"
 suffix="${GITHUB_RUN_ID:-local}-$RANDOM-$$"
 container_name="tmodloader-smoke-$suffix"
 volume_name="tmodloader-smoke-$suffix"
+root_probe_name="tmodloader-root-probe-$suffix"
+readonly_probe_name="tmodloader-readonly-probe-$suffix"
 
 case "$(uname -s)" in
     MINGW*|MSYS*) export MSYS_NO_PATHCONV=1 ;;
@@ -14,13 +16,39 @@ esac
 
 cleanup() {
     docker rm --force "$container_name" >/dev/null 2>&1 || true
+    docker rm --force "$root_probe_name" >/dev/null 2>&1 || true
+    docker rm --force "$readonly_probe_name" >/dev/null 2>&1 || true
     docker volume rm "$volume_name" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
 docker volume create "$volume_name" >/dev/null
+
+root_output="$(timeout 20 docker run --rm \
+    --name "$root_probe_name" \
+    --user 0:0 \
+    "$image" 2>&1 || true)"
+if ! grep -Fq "refuses to run as root" <<<"$root_output"; then
+    echo "Expected the image to reject a root runtime override." >&2
+    printf '%s\n' "$root_output" >&2
+    exit 1
+fi
+
+readonly_output="$(timeout 20 docker run --rm \
+    --name "$readonly_probe_name" \
+    --mount "type=volume,source=$volume_name,target=/data,readonly" \
+    "$image" 2>&1 || true)"
+if ! grep -Fq "/data is not writable" <<<"$readonly_output"; then
+    echo "Expected a precise diagnostic for a read-only /data volume." >&2
+    printf '%s\n' "$readonly_output" >&2
+    exit 1
+fi
+
 docker run --detach \
     --name "$container_name" \
+    --cap-drop ALL \
+    --security-opt no-new-privileges:true \
+    --tmpfs /tmp:rw,exec,nosuid,nodev,size=64m,mode=1777 \
     --mount "type=volume,source=$volume_name,target=/data" \
     --env TMOD_PASS=N/A \
     --env TMOD_MODS= \
@@ -51,6 +79,19 @@ if [[ "$health_status" != "healthy" ]]; then
     echo "Smoke-test container did not become healthy within $timeout_seconds seconds." >&2
     exit 1
 fi
+
+[[ "$(docker inspect --format '{{.Config.User}}' "$container_name")" == "tml:tml" ]]
+[[ "$(docker exec "$container_name" id -u)" == "1000" ]]
+[[ "$(docker exec "$container_name" id -g)" == "1000" ]]
+[[ "$(docker exec "$container_name" cat /proc/1/comm)" == "tini" ]]
+if docker exec "$container_name" sh -c 'command -v tmux' >/dev/null 2>&1; then
+    echo "tmux is still installed in the runtime image." >&2
+    exit 1
+fi
+docker exec "$container_name" sh -c \
+    'server_pid="$(cat /tmp/tmodloader/server.pid)" && test -n "$server_pid" && kill -0 "$server_pid"'
+[[ "$(docker inspect --format '{{json .HostConfig.CapDrop}}' "$container_name")" == '["ALL"]' ]]
+[[ "$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$container_name")" == *'no-new-privileges'* ]]
 
 docker exec "$container_name" inject "say Docker smoke test passed."
 docker exec "$container_name" test -s /data/tModLoader/Logs/server.log

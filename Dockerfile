@@ -19,9 +19,13 @@ RUN curl --fail --silent --show-error --location \
 # land without its matching .NET native dependencies and broke every new image.
 FROM ubuntu:24.04
 
-
 # The TMOD Version. Ensure that you follow the correct format. Version releases can be found at https://github.com/tModLoader/tModLoader/releases if you're lost.
 ARG TMOD_VERSION=v2026.07.3.0
+
+# Published images use an unprivileged runtime identity. Custom local builds can
+# select another fixed identity to match an existing host-owned data directory.
+ARG TMOD_UID=1000
+ARG TMOD_GID=1000
 
 # The shutdown message is broadcast to the game chat when the container was stopped from the host.
 ENV TMOD_SHUTDOWN_MESSAGE="Server is shutting down NOW!"
@@ -127,6 +131,10 @@ COPY --from=builder /usr/games/steamcmd /usr/bin/steamcmd
 COPY --from=builder /lib/i386-linux-gnu /lib/
 COPY --from=builder /root/installer/linux32/libstdc++.so.6 /lib/
 RUN chown -R root:root /usr/bin/ /lib/ /usr/lib/
+RUN chmod 755 \
+        /usr/bin/steamcmd \
+        /usr/lib/games/steam/steamcmd \
+        /usr/lib/games/steam/steamcmd.sh
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -141,18 +149,44 @@ RUN apt-get update \
         libsdl2-2.0-0 \
         libssl3 \
         libstdc++6 \
-        tmux \
+        tini \
         tzdata \
         unzip \
+        util-linux \
         wget \
         zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p \
+RUN case "$TMOD_UID" in ''|*[!0-9]*|0) echo "TMOD_UID must be a positive integer." >&2; exit 1 ;; esac \
+    && case "$TMOD_GID" in ''|*[!0-9]*|0) echo "TMOD_GID must be a positive integer." >&2; exit 1 ;; esac \
+    && existing_user="$(getent passwd "$TMOD_UID" | cut -d: -f1)" \
+    && existing_group="$(getent group "$TMOD_GID" | cut -d: -f1)" \
+    && if [ "$existing_user" = ubuntu ] && [ "$existing_group" = ubuntu ]; then \
+        groupmod --new-name tml ubuntu; \
+        usermod --login tml --comment 'tModLoader runtime' --home /home/tml --move-home ubuntu; \
+    elif [ -n "$existing_user" ] || [ -n "$existing_group" ]; then \
+        echo "TMOD_UID or TMOD_GID is already assigned in the base image." >&2; \
+        exit 1; \
+    else \
+        groupadd --gid "$TMOD_GID" tml; \
+        useradd --no-log-init --uid "$TMOD_UID" --gid "$TMOD_GID" \
+            --create-home --home-dir /home/tml --shell /bin/bash tml; \
+    fi \
+    && install -d -m 0755 -o tml -g tml \
+        /home/tml/.steam \
+        /data \
         /data/steamMods \
+        /data/tModLoader \
         /data/tModLoader/Logs \
+        /data/tModLoader/ModConfigs \
         /data/tModLoader/Mods \
-        /data/tModLoader/Worlds
+        /data/tModLoader/Worlds \
+        /terraria-server
+
+ENV HOME="/home/tml"
+ENV USER="tml"
+
+USER tml:tml
 
 EXPOSE 7777
 
@@ -167,14 +201,14 @@ RUN curl --fail --silent --show-error --location \
     && unzip -o tModLoader.zip \
     && rm tModLoader.zip
 
-COPY entrypoint.sh .
-COPY run-server.sh .
-COPY log-filter.sh .
-COPY manage-mods.sh .
-COPY inject.sh /usr/local/bin/inject
-COPY healthcheck.sh /usr/local/bin/healthcheck
-COPY autosave.sh .
-COPY prepare-config.sh .
+COPY --chown=tml:tml entrypoint.sh .
+COPY --chown=tml:tml run-server.sh .
+COPY --chown=tml:tml log-filter.sh .
+COPY --chown=tml:tml manage-mods.sh .
+COPY --chown=tml:tml inject.sh /usr/local/bin/inject
+COPY --chown=tml:tml healthcheck.sh /usr/local/bin/healthcheck
+COPY --chown=tml:tml autosave.sh .
+COPY --chown=tml:tml prepare-config.sh .
 
 RUN find ./LaunchUtils -type f -name '*.sh' -exec chmod 755 {} + \
     && chmod 755 ./entrypoint.sh \
@@ -202,4 +236,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10m --retries=3 CMD ["hea
 
 STOPSIGNAL SIGTERM
 
-ENTRYPOINT ["./entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "--", "./entrypoint.sh"]

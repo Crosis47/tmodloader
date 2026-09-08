@@ -56,12 +56,18 @@ docker run --rm --entrypoint bash \
   tmodloader:dev \
   /repo/tests/log-filter-test.sh /terraria-server/log-filter.sh /terraria-server/run-server.sh
 
+docker run --rm --entrypoint bash \
+  --mount type=bind,source="$PWD",target=/repo,readonly \
+  tmodloader:dev \
+  /repo/tests/runtime-control-test.sh /usr/local/bin/inject
+
 bash tests/server-smoke-test.sh tmodloader:dev
 ```
 
 The smoke test creates temporary Docker resources, starts a real tModLoader
 server, verifies health and command injection, stops it, checks the exit status,
-and verifies persistent logs. It can take several minutes on an uncached host.
+verifies the non-root identity and hardened runtime, and verifies persistent
+logs. It can take several minutes on an uncached host.
 
 When invoking bind mounts from PowerShell, replace `$PWD` with an absolute
 Windows path. GitHub Actions runs the same build and runtime checks on pull

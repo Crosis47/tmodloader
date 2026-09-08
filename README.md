@@ -36,17 +36,19 @@ and this project is not affiliated with Re-Logic or the tModLoader team.
 - Persistent worlds, mod configuration, Workshop content, and server logs.
 - Configurable quiet, normal, and debug Docker console output with automatic
   crash-tail replay and persistent raw logs.
-- Docker health status based on the live server session, log, and TCP port.
+- Docker health status based on the supervised server process, log, and TCP port.
 - Validated environment-based server configuration or an optional custom file.
 - Password redaction and file-based password support.
 - Scheduled saves, console command injection, and graceful shutdown.
+- Non-root execution with `tini`, direct process supervision, and hardened
+  Compose capability defaults.
 
 ## Requirements
 
 - Docker Engine with the Compose plugin, or Docker Desktop.
 - Enough memory for the selected world and mod pack; requirements vary greatly
   between mod collections.
-- A writable host directory for `/data`.
+- A host directory for `/data` writable by container UID/GID `1000:1000`.
 - The configured TCP port allowed through the host firewall when remote players
   will connect.
 
@@ -73,6 +75,18 @@ Copy-Item .env.example .env
 
 The `.env` file is excluded from Git. Do not commit it if it contains a server
 password or other deployment-specific information.
+
+On Linux, prepare the bind-mounted data directory for the image's non-root
+runtime identity. Review the target before changing ownership if it already
+contains server data:
+
+```bash
+mkdir -p ./data
+sudo chown -R 1000:1000 ./data
+```
+
+Docker Desktop handles bind-mounted directory access through its file-sharing
+layer, so the ownership command is normally unnecessary on Windows and macOS.
 
 ### 2. Configure the server
 
@@ -149,6 +163,25 @@ Replacing the container does not remove this directory. Worlds, downloaded
 Workshop items, enabled-mod state, mod configuration, logs, and collection
 membership cache therefore survive normal upgrades.
 
+The image deliberately does not recursively change mounted-file ownership at
+startup. If `/data` is not writable, startup stops with the runtime UID/GID and
+the affected path instead of partially modifying a host directory.
+
+## Runtime security and process model
+
+Published images run SteamCMD and tModLoader as the dedicated `tml` user with
+UID/GID `1000:1000`. `tini` is PID 1 and reaps orphaned processes, while the
+entrypoint directly tracks the server process group and feeds console commands
+through a private FIFO. The supplied Compose deployment drops all Linux
+capabilities, prevents privilege escalation, and provides a bounded temporary
+filesystem for runtime control files. That `/tmp` filesystem permits executable
+mappings because MonoMod creates a short-lived native helper there during
+startup; it remains isolated, size-limited, `nosuid`, and `nodev`.
+
+If a Linux host requires a different fixed identity, build a local image with
+`TMOD_UID` and `TMOD_GID` build arguments and make `/data` writable by that
+identity. Overriding a published image to run as root is intentionally rejected.
+
 ## Configuration model
 
 Compose reads `.env` and passes the supported values into the container. The
@@ -180,7 +213,7 @@ removed before tModLoader logs its process environment.
 | `TMOD_DOWNLOAD_RETRY_DELAY` | `10` | Seconds between SteamCMD attempts. |
 | `TMOD_AUTOSAVE_INTERVAL` | `10` | Minutes between save commands; `0` disables scheduled commands. |
 | `TMOD_SHUTDOWN_MESSAGE` | `Server is shutting down NOW!` | Chat message sent during a Docker stop. |
-| `TMOD_SHUTDOWN_TIMEOUT` | `90` | Seconds allowed for graceful shutdown before the tmux session is terminated. |
+| `TMOD_SHUTDOWN_TIMEOUT` | `90` | Seconds allowed for graceful shutdown before the directly supervised server process group is terminated. |
 | `TMOD_LOG_LEVEL` | `normal` | Docker console detail: `quiet`, `normal`, or `debug`. |
 | `TMOD_CRASH_LOG_LINES` | `200` | Raw console lines replayed after a non-zero exit in quiet/normal mode; `0` disables replay. |
 | `TMOD_USECONFIGFILE` | `No` | Use `/terraria-server/customconfig.txt` when set to `Yes`. |
@@ -318,7 +351,7 @@ exit, waits up to `TMOD_SHUTDOWN_TIMEOUT`, and preserves the server's exit
 status during ordinary operation.
 
 Logs and crash information are stored in `./data/tModLoader/Logs`. Docker marks
-the container healthy after the tmux session exists, the current server log
+the container healthy after the supervised server PID exists, the current server log
 reports `Server started`, and the internal TCP port accepts a connection. The
 ten-minute health start period prevents slow first-time world generation from
 being treated as an immediate failure; a successful check can report healthy
@@ -414,6 +447,13 @@ The fatal message names the invalid variable and range. Correct `.env`, run
 `docker compose config`, and recreate the container with `docker compose up -d`.
 Existing worlds are not regenerated merely because world-generation variables
 change.
+
+### Data directory is not writable
+
+The fatal startup message includes the container UID/GID and the failing path.
+For the published image on Linux, verify that the bind-mounted directory is
+owned or writable by `1000:1000`. The container will not automatically run a
+recursive ownership change over existing worlds or Workshop content.
 
 ## Image automation
 

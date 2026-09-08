@@ -48,8 +48,12 @@ for a fix and rebuilt image before public disclosure.
 - Publish only the configured Terraria TCP port. Never mount the Docker socket
   or unrelated host directories into this container.
 - Keep `/data` writable only by trusted host users and include it in backups.
-- The container currently runs as root for SteamCMD and tModLoader
-  compatibility. Treat any mounted path as accessible to the container.
+- The published image runs as the dedicated `tml` user (`1000:1000`). The
+  supplied Compose file drops all Linux capabilities and prevents privilege
+  escalation. Do not override it to run as root.
+- The image does not recursively change `/data` ownership. Prepare bind mounts
+  explicitly and investigate an ownership failure instead of granting broad
+  write access.
 - Keep Docker, the host operating system, and the deployed image updated.
 - Use an image digest when deployment policy requires a reviewed, immutable
   artifact.
