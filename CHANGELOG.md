@@ -10,6 +10,27 @@ immutable deployment identifier.
 
 No unreleased container changes.
 
+## 1.2.0 - 2026-09-08
+
+### Added
+
+- A dedicated non-root `tml` runtime identity with fixed UID/GID `1000:1000`
+  in published images and configurable identity build arguments for local
+  images.
+- Explicit startup diagnostics for mounted paths that are not writable by the
+  runtime identity.
+
+### Changed
+
+- Replaced tmux session supervision with a server process group tracked
+  directly by the entrypoint under `tini`.
+- Console injection and scheduled saves now use a private runtime FIFO while
+  preserving graceful shutdown and the server's real exit status.
+- The supplied Compose deployment drops all Linux capabilities, prevents
+  privilege escalation, and stores runtime control files on a bounded tmpfs.
+- The real-server smoke test now verifies the non-root identity, PID 1 init,
+  direct supervision, command injection, and hardened container settings.
+
 ## 1.1.1 - 2026-09-08
 
 ### Fixed

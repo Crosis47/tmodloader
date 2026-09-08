@@ -5,13 +5,8 @@ set -Eeuo pipefail
 filter_under_test="${1:-/terraria-server/log-filter.sh}"
 runner_under_test="${2:-/terraria-server/run-server.sh}"
 test_root="$(mktemp -d)"
-reader_pid=""
 
 cleanup() {
-    if [[ -n "$reader_pid" ]]; then
-        kill "$reader_pid" 2>/dev/null || true
-        wait "$reader_pid" 2>/dev/null || true
-    fi
     rm -rf "$test_root"
 }
 trap cleanup EXIT
@@ -69,13 +64,8 @@ printf '%s\n' 'FATAL: simulated server crash'
 exit 42
 EOF
 
-fifo="$test_root/output.pipe"
-status_path="$test_root/status"
 mkdir -p "$test_root/logs"
 printf '%s\n' 'previous launch' > "$test_root/logs/container-console.log"
-mkfifo "$fifo"
-cat "$fifo" > "$test_root/crash-output.log" &
-reader_pid=$!
 
 set +e
 TMOD_SCRIPT_CALLER="$mock_caller" \
@@ -83,14 +73,11 @@ TMOD_LOG_FILTER="$filter_under_test" \
 TMOD_LOG_DIR="$test_root/logs" \
 TMOD_LOG_LEVEL=normal \
 TMOD_CRASH_LOG_LINES=20 \
-bash "$runner_under_test" "$test_root/serverconfig.txt" "$fifo" "$status_path"
+bash "$runner_under_test" "$test_root/serverconfig.txt" > "$test_root/crash-output.log" 2>&1
 runner_status=$?
 set -e
-wait "$reader_pid"
-reader_pid=""
 
 [[ "$runner_status" == "42" ]]
-grep -Fxq '42' "$status_path"
 grep -Fq 'replaying the last 20 raw console lines' "$test_root/crash-output.log"
 grep -Fq 'Launch command:' "$test_root/crash-output.log"
 grep -Fq 'Launch command:' "$test_root/logs/container-console.log"

@@ -5,6 +5,13 @@ services:
     container_name: tmodloader
     restart: unless-stopped
     stop_grace_period: 2m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      # MonoMod writes a short-lived native helper here and requires executable mappings.
+      - /tmp:rw,exec,nosuid,nodev,size=64m,mode=1777
     ports:
       # TMOD_HOST_PORT is the host-facing port; TMOD_PORT is the port inside the container.
       - "${TMOD_HOST_PORT:-7777}:${TMOD_PORT:-7777}/tcp"
@@ -52,7 +59,7 @@ services:
       TMOD_JOURNEY_SPAWN_RATE: "${TMOD_JOURNEY_SPAWN_RATE:-0}"
 
     volumes:
-      ##### By default, the below setting will create a data directory on your host where this compose file lives.
+      # On Linux, create ./data with ownership 1000:1000 before starting.
       - "./data:/data"
       # For TMOD_USECONFIGFILE=Yes:
       # - "./customconfig.txt:/terraria-server/customconfig.txt:ro"

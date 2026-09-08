@@ -78,6 +78,13 @@ jobs:
           tmodloader:ci
           /repo/tests/log-filter-test.sh /terraria-server/log-filter.sh /terraria-server/run-server.sh
 
+      - name: Test direct console control
+        run: >-
+          docker run --rm --entrypoint bash
+          --mount type=bind,source="$PWD",target=/repo,readonly
+          tmodloader:ci
+          /repo/tests/runtime-control-test.sh /usr/local/bin/inject
+
       - name: Smoke-test the server
         timeout-minutes: 12
         run: bash tests/server-smoke-test.sh tmodloader:ci
