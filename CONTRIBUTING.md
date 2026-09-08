@@ -33,7 +33,7 @@ set:
 ```bash
 bash -n ./*.sh tests/*.sh
 shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh \
-  manage-mods.sh prepare-config.sh run-server.sh tests/*.sh
+  log-filter.sh manage-mods.sh prepare-config.sh run-server.sh tests/*.sh
 docker compose config --quiet
 docker build --tag tmodloader:dev .
 ```
@@ -50,6 +50,11 @@ docker run --rm --entrypoint bash \
   --mount type=bind,source="$PWD",target=/repo,readonly \
   tmodloader:dev \
   /repo/tests/config-test.sh /terraria-server/prepare-config.sh
+
+docker run --rm --entrypoint bash \
+  --mount type=bind,source="$PWD",target=/repo,readonly \
+  tmodloader:dev \
+  /repo/tests/log-filter-test.sh /terraria-server/log-filter.sh /terraria-server/run-server.sh
 
 bash tests/server-smoke-test.sh tmodloader:dev
 ```

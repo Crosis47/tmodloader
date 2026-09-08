@@ -34,6 +34,8 @@ and this project is not affiliated with Re-Logic or the tModLoader team.
 - One `TMOD_MODS` setting for downloading, updating, and enabling Workshop mods.
 - Recursive Steam Workshop collection expansion and cached-offline startup.
 - Persistent worlds, mod configuration, Workshop content, and server logs.
+- Configurable quiet, normal, and debug Docker console output with automatic
+  crash-tail replay and persistent raw logs.
 - Docker health status based on the live server session, log, and TCP port.
 - Validated environment-based server configuration or an optional custom file.
 - Password redaction and file-based password support.
@@ -80,6 +82,7 @@ Open `.env` and, at minimum, review these values:
 TMOD_HOST_PORT=7777
 TMOD_PORT=7777
 TMOD_MODS=
+TMOD_LOG_LEVEL=normal
 TMOD_WORLDNAME=Docker
 TMOD_WORLDSIZE=3
 TMOD_DIFFICULTY=1
@@ -178,6 +181,8 @@ removed before tModLoader logs its process environment.
 | `TMOD_AUTOSAVE_INTERVAL` | `10` | Minutes between save commands; `0` disables scheduled commands. |
 | `TMOD_SHUTDOWN_MESSAGE` | `Server is shutting down NOW!` | Chat message sent during a Docker stop. |
 | `TMOD_SHUTDOWN_TIMEOUT` | `90` | Seconds allowed for graceful shutdown before the tmux session is terminated. |
+| `TMOD_LOG_LEVEL` | `normal` | Docker console detail: `quiet`, `normal`, or `debug`. |
+| `TMOD_CRASH_LOG_LINES` | `200` | Raw console lines replayed after a non-zero exit in quiet/normal mode; `0` disables replay. |
 | `TMOD_USECONFIGFILE` | `No` | Use `/terraria-server/customconfig.txt` when set to `Yes`. |
 
 ### Generated server settings
@@ -280,6 +285,21 @@ Follow the live console output:
 ```bash
 docker compose logs -f tmodloader
 ```
+
+`TMOD_LOG_LEVEL` controls only the stream shown by `docker logs`:
+
+- `normal` keeps server, mod-loading, player, warning, and error messages, but
+  collapses world generation to one line per stage and hides low-value launcher
+  checks and the full launch command.
+- `quiet` keeps server lifecycle, save, warning, error, exception, and crash
+  messages.
+- `debug` prints the complete unfiltered console stream.
+
+The setting never discards diagnostics. The full current launch is written to
+`./data/tModLoader/Logs/container-console.log`; the prior launch is retained as
+`container-console.previous.log`, and tModLoader's native `server.log` remains
+unchanged. If the server exits non-zero in `quiet` or `normal`, the container
+automatically replays the final `TMOD_CRASH_LOG_LINES` raw lines to Docker logs.
 
 Send a tModLoader console command:
 

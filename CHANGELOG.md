@@ -10,6 +10,22 @@ immutable deployment identifier.
 
 No unreleased container changes.
 
+## 1.1.0 - 2026-09-08
+
+### Added
+
+- `TMOD_LOG_LEVEL=quiet|normal|debug` to control Docker console verbosity
+  without reducing tModLoader's native logs.
+- Persistent raw console logs for the current and previous server launch.
+- Automatic raw-log tail replay after a non-zero server exit, configurable
+  with `TMOD_CRASH_LOG_LINES`.
+
+### Changed
+
+- The default `normal` console collapses high-frequency world-generation
+  progress, hides upstream launcher command chatter, and suppresses loopback
+  healthcheck connection notices.
+
 ## 1.0.0 - 2026-09-08
 
 ### Added

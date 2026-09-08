@@ -28,6 +28,7 @@ docker run --detach \
     --env TMOD_WORLDSIZE=1 \
     --env TMOD_DIFFICULTY=0 \
     --env TMOD_AUTOSAVE_INTERVAL=0 \
+    --env TMOD_LOG_LEVEL=normal \
     --env 'TMOD_SHUTDOWN_MESSAGE=Smoke test shutdown' \
     "$image" >/dev/null
 
@@ -53,10 +54,22 @@ fi
 
 docker exec "$container_name" inject "say Docker smoke test passed."
 docker exec "$container_name" test -s /data/tModLoader/Logs/server.log
+docker exec "$container_name" test -s /data/tModLoader/Logs/container-console.log
 if docker exec "$container_name" grep -R -Fq 'TMOD_PASS=' /data/tModLoader/Logs; then
     echo "The server password variable leaked into a tModLoader environment log." >&2
     exit 1
 fi
+
+console_output="$(docker logs "$container_name" 2>&1)"
+if grep -Fq 'Launch command:' <<< "$console_output"; then
+    echo "Normal console logging exposed the upstream launch command." >&2
+    exit 1
+fi
+if grep -Eq '^[[:digit:]]+([.][[:digit:]]+)?% - .+ - [[:digit:]]+([.][[:digit:]]+)?%$' <<< "$console_output"; then
+    echo "Normal console logging exposed high-frequency world-generation progress." >&2
+    exit 1
+fi
+docker exec "$container_name" grep -Fq 'Launch command:' /data/tModLoader/Logs/container-console.log
 
 docker stop --time 120 "$container_name" >/dev/null
 exit_code="$(docker inspect --format '{{.State.ExitCode}}' "$container_name")"

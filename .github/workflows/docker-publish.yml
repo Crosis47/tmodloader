@@ -136,7 +136,7 @@ jobs:
         if: steps.publication.outputs.publish == 'true'
         run: |
           bash -n ./*.sh tests/*.sh
-          shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh tests/*.sh
+          shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh log-filter.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh tests/*.sh
           bash tests/release-metadata-test.sh
           docker compose config --quiet
 
@@ -177,6 +177,10 @@ jobs:
             --mount type=bind,source="$PWD",target=/repo,readonly \
             "$IMAGE@$DIGEST" \
             /repo/tests/config-test.sh /terraria-server/prepare-config.sh
+          docker run --rm --entrypoint bash \
+            --mount type=bind,source="$PWD",target=/repo,readonly \
+            "$IMAGE@$DIGEST" \
+            /repo/tests/log-filter-test.sh /terraria-server/log-filter.sh /terraria-server/run-server.sh
 
       - name: Smoke-test candidate server
         if: steps.publication.outputs.publish == 'true'

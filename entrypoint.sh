@@ -76,9 +76,19 @@ shutdown() {
 reject_line_breaks TMOD_SHUTDOWN_MESSAGE "$TMOD_SHUTDOWN_MESSAGE"
 [[ "${TMOD_AUTOSAVE_INTERVAL:-}" =~ ^[0-9]+$ ]] || fail "TMOD_AUTOSAVE_INTERVAL must be a non-negative integer."
 [[ "${TMOD_SHUTDOWN_TIMEOUT:-90}" =~ ^[1-9][0-9]*$ ]] || fail "TMOD_SHUTDOWN_TIMEOUT must be a positive integer."
+TMOD_LOG_LEVEL="${TMOD_LOG_LEVEL:-normal}"
+TMOD_LOG_LEVEL="${TMOD_LOG_LEVEL,,}"
+case "$TMOD_LOG_LEVEL" in
+    quiet|normal|debug) ;;
+    *) fail "TMOD_LOG_LEVEL must be quiet, normal, or debug." ;;
+esac
+TMOD_CRASH_LOG_LINES="${TMOD_CRASH_LOG_LINES:-200}"
+[[ "$TMOD_CRASH_LOG_LINES" =~ ^[0-9]+$ ]] || fail "TMOD_CRASH_LOG_LINES must be a non-negative integer."
+export TMOD_LOG_LEVEL TMOD_CRASH_LOG_LINES
 
 mkdir -p /data/tModLoader/Logs
 printf '[SYSTEM] Persistent tModLoader logs: /data/tModLoader/Logs\n'
+printf '[SYSTEM] Console log level: %s; raw output: /data/tModLoader/Logs/container-console.log\n' "$TMOD_LOG_LEVEL"
 printf '[SYSTEM] Shutdown message: configured; autosave interval: %s minute(s)\n' "$TMOD_AUTOSAVE_INTERVAL"
 
 trap shutdown TERM INT

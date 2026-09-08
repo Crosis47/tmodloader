@@ -30,6 +30,10 @@ ENV TMOD_SHUTDOWN_TIMEOUT="90"
 # The autosave feature will save the world periodically. The interval is in minutes.
 ENV TMOD_AUTOSAVE_INTERVAL="10"
 
+# Docker console verbosity. Complete raw output remains in the persistent log.
+ENV TMOD_LOG_LEVEL="normal"
+ENV TMOD_CRASH_LOG_LINES="200"
+
 # Workshop mods to keep current and enable when the server starts.
 # Example format: 2824688072,2824688266,2835214226
 ENV TMOD_MODS=""
@@ -163,6 +167,7 @@ RUN wget --no-verbose --output-document=tModLoader.zip \
 
 COPY entrypoint.sh .
 COPY run-server.sh .
+COPY log-filter.sh .
 COPY manage-mods.sh .
 COPY inject.sh /usr/local/bin/inject
 COPY healthcheck.sh /usr/local/bin/healthcheck
@@ -172,6 +177,7 @@ COPY prepare-config.sh .
 RUN find ./LaunchUtils -type f -name '*.sh' -exec chmod 755 {} + \
     && chmod 755 ./entrypoint.sh \
     && chmod 755 ./run-server.sh \
+    && chmod 755 ./log-filter.sh \
     && chmod 755 ./manage-mods.sh \
     && chmod 755 ./autosave.sh \
     && chmod 755 /usr/local/bin/healthcheck \
