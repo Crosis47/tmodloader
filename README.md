@@ -125,7 +125,7 @@ docker compose config
 ```bash
 docker compose pull
 docker compose up -d
-docker compose logs -f
+docker compose logs --tail=100 --follow tmodloader
 ```
 
 The first start can take several minutes while SteamCMD initializes, mods are
@@ -313,11 +313,49 @@ remain container features and continue to apply.
 
 ## Server operations
 
-Follow the live console output:
+### Console commands: use `inject`
+
+The supported way to administer the running server is the image's `inject`
+helper. Do not use `docker attach` for console commands: attach cannot replay a
+configurable number of prior lines and can forward terminal signals to the
+server process.
+
+Use two terminals. In the first, show the last 100 filtered console lines and
+continue following new output:
 
 ```bash
-docker compose logs -f tmodloader
+docker compose logs --tail=100 --follow tmodloader
 ```
+
+Replace `100` with the history length you want. `Ctrl+C` stops only the log
+viewer; it does not stop the container.
+
+In the second terminal, send one console command at a time:
+
+```bash
+docker exec tmodloader inject "help"
+docker exec tmodloader inject "playing"
+docker exec tmodloader inject "say Server restart in 10 minutes"
+docker exec tmodloader inject "save"
+```
+
+The Compose-native equivalent is:
+
+```bash
+docker compose exec -T tmodloader inject "save"
+```
+
+`inject` verifies that the supervised server process is running, rejects empty
+or multiline input, and writes the command through the private console FIFO.
+No interactive TTY or `stdin_open` Compose setting is required.
+
+For the unfiltered upstream console, follow the persistent raw log instead:
+
+```bash
+docker exec tmodloader tail -n 100 -F /data/tModLoader/Logs/container-console.log
+```
+
+### Console log levels
 
 `TMOD_LOG_LEVEL` controls only the stream shown by `docker logs`:
 
@@ -333,12 +371,6 @@ The setting never discards diagnostics. The full current launch is written to
 `container-console.previous.log`, and tModLoader's native `server.log` remains
 unchanged. If the server exits non-zero in `quiet` or `normal`, the container
 automatically replays the final `TMOD_CRASH_LOG_LINES` raw lines to Docker logs.
-
-Send a tModLoader console command:
-
-```bash
-docker exec tmodloader inject "say Hello World!"
-```
 
 Stop gracefully:
 

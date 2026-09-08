@@ -1,5 +1,9 @@
 services:
   tmodloader:
+    # Operator quick reference (run these commands on the Docker host):
+    #   docker compose logs --tail=100 --follow tmodloader
+    #   docker compose exec -T tmodloader inject "save"
+    # Use inject for console commands; stdin_open/tty and docker attach are not required.
     image: ghcr.io/crosis47/tmodloader:latest
     pull_policy: always
     container_name: tmodloader
