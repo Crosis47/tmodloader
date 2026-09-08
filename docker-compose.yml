@@ -9,31 +9,50 @@ services:
       # TMOD_HOST_PORT is the host-facing port; TMOD_PORT is the port inside the container.
       - "${TMOD_HOST_PORT:-7777}:${TMOD_PORT:-7777}/tcp"
     environment:
-      # IDs and collection:<id> entries are expanded, kept current, and enabled.
-      - "TMOD_MODS=2824688072,2824688266"
-      # Shutdown Message and Autosave Interval (In Minutes)
-      - "TMOD_SHUTDOWN_MESSAGE=Goodbye!"
-      - "TMOD_AUTOSAVE_INTERVAL=15"
-      - "TMOD_DOWNLOAD_RETRIES=3"
-      - "TMOD_DOWNLOAD_RETRY_DELAY=10"
-      - "TMOD_MOD_OFFLINE_POLICY=use-cache"
-      - "TMOD_COLLECTION_MAX_ITEMS=1000"
-      # Server Settings
-      - "TMOD_MOTD=Welcome to my tModLoader Server!"
-      # Put TMOD_PASS in a local .env file; N/A disables the password.
-      - "TMOD_PASS=${TMOD_PASS:-N/A}"
-      - "TMOD_MAXPLAYERS=16"
-      # The following world settings are only used when generating a new world.
-      - "TMOD_WORLDNAME=Earth"
-      - "TMOD_WORLDSIZE=2"
-      - "TMOD_WORLDSEED=not the bees!"
-      - "TMOD_DIFFICULTY=3"
-      - "TMOD_PORT=${TMOD_PORT:-7777}"
-      # If TMOD_USECONFIGFILE is "Yes", customconfig.txt is used and the settings above are ignored.
-      - "TMOD_USECONFIGFILE=No"
+      # Copy .env.example to .env and make deployment-specific changes there.
+      TMOD_MODS: "${TMOD_MODS:-}"
+      TMOD_DOWNLOAD_RETRIES: "${TMOD_DOWNLOAD_RETRIES:-3}"
+      TMOD_DOWNLOAD_RETRY_DELAY: "${TMOD_DOWNLOAD_RETRY_DELAY:-10}"
+      TMOD_MOD_OFFLINE_POLICY: "${TMOD_MOD_OFFLINE_POLICY:-use-cache}"
+      TMOD_COLLECTION_MAX_ITEMS: "${TMOD_COLLECTION_MAX_ITEMS:-1000}"
+      TMOD_SHUTDOWN_MESSAGE: "${TMOD_SHUTDOWN_MESSAGE:-Server is shutting down NOW!}"
+      TMOD_SHUTDOWN_TIMEOUT: "${TMOD_SHUTDOWN_TIMEOUT:-90}"
+      TMOD_AUTOSAVE_INTERVAL: "${TMOD_AUTOSAVE_INTERVAL:-10}"
+      TMOD_USECONFIGFILE: "${TMOD_USECONFIGFILE:-No}"
+      TMOD_MOTD: "${TMOD_MOTD:-A tModLoader server powered by Docker!}"
+      TMOD_PASS: "${TMOD_PASS:-N/A}"
+      TMOD_PASS_FILE: "${TMOD_PASS_FILE:-}"
+      TMOD_MAXPLAYERS: "${TMOD_MAXPLAYERS:-8}"
+      TMOD_WORLDNAME: "${TMOD_WORLDNAME:-Docker}"
+      TMOD_WORLDSIZE: "${TMOD_WORLDSIZE:-3}"
+      TMOD_WORLDSEED: "${TMOD_WORLDSEED:-Docker}"
+      TMOD_DIFFICULTY: "${TMOD_DIFFICULTY:-1}"
+      TMOD_SECURE: "${TMOD_SECURE:-0}"
+      TMOD_LANGUAGE: "${TMOD_LANGUAGE:-en-US}"
+      TMOD_NPCSTREAM: "${TMOD_NPCSTREAM:-60}"
+      TMOD_UPNP: "${TMOD_UPNP:-0}"
+      TMOD_PRIORITY: "${TMOD_PRIORITY:-1}"
+      TMOD_PORT: "${TMOD_PORT:-7777}"
+      TMOD_JOURNEY_SETFROZEN: "${TMOD_JOURNEY_SETFROZEN:-0}"
+      TMOD_JOURNEY_SETDAWN: "${TMOD_JOURNEY_SETDAWN:-0}"
+      TMOD_JOURNEY_SETNOON: "${TMOD_JOURNEY_SETNOON:-0}"
+      TMOD_JOURNEY_SETDUSK: "${TMOD_JOURNEY_SETDUSK:-0}"
+      TMOD_JOURNEY_SETMIDNIGHT: "${TMOD_JOURNEY_SETMIDNIGHT:-0}"
+      TMOD_JOURNEY_GODMODE: "${TMOD_JOURNEY_GODMODE:-0}"
+      TMOD_JOURNEY_WIND_STRENGTH: "${TMOD_JOURNEY_WIND_STRENGTH:-0}"
+      TMOD_JOURNEY_RAIN_STRENGTH: "${TMOD_JOURNEY_RAIN_STRENGTH:-0}"
+      TMOD_JOURNEY_TIME_SPEED: "${TMOD_JOURNEY_TIME_SPEED:-0}"
+      TMOD_JOURNEY_RAIN_FROZEN: "${TMOD_JOURNEY_RAIN_FROZEN:-0}"
+      TMOD_JOURNEY_WIND_FROZEN: "${TMOD_JOURNEY_WIND_FROZEN:-0}"
+      TMOD_JOURNEY_PLACEMENT_RANGE: "${TMOD_JOURNEY_PLACEMENT_RANGE:-0}"
+      TMOD_JOURNEY_SET_DIFFICULTY: "${TMOD_JOURNEY_SET_DIFFICULTY:-0}"
+      TMOD_JOURNEY_BIOME_SPREAD: "${TMOD_JOURNEY_BIOME_SPREAD:-0}"
+      TMOD_JOURNEY_SPAWN_RATE: "${TMOD_JOURNEY_SPAWN_RATE:-0}"
 
     volumes:
       ##### By default, the below setting will create a data directory on your host where this compose file lives.
       - "./data:/data"
-      # Uncomment the below line if you plan to use a mapped config file.
-      # - "/path/to/config/config.txt:/terraria-server/customconfig.txt:ro"
+      # For TMOD_USECONFIGFILE=Yes:
+      # - "./customconfig.txt:/terraria-server/customconfig.txt:ro"
+      # For TMOD_PASS_FILE=/run/secrets/tmod-password:
+      # - "./secrets/tmod-password:/run/secrets/tmod-password:ro"
