@@ -10,6 +10,14 @@ immutable deployment identifier.
 
 No unreleased container changes.
 
+## 1.1.1 - 2026-09-08
+
+### Fixed
+
+- Retry transient failures while downloading the upstream tModLoader release
+  archive during image builds, preventing a single GitHub 5xx response from
+  failing an otherwise valid release publication.
+
 ## 1.1.0 - 2026-09-08
 
 ### Added

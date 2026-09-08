@@ -160,7 +160,9 @@ WORKDIR /terraria-server
 
 RUN steamcmd /terraria-server +login anonymous +quit
 
-RUN wget --no-verbose --output-document=tModLoader.zip \
+RUN curl --fail --silent --show-error --location \
+        --retry 5 --retry-delay 5 --retry-max-time 120 --retry-all-errors \
+        --output tModLoader.zip \
         "https://github.com/tModLoader/tModLoader/releases/download/${TMOD_VERSION}/tModLoader.zip" \
     && unzip -o tModLoader.zip \
     && rm tModLoader.zip
