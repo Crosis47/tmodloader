@@ -1,5 +1,9 @@
 services:
   tmodloader:
+    # Operator quick reference (run these commands on the Docker host):
+    #   docker compose logs --tail=100 --follow tmodloader
+    #   docker compose exec -T tmodloader inject "save"
+    # Use inject for console commands; stdin_open/tty and docker attach are not required.
     image: ghcr.io/crosis47/tmodloader:latest
     pull_policy: always
     container_name: tmodloader
@@ -59,7 +63,8 @@ services:
       TMOD_JOURNEY_SPAWN_RATE: "${TMOD_JOURNEY_SPAWN_RATE:-0}"
 
     volumes:
-      # On Linux, create ./data with ownership 1000:1000 before starting.
+      # On Linux, UID 1000 or GID 1000 needs effective write/search access.
+      # Owner and group write bits are not both required; POSIX precedence still applies.
       - "./data:/data"
       # For TMOD_USECONFIGFILE=Yes:
       # - "./customconfig.txt:/terraria-server/customconfig.txt:ro"

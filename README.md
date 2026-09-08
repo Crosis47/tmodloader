@@ -125,7 +125,7 @@ docker compose config
 ```bash
 docker compose pull
 docker compose up -d
-docker compose logs -f
+docker compose logs --tail=100 --follow tmodloader
 ```
 
 The first start can take several minutes while SteamCMD initializes, mods are
@@ -165,7 +165,16 @@ membership cache therefore survive normal upgrades.
 
 The image deliberately does not recursively change mounted-file ownership at
 startup. If `/data` is not writable, startup stops with the runtime UID/GID and
-the affected path instead of partially modifying a host directory.
+the affected path, owner/group, and mode instead of partially modifying a host
+directory. The check performs a real create/write probe; it does not require
+both owner and group write bits.
+
+Linux selects exactly one traditional permission class. Mode `700` works when
+UID 1000 owns the directory. Mode `070` works when UID 1000 is not the owner but
+GID 1000 is the applicable group. Mode `770` works for either case. If UID 1000
+owns a mode-`070` directory, Linux uses the empty owner bits and does not fall
+back to the group bits, so that layout is correctly rejected. POSIX ACLs are
+also honored by the real access probe.
 
 ## Runtime security and process model
 
@@ -313,11 +322,49 @@ remain container features and continue to apply.
 
 ## Server operations
 
-Follow the live console output:
+### Console commands: use `inject`
+
+The supported way to administer the running server is the image's `inject`
+helper. Do not use `docker attach` for console commands: attach cannot replay a
+configurable number of prior lines and can forward terminal signals to the
+server process.
+
+Use two terminals. In the first, show the last 100 filtered console lines and
+continue following new output:
 
 ```bash
-docker compose logs -f tmodloader
+docker compose logs --tail=100 --follow tmodloader
 ```
+
+Replace `100` with the history length you want. `Ctrl+C` stops only the log
+viewer; it does not stop the container.
+
+In the second terminal, send one console command at a time:
+
+```bash
+docker exec tmodloader inject "help"
+docker exec tmodloader inject "playing"
+docker exec tmodloader inject "say Server restart in 10 minutes"
+docker exec tmodloader inject "save"
+```
+
+The Compose-native equivalent is:
+
+```bash
+docker compose exec -T tmodloader inject "save"
+```
+
+`inject` verifies that the supervised server process is running, rejects empty
+or multiline input, and writes the command through the private console FIFO.
+No interactive TTY or `stdin_open` Compose setting is required.
+
+For the unfiltered upstream console, follow the persistent raw log instead:
+
+```bash
+docker exec tmodloader tail -n 100 -F /data/tModLoader/Logs/container-console.log
+```
+
+### Console log levels
 
 `TMOD_LOG_LEVEL` controls only the stream shown by `docker logs`:
 
@@ -333,12 +380,6 @@ The setting never discards diagnostics. The full current launch is written to
 `container-console.previous.log`, and tModLoader's native `server.log` remains
 unchanged. If the server exits non-zero in `quiet` or `normal`, the container
 automatically replays the final `TMOD_CRASH_LOG_LINES` raw lines to Docker logs.
-
-Send a tModLoader console command:
-
-```bash
-docker exec tmodloader inject "say Hello World!"
-```
 
 Stop gracefully:
 
@@ -451,8 +492,10 @@ change.
 ### Data directory is not writable
 
 The fatal startup message includes the container UID/GID and the failing path.
-For the published image on Linux, verify that the bind-mounted directory is
-owned or writable by `1000:1000`. The container will not automatically run a
+It also reports the directory owner/group and numeric mode. For the published
+image on Linux, grant UID 1000 or one of its groups write and search permission
+through the applicable owner, group, ACL, or other class. Owner and group write
+bits are not both required. The container will not automatically run a
 recursive ownership change over existing worlds or Workshop content.
 
 ## Image automation

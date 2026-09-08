@@ -44,15 +44,28 @@ load_password_file() {
     export TMOD_PASS
 }
 
+describe_path_access() {
+    local path="$1"
+
+    if [[ -e "$path" ]]; then
+        stat --format='owner=%u:%g mode=%a' -- "$path" 2>/dev/null || printf 'owner/mode unavailable'
+    else
+        printf 'path does not exist'
+    fi
+}
+
 ensure_writable_directory() {
     local path="$1"
     local probe
+    local details
 
     if ! mkdir -p "$path" 2>/dev/null; then
-        fail "Cannot create $path as uid $(id -u), gid $(id -g). Check the mounted directory ownership."
+        details="$(describe_path_access "$path")"
+        fail "Cannot create $path as uid $(id -u), gid $(id -g), groups $(id -G) ($details). Check the mounted directory and parent permissions."
     fi
     if ! probe="$(mktemp "$path/.tmodloader-write-test.XXXXXX" 2>/dev/null)"; then
-        fail "$path is not writable as uid $(id -u), gid $(id -g). On Linux, make the host data directory writable by the container's runtime identity."
+        details="$(describe_path_access "$path")"
+        fail "$path is not writable as uid $(id -u), gid $(id -g), groups $(id -G) ($details). Grant write and search access through the applicable owner, group, ACL, or other permission class."
     fi
     rm -f "$probe"
 }

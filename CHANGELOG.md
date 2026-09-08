@@ -10,6 +10,20 @@ immutable deployment identifier.
 
 No unreleased container changes.
 
+## 1.2.1 - 2026-09-08
+
+### Fixed
+
+- Generate the `en_US.UTF-8` locale used by SteamCMD so international
+  characters remain supported without its locale fallback warning.
+- Report the mounted path owner, group, mode, and runtime group memberships
+  when a required directory is not writable.
+- Clarify and test that owner-only, group-only, ACL, and combined permission
+  layouts are accepted whenever they grant the runtime identity real write and
+  search access; Linux owner-class precedence is preserved.
+- Include the missing world path in the first-launch warning and identify that
+  initial world creation is expected.
+
 ## 1.2.0 - 2026-09-08
 
 ### Added
