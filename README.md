@@ -165,7 +165,16 @@ membership cache therefore survive normal upgrades.
 
 The image deliberately does not recursively change mounted-file ownership at
 startup. If `/data` is not writable, startup stops with the runtime UID/GID and
-the affected path instead of partially modifying a host directory.
+the affected path, owner/group, and mode instead of partially modifying a host
+directory. The check performs a real create/write probe; it does not require
+both owner and group write bits.
+
+Linux selects exactly one traditional permission class. Mode `700` works when
+UID 1000 owns the directory. Mode `070` works when UID 1000 is not the owner but
+GID 1000 is the applicable group. Mode `770` works for either case. If UID 1000
+owns a mode-`070` directory, Linux uses the empty owner bits and does not fall
+back to the group bits, so that layout is correctly rejected. POSIX ACLs are
+also honored by the real access probe.
 
 ## Runtime security and process model
 
@@ -483,8 +492,10 @@ change.
 ### Data directory is not writable
 
 The fatal startup message includes the container UID/GID and the failing path.
-For the published image on Linux, verify that the bind-mounted directory is
-owned or writable by `1000:1000`. The container will not automatically run a
+It also reports the directory owner/group and numeric mode. For the published
+image on Linux, grant UID 1000 or one of its groups write and search permission
+through the applicable owner, group, ACL, or other class. Owner and group write
+bits are not both required. The container will not automatically run a
 recursive ownership change over existing worlds or Workshop content.
 
 ## Image automation

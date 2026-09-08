@@ -149,13 +149,18 @@ RUN apt-get update \
         libsdl2-2.0-0 \
         libssl3 \
         libstdc++6 \
+        locales \
         tini \
         tzdata \
         unzip \
         util-linux \
         wget \
         zlib1g \
+    && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
+
+ENV LANG="en_US.UTF-8"
+ENV LC_ALL="en_US.UTF-8"
 
 RUN case "$TMOD_UID" in ''|*[!0-9]*|0) echo "TMOD_UID must be a positive integer." >&2; exit 1 ;; esac \
     && case "$TMOD_GID" in ''|*[!0-9]*|0) echo "TMOD_GID must be a positive integer." >&2; exit 1 ;; esac \

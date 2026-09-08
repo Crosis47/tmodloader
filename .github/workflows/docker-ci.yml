@@ -64,6 +64,13 @@ jobs:
           tmodloader:ci
           /repo/tests/manage-mods-test.sh /terraria-server/manage-mods.sh
 
+      - name: Test SteamCMD locale
+        run: >-
+          docker run --rm --entrypoint bash
+          --mount type=bind,source="$PWD",target=/repo,readonly
+          tmodloader:ci
+          /repo/tests/locale-test.sh /usr/bin/steamcmd
+
       - name: Test configuration generation
         run: >-
           docker run --rm --entrypoint bash

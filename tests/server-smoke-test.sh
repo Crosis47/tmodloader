@@ -9,6 +9,7 @@ container_name="tmodloader-smoke-$suffix"
 volume_name="tmodloader-smoke-$suffix"
 root_probe_name="tmodloader-root-probe-$suffix"
 readonly_probe_name="tmodloader-readonly-probe-$suffix"
+permission_probe_name="tmodloader-permission-probe-$suffix"
 
 case "$(uname -s)" in
     MINGW*|MSYS*) export MSYS_NO_PATHCONV=1 ;;
@@ -18,11 +19,56 @@ cleanup() {
     docker rm --force "$container_name" >/dev/null 2>&1 || true
     docker rm --force "$root_probe_name" >/dev/null 2>&1 || true
     docker rm --force "$readonly_probe_name" >/dev/null 2>&1 || true
+    docker rm --force "$permission_probe_name" >/dev/null 2>&1 || true
     docker volume rm "$volume_name" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
+probe_permission_layout() {
+    local label="$1"
+    local tmpfs_spec="$2"
+    local expectation="$3"
+    local output
+    local status
+
+    if output="$(timeout 30 docker run --rm \
+        --name "$permission_probe_name" \
+        --tmpfs "$tmpfs_spec" \
+        --env TMOD_SERVER_RUNNER=/bin/true \
+        --env TMOD_AUTOSAVE_INTERVAL=0 \
+        --env TMOD_MODS= \
+        "$image" 2>&1)"; then
+        status=0
+    else
+        status=$?
+        docker rm --force "$permission_probe_name" >/dev/null 2>&1 || true
+    fi
+
+    if [[ "$expectation" == pass && "$status" != 0 ]]; then
+        printf 'Expected permission layout to pass: %s\n%s\n' "$label" "$output" >&2
+        exit 1
+    fi
+    if [[ "$expectation" == fail && "$status" == 0 ]]; then
+        printf 'Expected permission layout to fail: %s\n%s\n' "$label" "$output" >&2
+        exit 1
+    fi
+    if [[ "$expectation" == fail ]] && \
+        ! grep -Fq '/data is not writable as uid 1000' <<<"$output"; then
+        printf 'Permission layout failed for an unexpected reason: %s\n%s\n' "$label" "$output" >&2
+        exit 1
+    fi
+}
+
 docker volume create "$volume_name" >/dev/null
+
+probe_permission_layout "owner UID 1000 with mode 700" \
+    "/data:rw,uid=1000,gid=2000,mode=0700" pass
+probe_permission_layout "non-owner with group GID 1000 and mode 070" \
+    "/data:rw,uid=2000,gid=1000,mode=0070" pass
+probe_permission_layout "owner/group 1000 with mode 770" \
+    "/data:rw,uid=1000,gid=1000,mode=0770" pass
+probe_permission_layout "owner UID 1000 with group-only mode 070" \
+    "/data:rw,uid=1000,gid=1000,mode=0070" fail
 
 root_output="$(timeout 20 docker run --rm \
     --name "$root_probe_name" \
@@ -83,6 +129,7 @@ fi
 [[ "$(docker inspect --format '{{.Config.User}}' "$container_name")" == "tml:tml" ]]
 [[ "$(docker exec "$container_name" id -u)" == "1000" ]]
 [[ "$(docker exec "$container_name" id -g)" == "1000" ]]
+[[ "$(docker exec "$container_name" locale charmap)" == "UTF-8" ]]
 [[ "$(docker exec "$container_name" cat /proc/1/comm)" == "tini" ]]
 if docker exec "$container_name" sh -c 'command -v tmux' >/dev/null 2>&1; then
     echo "tmux is still installed in the runtime image." >&2

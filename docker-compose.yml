@@ -63,7 +63,8 @@ services:
       TMOD_JOURNEY_SPAWN_RATE: "${TMOD_JOURNEY_SPAWN_RATE:-0}"
 
     volumes:
-      # On Linux, create ./data with ownership 1000:1000 before starting.
+      # On Linux, UID 1000 or GID 1000 needs effective write/search access.
+      # Owner and group write bits are not both required; POSIX precedence still applies.
       - "./data:/data"
       # For TMOD_USECONFIGFILE=Yes:
       # - "./customconfig.txt:/terraria-server/customconfig.txt:ro"

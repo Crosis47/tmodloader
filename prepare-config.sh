@@ -92,7 +92,8 @@ world_path="$world_dir/$TMOD_WORLDNAME.wld"
 append_config world "$world_path"
 append_config worldpath "$world_dir/"
 if [[ ! -e "$world_path" ]]; then
-    printf '[!!] WARNING: World %s was not found; tModLoader will create it.\n' "$TMOD_WORLDNAME"
+    printf '[!!] WARNING: World %s was not found at %s; tModLoader will create it. This is expected on first launch.\n' \
+        "$TMOD_WORLDNAME" "$world_path"
     append_config worldname "$TMOD_WORLDNAME"
     append_config autocreate "$TMOD_WORLDSIZE"
 fi

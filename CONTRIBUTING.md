@@ -49,6 +49,11 @@ docker run --rm --entrypoint bash \
 docker run --rm --entrypoint bash \
   --mount type=bind,source="$PWD",target=/repo,readonly \
   tmodloader:dev \
+  /repo/tests/locale-test.sh /usr/bin/steamcmd
+
+docker run --rm --entrypoint bash \
+  --mount type=bind,source="$PWD",target=/repo,readonly \
+  tmodloader:dev \
   /repo/tests/config-test.sh /terraria-server/prepare-config.sh
 
 docker run --rm --entrypoint bash \
