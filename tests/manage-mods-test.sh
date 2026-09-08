@@ -51,12 +51,36 @@ write_manifest "old-222" "100"
 
 cat > "$mock_bin/curl" <<'EOF'
 #!/usr/bin/env bash
+if [[ "${TEST_CURL_FAIL:-false}" == "true" ]]; then
+    exit 22
+fi
+
+if [[ "$*" == *GetCollectionDetails* ]]; then
+    if [[ "$*" == *"publishedfileids[0]=333"* ]]; then
+        cat <<'JSON'
+{"response":{"collectiondetails":[{"result":1,"children":[
+  {"publishedfileid":"111","filetype":0},
+  {"publishedfileid":"444","filetype":2}
+]}]}}
+JSON
+    elif [[ "$*" == *"publishedfileids[0]=444"* ]]; then
+        cat <<'JSON'
+{"response":{"collectiondetails":[{"result":1,"children":[
+  {"publishedfileid":"222","filetype":0}
+]}]}}
+JSON
+    else
+        exit 22
+    fi
+    exit 0
+fi
+
 cat <<'JSON'
 {
   "response": {
     "publishedfiledetails": [
-      {"publishedfileid":"111","result":1,"hcontent_file":"current-111","time_updated":200},
-      {"publishedfileid":"222","result":1,"hcontent_file":"current-222","time_updated":200}
+      {"publishedfileid":"111","result":1,"consumer_app_id":1281930,"title":"Current Mod","hcontent_file":"current-111","time_updated":200},
+      {"publishedfileid":"222","result":1,"consumer_app_id":1281930,"title":"Outdated Mod","hcontent_file":"current-222","time_updated":200}
     ]
   }
 }
@@ -66,6 +90,9 @@ EOF
 cat > "$mock_bin/steamcmd" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$@" > "$TEST_STEAMCMD_LOG"
+if [[ "${TEST_STEAMCMD_FAIL:-false}" == "true" ]]; then
+    exit 1
+fi
 cat > "$TEST_WORKSHOP_MANIFEST" <<'ACF'
 "AppWorkshop"
 {
@@ -94,11 +121,13 @@ export TEST_STEAMCMD_LOG="$steamcmd_log"
 export TEST_WORKSHOP_MANIFEST="$manifest"
 
 run_manager() {
-    TMOD_MODS="111, 222,111" \
+    local mod_spec="${1:-111, 222,111}"
+    TMOD_MODS="$mod_spec" \
     TMOD_DATA_DIR="$data_root" \
     TMOD_CURL_BIN="$mock_bin/curl" \
     TMOD_STEAMCMD_BIN="$mock_bin/steamcmd" \
     TMOD_JQ_BIN="jq" \
+    TMOD_WORKSHOP_COLLECTION_API_URL="https://example.invalid/GetCollectionDetails" \
     TMOD_DOWNLOAD_RETRIES="1" \
     bash "$script_under_test"
 }
@@ -119,6 +148,41 @@ if [[ -e "$steamcmd_log" ]]; then
     exit 1
 fi
 
+run_manager "collection:333,111"
+if [[ -e "$steamcmd_log" ]]; then
+    echo "SteamCMD was unexpectedly called for a current expanded collection." >&2
+    exit 1
+fi
+jq -e '. == ["CurrentMod", "OutdatedMod"]' "$data_root/tModLoader/Mods/enabled.json" >/dev/null
+grep -Fxq "111" "$data_root/tModLoader/Mods/collection-cache/333.txt"
+grep -Fxq "222" "$data_root/tModLoader/Mods/collection-cache/333.txt"
+
+export TEST_CURL_FAIL=true
+run_manager "collection:333"
+unset TEST_CURL_FAIL
+if [[ -e "$steamcmd_log" ]]; then
+    echo "SteamCMD was unexpectedly called while complete cached collection data was available offline." >&2
+    exit 1
+fi
+
+export TEST_CURL_FAIL=true
+export TEST_STEAMCMD_FAIL=true
+if TMOD_MOD_OFFLINE_POLICY=strict run_manager "collection:333"; then
+    echo "Strict offline policy unexpectedly accepted a failed Steam check." >&2
+    exit 1
+fi
+unset TEST_STEAMCMD_FAIL
+unset TEST_CURL_FAIL
+
+export TEST_CURL_FAIL=true
+export TEST_STEAMCMD_FAIL=true
+if run_manager "collection:333,999"; then
+    echo "Offline startup unexpectedly accepted a requested mod missing from cache." >&2
+    exit 1
+fi
+unset TEST_STEAMCMD_FAIL
+unset TEST_CURL_FAIL
+
 if TMOD_MODS="not-a-workshop-id" \
     TMOD_DATA_DIR="$data_root" \
     TMOD_CURL_BIN="$mock_bin/curl" \
@@ -126,6 +190,17 @@ if TMOD_MODS="not-a-workshop-id" \
     TMOD_JQ_BIN="jq" \
     bash "$script_under_test"; then
     echo "An invalid TMOD_MODS value unexpectedly succeeded." >&2
+    exit 1
+fi
+
+if TMOD_MODS="111" \
+    TMOD_COLLECTION_MAX_ITEMS="0" \
+    TMOD_DATA_DIR="$data_root" \
+    TMOD_CURL_BIN="$mock_bin/curl" \
+    TMOD_STEAMCMD_BIN="$mock_bin/steamcmd" \
+    TMOD_JQ_BIN="jq" \
+    bash "$script_under_test"; then
+    echo "An invalid collection safety limit unexpectedly succeeded." >&2
     exit 1
 fi
 

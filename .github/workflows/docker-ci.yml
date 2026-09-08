@@ -5,16 +5,22 @@ on:
     branches-ignore:
       - master
     paths:
+      - VERSION
+      - CHANGELOG.md
       - Dockerfile
       - "*.sh"
+      - "tests/**"
       - docker-compose.yml
-      - .github/workflows/docker-ci.yml
+      - ".github/workflows/*.yml"
   pull_request:
     paths:
+      - VERSION
+      - CHANGELOG.md
       - Dockerfile
       - "*.sh"
+      - "tests/**"
       - docker-compose.yml
-      - .github/workflows/docker-ci.yml
+      - ".github/workflows/*.yml"
   workflow_dispatch:
 
 permissions:
@@ -31,7 +37,10 @@ jobs:
         run: bash -n ./*.sh tests/*.sh
 
       - name: Lint runtime scripts
-        run: shellcheck --severity=warning autosave.sh entrypoint.sh inject.sh manage-mods.sh prepare-config.sh tests/*.sh
+        run: shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh log-filter.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh tests/*.sh
+
+      - name: Test release metadata and notes
+        run: bash tests/release-metadata-test.sh
 
       - name: Validate Compose configuration
         run: docker compose config --quiet
@@ -54,3 +63,21 @@ jobs:
           --mount type=bind,source="$PWD",target=/repo,readonly
           tmodloader:ci
           /repo/tests/manage-mods-test.sh /terraria-server/manage-mods.sh
+
+      - name: Test configuration generation
+        run: >-
+          docker run --rm --entrypoint bash
+          --mount type=bind,source="$PWD",target=/repo,readonly
+          tmodloader:ci
+          /repo/tests/config-test.sh /terraria-server/prepare-config.sh
+
+      - name: Test console log filtering and crash replay
+        run: >-
+          docker run --rm --entrypoint bash
+          --mount type=bind,source="$PWD",target=/repo,readonly
+          tmodloader:ci
+          /repo/tests/log-filter-test.sh /terraria-server/log-filter.sh /terraria-server/run-server.sh
+
+      - name: Smoke-test the server
+        timeout-minutes: 12
+        run: bash tests/server-smoke-test.sh tmodloader:ci

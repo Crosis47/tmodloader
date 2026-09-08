@@ -1,204 +1,449 @@
-# tModLoader Powered By Docker
+# tModLoader Dedicated Server Container
+
 [![Publish](https://img.shields.io/github/actions/workflow/status/Crosis47/tmodloader/docker-publish.yml?branch=master&logo=github&label=image%20publisher&style=for-the-badge)](https://github.com/Crosis47/tmodloader/actions/workflows/docker-publish.yml)
 [![CI](https://img.shields.io/github/actions/workflow/status/Crosis47/tmodloader/docker-ci.yml?logo=github&label=docker%20CI&style=for-the-badge)](https://github.com/Crosis47/tmodloader/actions/workflows/docker-ci.yml)
 
----
+[GitHub repository](https://github.com/Crosis47/tmodloader) |
+[GHCR images](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader) |
+[Releases](https://github.com/Crosis47/tmodloader/releases) |
+[Container changelog](CHANGELOG.md) |
+[Contributing](CONTRIBUTING.md) |
+[Security](SECURITY.md)
 
-[View on GitHub](https://github.com/Crosis47/tmodloader) |
-[View container images](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
+This container runs a configurable tModLoader dedicated server with persistent
+worlds, mods, configuration, and logs. Steam Workshop mods and collections can
+be managed from one environment variable, and the published images are tested
+by starting a real server before their public tags are updated.
 
-This Docker Image is designed to allow for easy configuration and setup of a modded Terraria server powered by tModLoader.
+## Maintained hard fork
+
+This repository is a **hard fork of
+[JACOBSMILE/tmodloader1.4](https://github.com/JACOBSMILE/tmodloader1.4)**. It is
+independently maintained and is not an upstream mirror. The fork preserves the
+original project's foundation and license while adding new features and fixes
+for long-standing container, dependency, automation, configuration, shutdown,
+and Workshop-management bugs.
+
+Changes made here should not be assumed to exist in the original repository,
+and this project is not affiliated with Re-Logic or the tModLoader team.
 
 ## Features
-- Easy Downloading of tModLoader mods by Workshop ID
-- Scheduled World Saving
-- Graceful Shutdowns
-- Configuration Files are optional
-- GitHub automation that publishes stable and preview tModLoader releases
-- Build-time .NET runtime checks to prevent broken images from being published
 
-## Credits & Mentions
-- Terraria
-  - [Website](https://terraria.org/)
-  - [Steam Store Page](https://store.steampowered.com/app/105600/Terraria/)
-- tModLoader
-  - [Website](https://www.tmodloader.net/)
-  - [Steam Store Page](https://store.steampowered.com/app/1281930/tModLoader/)
-  - [Github](https://github.com/tModLoader/tModLoader)
-- [ldericher](https://github.com/ldericher/tmodloader-docker)'s Docker implementation of tModLoader for Terraria 1.3 and command injection functionality
-- [rfvgyhn](https://github.com/rfvgyhn/tmodloader-docker)'s Docker implementation of tModLoader for Terraria 1.3
-- [guillheu](https://github.com/guillheu/tmodloader-docker)'s Docker implementation of tModLoader for Terraria 1.4
-- [FlorentLM](https://github.com/FlorentLM/tmodloader1.4) For helping clean up the Dockerfile & resolving some security concerns.
-- [JACOBSMILE/tmodloader1.4](https://github.com/JACOBSMILE/tmodloader1.4), the original project this maintained fork is based on
+- Stable, preview, and exact-version images published to GHCR.
+- Candidate-image gating with script tests and a real server smoke test.
+- One `TMOD_MODS` setting for downloading, updating, and enabling Workshop mods.
+- Recursive Steam Workshop collection expansion and cached-offline startup.
+- Persistent worlds, mod configuration, Workshop content, and server logs.
+- Configurable quiet, normal, and debug Docker console output with automatic
+  crash-tail replay and persistent raw logs.
+- Docker health status based on the live server session, log, and TCP port.
+- Validated environment-based server configuration or an optional custom file.
+- Password redaction and file-based password support.
+- Scheduled saves, console command injection, and graceful shutdown.
 
-# Repository Automation & Daily Automated Builds
+## Requirements
 
-The publisher checks the official tModLoader releases every day. It publishes immutable release tags plus two moving channels:
+- Docker Engine with the Compose plugin, or Docker Desktop.
+- Enough memory for the selected world and mod pack; requirements vary greatly
+  between mod collections.
+- A writable host directory for `/data`.
+- The configured TCP port allowed through the host firewall when remote players
+  will connect.
 
-- `latest` is the newest stable tModLoader release.
-- `preview` is the newest release when that release is a prerelease.
-- `vYYYY.MM.X.Y` tags select one exact tModLoader release.
+## Quick start with Docker Compose
 
-The publisher passes each release as a Docker build argument instead of rewriting the Dockerfile. This prevents stable and preview jobs from repeatedly reverting each other's commits.
-
-## To Pull the Latest tModLoader Image
+### 1. Get the deployment files
 
 ```bash
-# ":latest" is always the newest stable tModLoader release.
-docker pull ghcr.io/crosis47/tmodloader:latest
+git clone https://github.com/Crosis47/tmodloader.git
+cd tmodloader
 ```
 
-## To Pull a Specific tModLoader Image Version
-```bash
-# Replace 'v2022.09.47.13' with the version string found at https://github.com/tModLoader/tModLoader/releases
-docker pull ghcr.io/crosis47/tmodloader:v2022.09.47.13
-```
-
-# Container Preparation
-
-### Data Directory
-Create a directory on HOST machine to house persistent files.
+Create your private `.env` from the supplied template:
 
 ```bash
-# Making the Data directory
-mkdir /path/to/data/directory
+# Linux, macOS, or Git Bash
+cp .env.example .env
 ```
+
+```powershell
+# Windows PowerShell
+Copy-Item .env.example .env
+```
+
+The `.env` file is excluded from Git. Do not commit it if it contains a server
+password or other deployment-specific information.
+
+### 2. Configure the server
+
+Open `.env` and, at minimum, review these values:
+
+```dotenv
+TMOD_HOST_PORT=7777
+TMOD_PORT=7777
+TMOD_MODS=
+TMOD_LOG_LEVEL=normal
+TMOD_WORLDNAME=Docker
+TMOD_WORLDSIZE=3
+TMOD_DIFFICULTY=1
+TMOD_MAXPLAYERS=8
+TMOD_PASS=
+```
+
+- Leave `TMOD_MODS` empty for an unmodded tModLoader server, or add Workshop
+  IDs as described under [Workshop mods and collections](#workshop-mods-and-collections).
+- Set a unique `TMOD_PASS`. An empty value or `N/A` disables authentication.
+- `TMOD_HOST_PORT` is the port players contact on the Docker host.
+- `TMOD_PORT` is the port tModLoader listens on inside the container. Compose
+  maps the host value to this value automatically.
+- The world size and difficulty settings are used only when a world does not
+  already exist.
+
+Values containing `#`, quotes, or dollar signs should be quoted according to
+Docker Compose `.env` syntax. After editing, verify the rendered configuration:
 
 ```bash
-# The below line is a mapped volume for the Docker container.
--v /path/to/data/directory:/data
+docker compose config
 ```
 
-Within this directory, you will find the following file structure:
-```
-/data/
-├─ steamMods/
-│  ├─ steamapps/
-│  │  ├─ workshop/
-│  │  │  ├─ content/
-│  │  │  │  ├─ 1281930/
-├─ tModLoader/
-│  ├─ ModConfigs/
-│  ├─ Mods/
-│  │  ├─ enabled.json
-│  ├─ Worlds/
-```
-
-Steam Workshop content is stored within `steamMods`.
-
-The server's Mod Configurations, Mod directory and World directories are stored within `tModLoader`.
-
-
-## Managing Mods
-Every Workshop item on Steam has a unique identifier which can be found by visiting the store page directly. For example, for the [Calamity Mod](https://steamcommunity.com/sharedfiles/filedetails/?id=2824688072), you can find the Workshop ID from the URL. In this case, **2824688072** is the ID. This Docker container is capable of downloading tModLoader mods directly from the Steam Workshop to streamline the setup process.
-
-Set `TMOD_MODS` to one comma-separated list of the Workshop IDs the server should keep current **and** enable:
+### 3. Pull and start
 
 ```bash
--e TMOD_MODS=2824688072,2824688266
+docker compose pull
+docker compose up -d
+docker compose logs -f
 ```
 
-On each start, the container compares the installed Workshop content manifest with Steam's current content manifest. SteamCMD runs only for missing or outdated items. If Steam's metadata endpoint is temporarily unavailable, SteamCMD checks the requested items itself instead of assuming the cache is current. The resolved `.tmod` names are then written atomically to `/data/tModLoader/Mods/enabled.json`.
+The first start can take several minutes while SteamCMD initializes, mods are
+downloaded, and the world is generated. Stop following logs with `Ctrl+C`; that
+does not stop the container.
 
-Removing an ID from `TMOD_MODS` disables it at the next start but leaves its Workshop files cached. If `TMOD_MODS` is empty, the container leaves the existing Workshop cache and `enabled.json` unchanged.
-
-`TMOD_AUTODOWNLOAD` and `TMOD_ENABLEDMODS` remain available for compatibility with existing deployments, but they are deprecated. A non-empty `TMOD_MODS` value takes precedence over both.
-
-# Environment Variables
-The following are all of the environment variables that are supported by the container. These handle server functionality and Terraria server configurations.
-
-| Variable      | Default Value | Description |
-| ----------- | ----------- | ----------- |
-| TMOD_SHUTDOWN_MESSAGE | Server is shutting down NOW! | The message which will be sent to the in-game chat upon container shutdown.
-| TMOD_AUTOSAVE_INTERVAL   | 10 | The autosave interval (in minutes) in which the World will be saved.
-| TMOD_MODS | N/A | A comma-separated list of Workshop Mod IDs to keep current and enable on startup.
-| TMOD_DOWNLOAD_RETRIES | 3 | Number of SteamCMD download attempts before startup fails.
-| TMOD_DOWNLOAD_RETRY_DELAY | 10 | Seconds to wait between SteamCMD download attempts.
-| TMOD_AUTODOWNLOAD | N/A | Deprecated compatibility variable for IDs to download or update.
-| TMOD_ENABLEDMODS | N/A | Deprecated compatibility variable for IDs to enable.
-| TMOD_USECONFIGFILE | No | Set to `Yes` to use a file mounted at `/terraria-server/customconfig.txt` instead of generated environment-variable settings.
-| TMOD_MOTD | A tModLoader server powered by Docker! | The Message of the Day which prints in the chat upon joining the server.
-| TMOD_PASS | docker | The password players must supply to join the server. Set this variable to "N/A" to disable requiring a password on join. (Not Recommended)
-| TMOD_MAXPLAYERS | 8 | The maximum number of players which can join the server at once.
-| TMOD_WORLDNAME | Docker | The name of the world file. This is seen in-game as well as will be used for the name of the .WLD file.
-| TMOD_WORLDSIZE | 3 | When generating a new world (and only when generating a new world), this variable will be used to designate the size. 1 = Small, 2 = Medium, 3 = Large
-| TMOD_WORLDSEED | Docker | The seed for a new world.
-| TMOD_DIFFICULTY | 1 | When generating a new world (and only when generating a new world), this variable will set the difficulty of the world. 0 = Normal, 1 = Expert, 2 = Master, 3 = Journey.
-| TMOD_SECURE | 0 | Adds additional cheat protection.
-| TMOD_LANGUAGE | en-US | Sets the language for the server. Available options are: `en-US` (English), `de-DE` (German), `it-IT` (Italian), `fr-FR` (French), `es-ES` (Spanish), `ru-RU` (Russian), `zh-Hans` (Chinese), `pt-BR` (Portuguese), `pl-PL` (Polish).
-| TMOD_NPCSTREAM | 60 | Reduces enemy skipping, but increases bandwidth usage. The lower the number, the less skipping will happeb, but more data is sent. 0 is off.
-| TMOD_UPNP | 0 | Automatically forwards ports with uPNP (untested, and may not work in all cases depending on network configuration)
-| TMOD_PORT | 7777 | Set the port for the tModLoader server to run on within the container.
-
-The following are environment variables which control Journey Mode settings. For all of these settings, 
-* 0 = Locked for everyone 
-* 1 = Only Changeable by Host
-* 2 = Can be changed by everyone. 
-
-Refer to the [Terraria Server Wiki](https://terraria.fandom.com/wiki/Server) for more information. The default setting for all of these is 0 when not explicitly set.
-
-* TMOD_JOURNEY_SETFROZEN
-* TMOD_JOURNEY_SETDAWN
-* TMOD_JOURNEY_SETNOON
-* TMOD_JOURNEY_SETDUSK
-* TMOD_JOURNEY_SETMIDNIGHT
-* TMOD_JOURNEY_GODMODE
-* TMOD_JOURNEY_WIND_STRENGTH
-* TMOD_JOURNEY_RAIN_STRENGTH
-* TMOD_JOURNEY_TIME_SPEED
-* TMOD_JOURNEY_RAIN_FROZEN
-* TMOD_JOURNEY_WIND_FROZEN
-* TMOD_JOURNEY_PLACEMENT_RANGE
-* TMOD_JOURNEY_SET_DIFFICULTY
-* TMOD_JOURNEY_BIOME_SPREAD
-* TMOD_JOURNEY_SPAWN_RATE
-
-# Running the Container
-
-## Docker Command
+Check Docker's health result:
 
 ```bash
-# Pull the image
-docker pull ghcr.io/crosis47/tmodloader:latest
-
-# Execute the container
-docker run -p 7777:7777 --name tmodloader --rm \
-  -v /path/to/data:/data \
-  -e TMOD_SHUTDOWN_MESSAGE='Goodbye!' \
-  -e TMOD_AUTOSAVE_INTERVAL='15' \
-  -e TMOD_MODS='2824688072,2824688266' \
-  -e TMOD_MOTD='Welcome to my tModLoader Server!' \
-  -e TMOD_PASS='secret' \
-  -e TMOD_MAXPLAYERS='16' \
-  -e TMOD_WORLDNAME='Earth' \
-  -e TMOD_WORLDSIZE='2' \
-  -e TMOD_WORLDSEED='not the bees!' \
-  -e TMOD_DIFFICULTY='3' \
-  ghcr.io/crosis47/tmodloader:latest
+docker inspect --format '{{.State.Health.Status}}' tmodloader
 ```
 
-## Docker Compose
+Once it reports `healthy`, connect to the Docker host's address and
+`TMOD_HOST_PORT`.
 
-Included in the Github repository is a sample `docker-compose.yml` file. Refer to the contents of this file to learn how to configure this file. 
+## Persistent data
 
-Once you are satisfied with the Compose file, pull and start it with the following commands.
+The supplied Compose file binds `./data` on the host to `/data` in the
+container:
+
+```text
+data/
+├── steamMods/
+│   └── steamapps/workshop/
+└── tModLoader/
+    ├── Logs/
+    ├── ModConfigs/
+    ├── Mods/
+    │   ├── collection-cache/
+    │   └── enabled.json
+    └── Worlds/
+```
+
+Replacing the container does not remove this directory. Worlds, downloaded
+Workshop items, enabled-mod state, mod configuration, logs, and collection
+membership cache therefore survive normal upgrades.
+
+## Configuration model
+
+Compose reads `.env` and passes the supported values into the container. The
+precedence rules are:
+
+1. With `TMOD_USECONFIGFILE=No`, the container validates the server settings
+   and writes a fresh generated configuration on every start.
+2. `TMOD_PASS_FILE`, when configured in generated-config mode, overrides
+   `TMOD_PASS`.
+3. With `TMOD_USECONFIGFILE=Yes`, the mounted `customconfig.txt` controls the
+   Terraria server settings. Container controls such as mods, autosave, and
+   shutdown still apply.
+4. A non-empty `TMOD_MODS` replaces the deprecated `TMOD_AUTODOWNLOAD` and
+   `TMOD_ENABLEDMODS` behavior.
+
+Generated settings reject invalid numeric ranges, unsafe world paths, and
+multiline values before the server starts. The password is redacted from
+startup output, the generated file is mode `0600`, and password variables are
+removed before tModLoader logs its process environment.
+
+### Container and Workshop settings
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `TMOD_MODS` | empty | Comma-separated mod IDs and `collection:ID` entries to update and enable. |
+| `TMOD_MOD_OFFLINE_POLICY` | `use-cache` | Use complete cached mods during a Steam outage; `strict` requires successful verification. |
+| `TMOD_COLLECTION_MAX_ITEMS` | `1000` | Maximum recursively expanded collection items and nested collections. |
+| `TMOD_DOWNLOAD_RETRIES` | `3` | SteamCMD attempts for required downloads or updates. |
+| `TMOD_DOWNLOAD_RETRY_DELAY` | `10` | Seconds between SteamCMD attempts. |
+| `TMOD_AUTOSAVE_INTERVAL` | `10` | Minutes between save commands; `0` disables scheduled commands. |
+| `TMOD_SHUTDOWN_MESSAGE` | `Server is shutting down NOW!` | Chat message sent during a Docker stop. |
+| `TMOD_SHUTDOWN_TIMEOUT` | `90` | Seconds allowed for graceful shutdown before the tmux session is terminated. |
+| `TMOD_LOG_LEVEL` | `normal` | Docker console detail: `quiet`, `normal`, or `debug`. |
+| `TMOD_CRASH_LOG_LINES` | `200` | Raw console lines replayed after a non-zero exit in quiet/normal mode; `0` disables replay. |
+| `TMOD_USECONFIGFILE` | `No` | Use `/terraria-server/customconfig.txt` when set to `Yes`. |
+
+### Generated server settings
+
+| Variable | Default | Valid values and behavior |
+| --- | --- | --- |
+| `TMOD_MOTD` | `A tModLoader server powered by Docker!` | Message shown to joining players. |
+| `TMOD_PASS` | `docker` in the image; `N/A` in Compose when empty | Server password; empty/`N/A` disables it in the supplied Compose deployment. |
+| `TMOD_PASS_FILE` | empty | Mounted password-file path; overrides `TMOD_PASS` in generated-config mode. |
+| `TMOD_MAXPLAYERS` | `8` | `1` through `255`. |
+| `TMOD_WORLDNAME` | `Docker` | World display name and filename; path separators are rejected. |
+| `TMOD_WORLDSIZE` | `3` | `1` small, `2` medium, `3` large; new worlds only. |
+| `TMOD_WORLDSEED` | `Docker` | Seed used for a new world. |
+| `TMOD_DIFFICULTY` | `1` | `0` normal, `1` expert, `2` master, `3` journey; new worlds only. |
+| `TMOD_SECURE` | `0` | `0` disabled or `1` enabled. |
+| `TMOD_LANGUAGE` | `en-US` | Language code such as `en-US`, `de-DE`, or `pt-BR`. |
+| `TMOD_NPCSTREAM` | `60` | NPC streaming range from `0` through `1000`. |
+| `TMOD_UPNP` | `0` | `0` disabled or `1` enabled; explicit Docker port publishing is recommended. |
+| `TMOD_PRIORITY` | `1` | Process priority from `0` realtime through `5` idle. |
+| `TMOD_PORT` | `7777` | Internal TCP listening port from `1` through `65535`. |
+
+Journey permission variables are included in `.env.example`. Each accepts `0`
+(locked), `1` (host only), or `2` (everyone).
+
+## Workshop mods and collections
+
+Every Steam Workshop item has an ID in its URL. For example, Calamity Mod uses
+`2824688072`. Use one comma-separated `TMOD_MODS` value to control both download
+and enablement:
+
+```dotenv
+TMOD_MODS=2824688072,2824688266
+```
+
+Prefix a collection ID with `collection:`. Nested collections are expanded
+recursively:
+
+```dotenv
+TMOD_MODS=2824688072,collection:3443710509
+```
+
+At startup, the container:
+
+1. Expands collections and filters their public items to tModLoader Workshop
+   application `1281930`.
+2. Deduplicates direct and collection-derived IDs.
+3. Compares local Workshop manifests with Steam.
+4. Downloads only missing or outdated items.
+5. Atomically writes the resolved `.tmod` names to `enabled.json`.
+
+Collection membership is cached under
+`/data/tModLoader/Mods/collection-cache`. With the default
+`TMOD_MOD_OFFLINE_POLICY=use-cache`, the server can start during a Steam API or
+SteamCMD outage only when the collection membership and every requested mod are
+already cached. It will never silently ignore a requested mod that is missing.
+Use `strict` when any inability to verify or update should block startup.
+
+Removing an ID disables it on the next managed start but leaves its Workshop
+files cached. An empty `TMOD_MODS` leaves the existing cache and `enabled.json`
+unchanged. `TMOD_AUTODOWNLOAD` and `TMOD_ENABLEDMODS` remain only for backward
+compatibility.
+
+## Password file
+
+Environment variables are visible through Docker metadata. To keep the real
+password out of that metadata, create `./secrets/tmod-password`, set:
+
+```dotenv
+TMOD_PASS=N/A
+TMOD_PASS_FILE=/run/secrets/tmod-password
+```
+
+Then uncomment this mount in `docker-compose.yml`:
+
+```yaml
+- "./secrets/tmod-password:/run/secrets/tmod-password:ro"
+```
+
+Restrict access to the host file. `TMOD_PASS_FILE` applies to generated-config
+mode; a custom server config is responsible for its own password handling.
+
+## Custom server configuration
+
+To use a native Terraria/tModLoader server configuration:
+
+1. Create `customconfig.txt` beside `docker-compose.yml`.
+2. Set `TMOD_USECONFIGFILE=Yes` in `.env`.
+3. Uncomment the `customconfig.txt` volume in `docker-compose.yml`.
+4. Keep `TMOD_PORT` equal to the `port` value in the custom file so Docker's
+   port mapping and healthcheck target the correct listener.
+
+The generated-server variables are ignored in this mode. `TMOD_MODS`, Workshop
+policies, autosave, shutdown behavior, persistent paths, and health monitoring
+remain container features and continue to apply.
+
+## Server operations
+
+Follow the live console output:
+
+```bash
+docker compose logs -f tmodloader
+```
+
+`TMOD_LOG_LEVEL` controls only the stream shown by `docker logs`:
+
+- `normal` keeps server, mod-loading, player, warning, and error messages, but
+  collapses world generation to one line per stage and hides low-value launcher
+  checks and the full launch command.
+- `quiet` keeps server lifecycle, save, warning, error, exception, and crash
+  messages.
+- `debug` prints the complete unfiltered console stream.
+
+The setting never discards diagnostics. The full current launch is written to
+`./data/tModLoader/Logs/container-console.log`; the prior launch is retained as
+`container-console.previous.log`, and tModLoader's native `server.log` remains
+unchanged. If the server exits non-zero in `quiet` or `normal`, the container
+automatically replays the final `TMOD_CRASH_LOG_LINES` raw lines to Docker logs.
+
+Send a tModLoader console command:
+
+```bash
+docker exec tmodloader inject "say Hello World!"
+```
+
+Stop gracefully:
+
+```bash
+docker compose stop
+```
+
+The entrypoint announces the configured shutdown message, asks tModLoader to
+exit, waits up to `TMOD_SHUTDOWN_TIMEOUT`, and preserves the server's exit
+status during ordinary operation.
+
+Logs and crash information are stored in `./data/tModLoader/Logs`. Docker marks
+the container healthy after the tmux session exists, the current server log
+reports `Server started`, and the internal TCP port accepts a connection. The
+ten-minute health start period prevents slow first-time world generation from
+being treated as an immediate failure; a successful check can report healthy
+earlier.
+
+## Updating and pinning images
+
+Update the Compose deployment with:
+
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-An image tag changing in a registry does not replace an already-created container. Run those commands again to update it. The included Compose file also uses `pull_policy: always`, so each `up` checks for a newer image.
+The supplied Compose file uses `pull_policy: always`, but an already-created
+container is not replaced merely because a registry tag moved. Running `up -d`
+after `pull` performs that replacement while retaining `./data`.
 
-# Interacting with the Server
+The container and tModLoader are versioned independently. `VERSION` is the
+container's SemVer core. The bundled tModLoader version and channel are added to
+each exact release:
 
-To send commands to the server once it has started, use the following command on your Host machine. The below example will send "Hello World" to the game chat.
+| Purpose | Example | Behavior |
+| --- | --- | --- |
+| GitHub Release tag | `1.0.0+tml.v2026.07.3.0.stable` | Strict SemVer using build metadata for the bundled dependency. |
+| Exact Docker tag | `1.0.0-tml-v2026-07-3-0-stable` | Docker-safe SemVer spelling; release workflows refuse to reuse it. |
+| tModLoader lookup | `tml-v2026.07.3.0-stable` | Moves when that tModLoader release receives a newer container build. |
+| Stable channel | `latest` or `stable` | Newest verified stable combination. |
+| Preview channel | `preview` | Newest verified preview combination. |
+| Compatibility | `v2026.07.3.0` | Legacy upstream-only alias retained during migration. |
+
+Docker registries do not accept `+` in a tag, so the exact Docker form uses one
+hyphenated prerelease identifier. The terminal `stable` or `preview` text is the
+actual channel; the hyphen is a registry-safe representation of dependency
+metadata rather than a statement that every Docker image is unstable.
+
+Each exact combination also receives a GitHub Release containing its container
+changelog, tModLoader release link, published tags, tested digest, and validation
+summary. Use the digest shown in that release when the complete image must be
+immutable:
+
+```yaml
+image: ghcr.io/crosis47/tmodloader@sha256:replace-with-reviewed-digest
+```
+
+## Backups
+
+The complete persistent state is under `./data`. For a consistent cold backup,
+stop the container, copy that directory to protected storage, and start the
+container again:
 
 ```bash
-docker exec tmodloader inject "say Hello World!"
+docker compose stop
+# Back up ./data with the host backup tool of your choice.
+docker compose start
 ```
-You can alternatively use the ID of the container in place of `tmodloader` if you did not name your configuration.
 
-_Credit to [ldericher](https://github.com/ldericher/tmodloader-docker) for this method of command injection to tModLoader's console._
+At minimum, protect `data/tModLoader/Worlds`, `ModConfigs`, and the Workshop/mod
+state needed by the deployment. Test restoration rather than assuming a copied
+backup is usable.
 
-# Notes
-I do not own tModLoader or Terraria. This Docker Image was created for players to easily host a game server with Docker, and is not intended to infringe on any Copyright, Trademark or Intellectual Property.
+## Troubleshooting
+
+### Container remains unhealthy
+
+```bash
+docker compose ps
+docker compose logs --tail=200 tmodloader
+docker inspect --format '{{json .State.Health}}' tmodloader
+```
+
+Confirm that world generation has finished, `TMOD_PORT` matches any custom
+configuration, and the process has enough memory. Docker health status is
+diagnostic; Compose's `restart: unless-stopped` does not restart a process solely
+because its health result is `unhealthy`.
+
+### Players cannot connect
+
+Confirm `TMOD_HOST_PORT`, the host firewall rule, router forwarding if needed,
+and the address players use. `docker compose config` should show the expected
+published host port and internal target port.
+
+### Workshop startup fails
+
+Read the startup log for the specific missing or outdated Workshop ID. The
+default offline policy permits cached startup only when all requested content
+is present. A first-time download therefore requires Steam access. Private,
+removed, or non-tModLoader collection items are excluded.
+
+### Configuration is rejected
+
+The fatal message names the invalid variable and range. Correct `.env`, run
+`docker compose config`, and recreate the container with `docker compose up -d`.
+Existing worlds are not regenerated merely because world-generation variables
+change.
+
+## Image automation
+
+The publisher checks official tModLoader releases daily and can also build an
+exact release on demand. It combines the repository's container `VERSION` with
+the discovered tModLoader version, builds an untagged candidate digest, runs
+Bash and configuration tests, starts and stops a real dedicated server, and
+only then assigns the public GHCR tags and creates the corresponding GitHub
+Release. Release notes are rendered from the matching version section in
+`CHANGELOG.md` and include the exact tested digest. A failed candidate cannot
+move a public tag or create a release.
+
+Images are published to GitHub Container Registry. Docker Hub credentials are
+not required for this repository's release workflow.
+
+## Credits
+
+- [Terraria](https://terraria.org/) and
+  [its Steam page](https://store.steampowered.com/app/105600/Terraria/)
+- [tModLoader](https://www.tmodloader.net/),
+  [its source](https://github.com/tModLoader/tModLoader), and
+  [its Steam page](https://store.steampowered.com/app/1281930/tModLoader/)
+- [JACOBSMILE/tmodloader1.4](https://github.com/JACOBSMILE/tmodloader1.4),
+  the original project on which this hard fork is based
+- [ldericher/tmodloader-docker](https://github.com/ldericher/tmodloader-docker)
+  for the Terraria 1.3 implementation and console-injection approach
+- [rfvgyhn/tmodloader-docker](https://github.com/rfvgyhn/tmodloader-docker)
+- [guillheu/tmodloader-docker](https://github.com/guillheu/tmodloader-docker)
+- [FlorentLM/tmodloader1.4](https://github.com/FlorentLM/tmodloader1.4)
+
+The repository's container code and scripts are distributed under
+[LICENSE.md](LICENSE.md). Terraria, tModLoader, SteamCMD, and their respective
+assets remain the property of their owners.

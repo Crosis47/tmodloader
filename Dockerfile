@@ -23,14 +23,16 @@ FROM ubuntu:24.04
 # The TMOD Version. Ensure that you follow the correct format. Version releases can be found at https://github.com/tModLoader/tModLoader/releases if you're lost.
 ARG TMOD_VERSION=v2026.07.3.0
 
-# Sends update messages to the console before launch.
-ENV UPDATE_NOTICE="true"
-
 # The shutdown message is broadcast to the game chat when the container was stopped from the host.
 ENV TMOD_SHUTDOWN_MESSAGE="Server is shutting down NOW!"
+ENV TMOD_SHUTDOWN_TIMEOUT="90"
 
 # The autosave feature will save the world periodically. The interval is in minutes.
 ENV TMOD_AUTOSAVE_INTERVAL="10"
+
+# Docker console verbosity. Complete raw output remains in the persistent log.
+ENV TMOD_LOG_LEVEL="normal"
+ENV TMOD_CRASH_LOG_LINES="200"
 
 # Workshop mods to keep current and enable when the server starts.
 # Example format: 2824688072,2824688266,2835214226
@@ -43,9 +45,12 @@ ENV TMOD_ENABLEDMODS=""
 # Retry transient Steam Workshop failures before aborting startup.
 ENV TMOD_DOWNLOAD_RETRIES="3"
 ENV TMOD_DOWNLOAD_RETRY_DELAY="10"
+ENV TMOD_MOD_OFFLINE_POLICY="use-cache"
+ENV TMOD_COLLECTION_MAX_ITEMS="1000"
 
 # If you want to specify your own config, set the following to "Yes".
 ENV TMOD_USECONFIGFILE="No"
+ENV TMOD_PASS_FILE=""
 
 #--------- CONFIG SECTION --------- #
 # The following environment variables will configure common settings for the tModLoader server.
@@ -110,9 +115,8 @@ ENV TMOD_JOURNEY_BIOME_SPREAD="0"
 # journeypermission_setspawnrate
 ENV TMOD_JOURNEY_SPAWN_RATE="0"
 
-# [!!!] The section for using a config file has been deprecated in favor of the environment variable approach.
-# Loading a configuration file expects a proper Terraria config file to be mapped to /root/terraria-server/serverconfig.txt
-# Set this to "Yes" if you would rather use a config file instead of the above settings.
+# Loading a custom configuration file expects a Terraria server config mounted
+# at /terraria-server/customconfig.txt. Set this to "Yes" to use that file.
 # ENV TMOD_USECONFIGFILE="No"
 
 
@@ -146,6 +150,7 @@ RUN apt-get update \
 
 RUN mkdir -p \
         /data/steamMods \
+        /data/tModLoader/Logs \
         /data/tModLoader/Mods \
         /data/tModLoader/Worlds
 
@@ -161,15 +166,21 @@ RUN wget --no-verbose --output-document=tModLoader.zip \
     && rm tModLoader.zip
 
 COPY entrypoint.sh .
+COPY run-server.sh .
+COPY log-filter.sh .
 COPY manage-mods.sh .
 COPY inject.sh /usr/local/bin/inject
+COPY healthcheck.sh /usr/local/bin/healthcheck
 COPY autosave.sh .
 COPY prepare-config.sh .
 
 RUN find ./LaunchUtils -type f -name '*.sh' -exec chmod 755 {} + \
     && chmod 755 ./entrypoint.sh \
+    && chmod 755 ./run-server.sh \
+    && chmod 755 ./log-filter.sh \
     && chmod 755 ./manage-mods.sh \
     && chmod 755 ./autosave.sh \
+    && chmod 755 /usr/local/bin/healthcheck \
     && chmod 755 /usr/local/bin/inject \
     && chmod 755 ./prepare-config.sh \
     && chmod 755 ./start-tModLoaderServer.sh
@@ -181,7 +192,11 @@ RUN bash -c 'set -Eeo pipefail; \
         . ./DotNetVersion.sh; \
         run_script ./InstallDotNet.sh' \
     && test -x ./dotnet/dotnet \
-    && ./dotnet/dotnet --info
+    && ./dotnet/dotnet --info \
+    && rm -rf ./tModLoader-Logs \
+    && ln -s /data/tModLoader/Logs ./tModLoader-Logs
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10m --retries=3 CMD ["healthcheck"]
 
 STOPSIGNAL SIGTERM
 
