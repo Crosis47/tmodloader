@@ -6,27 +6,31 @@ services:
     restart: unless-stopped
     stop_grace_period: 2m
     ports:
-      - "7777:7777/tcp"
+      # TMOD_HOST_PORT is the host-facing port; TMOD_PORT is the port inside the container.
+      - "${TMOD_HOST_PORT:-7777}:${TMOD_PORT:-7777}/tcp"
     environment:
-      # Keep the Calamity mod and CalamityMusic mod current and enabled.
+      # IDs and collection:<id> entries are expanded, kept current, and enabled.
       - "TMOD_MODS=2824688072,2824688266"
       # Shutdown Message and Autosave Interval (In Minutes)
       - "TMOD_SHUTDOWN_MESSAGE=Goodbye!"
       - "TMOD_AUTOSAVE_INTERVAL=15"
       - "TMOD_DOWNLOAD_RETRIES=3"
       - "TMOD_DOWNLOAD_RETRY_DELAY=10"
+      - "TMOD_MOD_OFFLINE_POLICY=use-cache"
+      - "TMOD_COLLECTION_MAX_ITEMS=1000"
       # Server Settings
       - "TMOD_MOTD=Welcome to my tModLoader Server!"
-      - "TMOD_PASS=secret"
+      # Put TMOD_PASS in a local .env file; N/A disables the password.
+      - "TMOD_PASS=${TMOD_PASS:-N/A}"
       - "TMOD_MAXPLAYERS=16"
       # The following world settings are only used when generating a new world.
       - "TMOD_WORLDNAME=Earth"
       - "TMOD_WORLDSIZE=2"
       - "TMOD_WORLDSEED=not the bees!"
       - "TMOD_DIFFICULTY=3"
+      - "TMOD_PORT=${TMOD_PORT:-7777}"
       # If TMOD_USECONFIGFILE is "Yes", customconfig.txt is used and the settings above are ignored.
       - "TMOD_USECONFIGFILE=No"
-      - "UPDATE_NOTICE=false"
 
     volumes:
       ##### By default, the below setting will create a data directory on your host where this compose file lives.

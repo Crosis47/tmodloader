@@ -28,6 +28,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -51,14 +52,14 @@ jobs:
 
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           image="ghcr.io/${owner}/tmodloader"
-          {
-            echo 'tags<<EOF'
-            echo "$image:$RELEASE"
-            if [[ "$FLOATING_TAG" != "version-only" ]]; then
-              echo "$image:$FLOATING_TAG"
-            fi
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "floating=$FLOATING_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Validate repository
+        run: |
+          bash -n ./*.sh tests/*.sh
+          shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh manage-mods.sh prepare-config.sh run-server.sh tests/*.sh
+          docker compose config --quiet
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -70,15 +71,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and publish image
+      - name: Build and publish untagged candidate
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
-          push: true
           build-args: |
             TMOD_VERSION=${{ inputs.release }}
-          tags: ${{ steps.release.outputs.tags }}
+          outputs: type=image,name=${{ steps.release.outputs.image }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -88,3 +89,36 @@ jobs:
           cache-to: type=gha,mode=max,scope=custom
           provenance: mode=max
           sbom: true
+
+      - name: Test candidate scripts
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker run --rm --entrypoint bash \
+            --mount type=bind,source="$PWD",target=/repo,readonly \
+            "$IMAGE@$DIGEST" \
+            /repo/tests/manage-mods-test.sh /terraria-server/manage-mods.sh
+          docker run --rm --entrypoint bash \
+            --mount type=bind,source="$PWD",target=/repo,readonly \
+            "$IMAGE@$DIGEST" \
+            /repo/tests/config-test.sh /terraria-server/prepare-config.sh
+
+      - name: Smoke-test candidate server
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: bash tests/server-smoke-test.sh "$IMAGE@$DIGEST"
+
+      - name: Publish verified tags
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          RELEASE: ${{ inputs.release }}
+          FLOATING: ${{ steps.release.outputs.floating }}
+        run: |
+          tag_args=(--tag "$IMAGE:$RELEASE")
+          if [[ "$FLOATING" != "version-only" ]]; then
+            tag_args+=(--tag "$IMAGE:$FLOATING")
+          fi
+          docker buildx imagetools create "${tag_args[@]}" "$IMAGE@$DIGEST"

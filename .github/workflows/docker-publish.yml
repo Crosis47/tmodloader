@@ -68,6 +68,7 @@ jobs:
     name: Publish ${{ matrix.channel }} (${{ matrix.version }})
     needs: releases
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.releases.outputs.matrix) }}
@@ -99,18 +100,23 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build and publish image
+      - name: Validate repository
+        if: steps.publication.outputs.publish == 'true'
+        run: |
+          bash -n ./*.sh tests/*.sh
+          shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh manage-mods.sh prepare-config.sh run-server.sh tests/*.sh
+          docker compose config --quiet
+
+      - name: Build and publish untagged candidate
+        id: build
         if: steps.publication.outputs.publish == 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
-          push: true
           build-args: |
             TMOD_VERSION=${{ matrix.version }}
-          tags: |
-            ${{ needs.releases.outputs.image }}:${{ matrix.version }}
-            ${{ needs.releases.outputs.image }}:${{ matrix.floating }}
+          outputs: type=image,name=${{ needs.releases.outputs.image }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -120,3 +126,38 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.channel }}
           provenance: mode=max
           sbom: true
+
+      - name: Test candidate scripts
+        if: steps.publication.outputs.publish == 'true'
+        env:
+          IMAGE: ${{ needs.releases.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker run --rm --entrypoint bash \
+            --mount type=bind,source="$PWD",target=/repo,readonly \
+            "$IMAGE@$DIGEST" \
+            /repo/tests/manage-mods-test.sh /terraria-server/manage-mods.sh
+          docker run --rm --entrypoint bash \
+            --mount type=bind,source="$PWD",target=/repo,readonly \
+            "$IMAGE@$DIGEST" \
+            /repo/tests/config-test.sh /terraria-server/prepare-config.sh
+
+      - name: Smoke-test candidate server
+        if: steps.publication.outputs.publish == 'true'
+        env:
+          IMAGE: ${{ needs.releases.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: bash tests/server-smoke-test.sh "$IMAGE@$DIGEST"
+
+      - name: Publish verified tags
+        if: steps.publication.outputs.publish == 'true'
+        env:
+          IMAGE: ${{ needs.releases.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          VERSION: ${{ matrix.version }}
+          FLOATING: ${{ matrix.floating }}
+        run: >-
+          docker buildx imagetools create
+          --tag "$IMAGE:$VERSION"
+          --tag "$IMAGE:$FLOATING"
+          "$IMAGE@$DIGEST"

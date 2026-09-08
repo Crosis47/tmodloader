@@ -1,90 +1,131 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
+set -Eeuo pipefail
 
-# Print Env variables
-configPath=/terraria-server/serverconfig.txt
-echo -e "[CONFIG] Config File Path: $configPath"
-echo -e "[CONFIG] Setting Config Values..."
+config_path="${TMOD_CONFIG_PATH:-/terraria-server/serverconfig.txt}"
+data_dir="${TMOD_DATA_DIR:-/data}"
+world_dir="$data_dir/tModLoader/Worlds"
 
-# A restarted container keeps its writable layer. Recreate the generated file
-# so settings are not duplicated on every restart.
-: > "$configPath"
+fail() {
+    printf '[!!] FATAL: %s\n' "$*" >&2
+    exit 1
+}
 
-echo -e "[CONFIG] TERRARIA CONFIG SETTINGS"
-echo -e "[CONFIG] MOTD Set to: $TMOD_MOTD"
-echo -e "[CONFIG] Server Password set to: $TMOD_PASS"
-echo -e "[CONFIG] Max Players set to: $TMOD_MAXPLAYERS"
-echo -e "[CONFIG] World Name set to: $TMOD_WORLDNAME"
-echo -e "[CONFIG] World Size set to: $TMOD_WORLDSIZE"
-echo -e "[CONFIG] World Seed set to: $TMOD_WORLDSEED"
-echo -e "[CONFIG] Difficulty set to: $TMOD_DIFFICULTY"
-echo -e "[CONFIG] Secure Mode set to: $TMOD_SECURE"
-echo -e "[CONFIG] Language set to: $TMOD_LANGUAGE"
-echo -e "[CONFIG] NPC Stream set to: $TMOD_NPCSTREAM"
-echo -e "[CONFIG] UPNP set to: $TMOD_UPNP"
-echo -e "[CONFIG] Priority set to: $TMOD_PRIORITY"
-echo -e "[CONFIG] JOURNEY MODE SETTINGS"
-echo -e "[CONFIG] journeypermission_time_setfrozen: $TMOD_JOURNEY_SETFROZEN"
-echo -e "[CONFIG] journeypermission_time_setdawn: $TMOD_JOURNEY_SETDAWN"
-echo -e "[CONFIG] journeypermission_time_setnoon: $TMOD_JOURNEY_SETNOON"
-echo -e "[CONFIG] journeypermission_time_setdusk: $TMOD_JOURNEY_SETDUSK"
-echo -e "[CONFIG] journeypermission_time_setmidnight: $TMOD_JOURNEY_SETMIDNIGHT"
-echo -e "[CONFIG] journeypermission_godmode: $TMOD_JOURNEY_GODMODE"
-echo -e "[CONFIG] journeypermission_wind_setstrength: $TMOD_JOURNEY_WIND_STRENGTH"
-echo -e "[CONFIG] journeypermission_rain_setstrength: $TMOD_JOURNEY_RAIN_STRENGTH"
-echo -e "[CONFIG] journeypermission_time_setspeed: $TMOD_JOURNEY_TIME_SPEED"
-echo -e "[CONFIG] journeypermission_rain_setfrozen: $TMOD_JOURNEY_RAIN_FROZEN"
-echo -e "[CONFIG] journeypermission_wind_setfrozen: $TMOD_JOURNEY_WIND_FROZEN"
-echo -e "[CONFIG] journeypermission_increaseplacementrange: $TMOD_JOURNEY_PLACEMENT_RANGE"
-echo -e "[CONFIG] journeypermission_setdifficulty: $TMOD_JOURNEY_SET_DIFFICULTY"
-echo -e "[CONFIG] journeypermission_biomespread_setfrozen: $TMOD_JOURNEY_BIOME_SPREAD"
-echo -e "[CONFIG] journeypermission_setspawnrate: $TMOD_JOURNEY_SPAWN_RATE"
+reject_line_breaks() {
+    local variable_name="$1"
+    local value="$2"
 
-# Check if the world file exists.
-if [ -e "/data/tModLoader/Worlds/$TMOD_WORLDNAME.wld" ]; then
-    echo "world=/data/tModLoader/Worlds/$TMOD_WORLDNAME.wld" >> "$configPath"
-    echo "worldpath=/data/tModLoader/Worlds/" >> "$configPath"
-else
-# If it does not, alert the player, and set the startup parameters to automatically generate the world.
-    echo -e "[!!] WARNING: The world \"$TMOD_WORLDNAME\" was not found. The server will automatically create a new world."
-    sleep 3s
-    echo "world=/data/tModLoader/Worlds/$TMOD_WORLDNAME.wld" >> "$configPath"
-    echo "worldpath=/data/tModLoader/Worlds/" >> "$configPath"
-    echo "worldname=$TMOD_WORLDNAME" >> "$configPath"
-    echo "autocreate=$TMOD_WORLDSIZE" >> "$configPath"
-fi
+    if [[ "$value" == *$'\n'* || "$value" == *$'\r'* ]]; then
+        fail "$variable_name cannot contain line breaks."
+    fi
+}
 
+require_integer_range() {
+    local variable_name="$1"
+    local value="$2"
+    local minimum="$3"
+    local maximum="$4"
+
+    [[ "$value" =~ ^[0-9]+$ ]] || fail "$variable_name must be an integer from $minimum through $maximum."
+    ((10#$value >= minimum && 10#$value <= maximum)) || \
+        fail "$variable_name must be an integer from $minimum through $maximum."
+}
+
+require_permission() {
+    require_integer_range "$1" "$2" 0 2
+}
+
+append_config() {
+    printf '%s=%s\n' "$1" "$2" >> "$config_path"
+}
+
+reject_line_breaks TMOD_MOTD "$TMOD_MOTD"
+reject_line_breaks TMOD_PASS "$TMOD_PASS"
+reject_line_breaks TMOD_WORLDNAME "$TMOD_WORLDNAME"
+reject_line_breaks TMOD_WORLDSEED "$TMOD_WORLDSEED"
+
+[[ -n "$TMOD_WORLDNAME" ]] || fail "TMOD_WORLDNAME cannot be empty."
+[[ "$TMOD_WORLDNAME" != */* && "$TMOD_WORLDNAME" != *\\* && "$TMOD_WORLDNAME" != "." && "$TMOD_WORLDNAME" != ".." ]] || \
+    fail "TMOD_WORLDNAME cannot contain path separators or be '.' or '..'."
+[[ "$TMOD_LANGUAGE" =~ ^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$ ]] || \
+    fail "TMOD_LANGUAGE must be a language code such as en-US."
+
+require_integer_range TMOD_MAXPLAYERS "$TMOD_MAXPLAYERS" 1 255
+require_integer_range TMOD_WORLDSIZE "$TMOD_WORLDSIZE" 1 3
+require_integer_range TMOD_DIFFICULTY "$TMOD_DIFFICULTY" 0 3
+require_integer_range TMOD_SECURE "$TMOD_SECURE" 0 1
+require_integer_range TMOD_NPCSTREAM "$TMOD_NPCSTREAM" 0 1000
+require_integer_range TMOD_UPNP "$TMOD_UPNP" 0 1
+require_integer_range TMOD_PRIORITY "$TMOD_PRIORITY" 0 5
+require_integer_range TMOD_PORT "$TMOD_PORT" 1 65535
+
+require_permission TMOD_JOURNEY_SETFROZEN "$TMOD_JOURNEY_SETFROZEN"
+require_permission TMOD_JOURNEY_SETDAWN "$TMOD_JOURNEY_SETDAWN"
+require_permission TMOD_JOURNEY_SETNOON "$TMOD_JOURNEY_SETNOON"
+require_permission TMOD_JOURNEY_SETDUSK "$TMOD_JOURNEY_SETDUSK"
+require_permission TMOD_JOURNEY_SETMIDNIGHT "$TMOD_JOURNEY_SETMIDNIGHT"
+require_permission TMOD_JOURNEY_GODMODE "$TMOD_JOURNEY_GODMODE"
+require_permission TMOD_JOURNEY_WIND_STRENGTH "$TMOD_JOURNEY_WIND_STRENGTH"
+require_permission TMOD_JOURNEY_RAIN_STRENGTH "$TMOD_JOURNEY_RAIN_STRENGTH"
+require_permission TMOD_JOURNEY_TIME_SPEED "$TMOD_JOURNEY_TIME_SPEED"
+require_permission TMOD_JOURNEY_RAIN_FROZEN "$TMOD_JOURNEY_RAIN_FROZEN"
+require_permission TMOD_JOURNEY_WIND_FROZEN "$TMOD_JOURNEY_WIND_FROZEN"
+require_permission TMOD_JOURNEY_PLACEMENT_RANGE "$TMOD_JOURNEY_PLACEMENT_RANGE"
+require_permission TMOD_JOURNEY_SET_DIFFICULTY "$TMOD_JOURNEY_SET_DIFFICULTY"
+require_permission TMOD_JOURNEY_BIOME_SPREAD "$TMOD_JOURNEY_BIOME_SPREAD"
+require_permission TMOD_JOURNEY_SPAWN_RATE "$TMOD_JOURNEY_SPAWN_RATE"
+
+mkdir -p "$(dirname "$config_path")" "$world_dir"
+: > "$config_path"
+chmod 600 "$config_path"
+
+printf '[CONFIG] Generating %s\n' "$config_path"
+printf '[CONFIG] World: %s; size: %s; difficulty: %s; max players: %s; port: %s\n' \
+    "$TMOD_WORLDNAME" "$TMOD_WORLDSIZE" "$TMOD_DIFFICULTY" "$TMOD_MAXPLAYERS" "$TMOD_PORT"
 if [[ "$TMOD_PASS" == "N/A" ]]; then
-    echo -e "[!!] Server Password has been disabled."
+    printf '[CONFIG] Server password: disabled\n'
 else
-    echo "password=$TMOD_PASS" >> "$configPath"
+    printf '[CONFIG] Server password: configured (value redacted)\n'
 fi
 
-echo "motd=$TMOD_MOTD" >> "$configPath"
-echo "maxplayers=$TMOD_MAXPLAYERS" >> "$configPath"
-echo "seed=$TMOD_WORLDSEED" >> "$configPath"
-echo "difficulty=$TMOD_DIFFICULTY" >> "$configPath"
-echo "secure=$TMOD_SECURE" >> "$configPath"
-echo "language=$TMOD_LANGUAGE" >> "$configPath"
-echo "npcstream=$TMOD_NPCSTREAM" >> "$configPath"
-echo "upnp=$TMOD_UPNP" >> "$configPath"
-echo "priority=$TMOD_PRIORITY" >> "$configPath"
-echo "port=$TMOD_PORT" >> "$configPath"
+world_path="$world_dir/$TMOD_WORLDNAME.wld"
+append_config world "$world_path"
+append_config worldpath "$world_dir/"
+if [[ ! -e "$world_path" ]]; then
+    printf '[!!] WARNING: World %s was not found; tModLoader will create it.\n' "$TMOD_WORLDNAME"
+    append_config worldname "$TMOD_WORLDNAME"
+    append_config autocreate "$TMOD_WORLDSIZE"
+fi
 
-echo "journeypermission_time_setfrozen=$TMOD_JOURNEY_SETFROZEN" >> "$configPath"
-echo "journeypermission_time_setdawn=$TMOD_JOURNEY_SETDAWN" >> "$configPath"
-echo "journeypermission_time_setnoon=$TMOD_JOURNEY_SETNOON" >> "$configPath"
-echo "journeypermission_time_setdusk=$TMOD_JOURNEY_SETDUSK" >> "$configPath"
-echo "journeypermission_time_setmidnight=$TMOD_JOURNEY_SETMIDNIGHT" >> "$configPath"
-echo "journeypermission_godmode=$TMOD_JOURNEY_GODMODE" >> "$configPath"
-echo "journeypermission_wind_setstrength=$TMOD_JOURNEY_WIND_STRENGTH" >> "$configPath"
-echo "journeypermission_rain_setstrength=$TMOD_JOURNEY_RAIN_STRENGTH" >> "$configPath"
-echo "journeypermission_time_setspeed=$TMOD_JOURNEY_TIME_SPEED" >> "$configPath"
-echo "journeypermission_rain_setfrozen=$TMOD_JOURNEY_RAIN_FROZEN" >> "$configPath"
-echo "journeypermission_wind_setfrozen=$TMOD_JOURNEY_WIND_FROZEN" >> "$configPath"
-echo "journeypermission_increaseplacementrange=$TMOD_JOURNEY_PLACEMENT_RANGE" >> "$configPath"
-echo "journeypermission_setdifficulty=$TMOD_JOURNEY_SET_DIFFICULTY" >> "$configPath"
-echo "journeypermission_biomespread_setfrozen=$TMOD_JOURNEY_BIOME_SPREAD" >> "$configPath"
-echo "journeypermission_setspawnrate=$TMOD_JOURNEY_SPAWN_RATE" >> "$configPath"
+if [[ "$TMOD_PASS" != "N/A" ]]; then
+    append_config password "$TMOD_PASS"
+fi
 
-echo -e "[CONFIG] Finished setting config settings."
+append_config motd "$TMOD_MOTD"
+append_config maxplayers "$TMOD_MAXPLAYERS"
+append_config seed "$TMOD_WORLDSEED"
+append_config difficulty "$TMOD_DIFFICULTY"
+append_config secure "$TMOD_SECURE"
+append_config language "$TMOD_LANGUAGE"
+append_config npcstream "$TMOD_NPCSTREAM"
+append_config upnp "$TMOD_UPNP"
+append_config priority "$TMOD_PRIORITY"
+append_config port "$TMOD_PORT"
+
+append_config journeypermission_time_setfrozen "$TMOD_JOURNEY_SETFROZEN"
+append_config journeypermission_time_setdawn "$TMOD_JOURNEY_SETDAWN"
+append_config journeypermission_time_setnoon "$TMOD_JOURNEY_SETNOON"
+append_config journeypermission_time_setdusk "$TMOD_JOURNEY_SETDUSK"
+append_config journeypermission_time_setmidnight "$TMOD_JOURNEY_SETMIDNIGHT"
+append_config journeypermission_godmode "$TMOD_JOURNEY_GODMODE"
+append_config journeypermission_wind_setstrength "$TMOD_JOURNEY_WIND_STRENGTH"
+append_config journeypermission_rain_setstrength "$TMOD_JOURNEY_RAIN_STRENGTH"
+append_config journeypermission_time_setspeed "$TMOD_JOURNEY_TIME_SPEED"
+append_config journeypermission_rain_setfrozen "$TMOD_JOURNEY_RAIN_FROZEN"
+append_config journeypermission_wind_setfrozen "$TMOD_JOURNEY_WIND_FROZEN"
+append_config journeypermission_increaseplacementrange "$TMOD_JOURNEY_PLACEMENT_RANGE"
+append_config journeypermission_setdifficulty "$TMOD_JOURNEY_SET_DIFFICULTY"
+append_config journeypermission_biomespread_setfrozen "$TMOD_JOURNEY_BIOME_SPREAD"
+append_config journeypermission_setspawnrate "$TMOD_JOURNEY_SPAWN_RATE"
+
+printf '[CONFIG] Finished writing validated server settings.\n'

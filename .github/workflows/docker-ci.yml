@@ -7,12 +7,14 @@ on:
     paths:
       - Dockerfile
       - "*.sh"
+      - "tests/**"
       - docker-compose.yml
       - .github/workflows/docker-ci.yml
   pull_request:
     paths:
       - Dockerfile
       - "*.sh"
+      - "tests/**"
       - docker-compose.yml
       - .github/workflows/docker-ci.yml
   workflow_dispatch:
@@ -31,7 +33,7 @@ jobs:
         run: bash -n ./*.sh tests/*.sh
 
       - name: Lint runtime scripts
-        run: shellcheck --severity=warning autosave.sh entrypoint.sh inject.sh manage-mods.sh prepare-config.sh tests/*.sh
+        run: shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh manage-mods.sh prepare-config.sh run-server.sh tests/*.sh
 
       - name: Validate Compose configuration
         run: docker compose config --quiet
@@ -54,3 +56,14 @@ jobs:
           --mount type=bind,source="$PWD",target=/repo,readonly
           tmodloader:ci
           /repo/tests/manage-mods-test.sh /terraria-server/manage-mods.sh
+
+      - name: Test configuration generation
+        run: >-
+          docker run --rm --entrypoint bash
+          --mount type=bind,source="$PWD",target=/repo,readonly
+          tmodloader:ci
+          /repo/tests/config-test.sh /terraria-server/prepare-config.sh
+
+      - name: Smoke-test the server
+        timeout-minutes: 12
+        run: bash tests/server-smoke-test.sh tmodloader:ci
