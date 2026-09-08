@@ -1,22 +1,11 @@
 # tModLoader Powered By Docker
-[![Discord](https://img.shields.io/discord/1132368789518950521?logo=discord&label=Discord%20Server&style=for-the-badge)](https://discord.gg/dHnVYYGed7)
-
-![Auto-Update Badge](https://img.shields.io/github/actions/workflow/status/jacobsmile/tmodloader1.4/tmodloader-check.yml?logo=github&label=tModLoader%20Auto-Updater&style=for-the-badge)
-
-![Contributors](https://img.shields.io/github/contributors/jacobsmile/tmodloader1.4?logo=github&style=for-the-badge)
-![Stars](https://img.shields.io/github/stars/jacobsmile/tmodloader1.4?logo=github&label=github%20stars&style=for-the-badge)
-![OpenIssues](https://img.shields.io/github/issues/jacobsmile/tmodloader1.4?logo=github&style=for-the-badge)
-![ClosedIssues](https://img.shields.io/github/issues-closed/jacobsmile/tmodloader1.4?logo=github&style=for-the-badge)
-
-[![DockerPulls](https://img.shields.io/docker/pulls/jacobsmile/tmodloader1.4?logo=docker&style=for-the-badge)](https://registry.hub.docker.com/r/jacobsmile/tmodloader1.4)
-[![DockerStars](https://img.shields.io/docker/stars/jacobsmile/tmodloader1.4?logo=docker&style=for-the-badge)](](https://registry.hub.docker.com/r/jacobsmile/tmodloader1.4))
-
-[![Unraid](https://img.shields.io/badge/Available_On_Unraid_Community_Apps!-gray?logo=unraid&link=https%3A%2F%2Funraid.net%2Fcommunity%2Fapps%3Fq%3Dtmodloader%23r&style=for-the-badge)](https://unraid.net/community/apps?q=tmodloader#r)
+[![Publish](https://img.shields.io/github/actions/workflow/status/Crosis47/tmodloader/docker-publish.yml?branch=master&logo=github&label=image%20publisher&style=for-the-badge)](https://github.com/Crosis47/tmodloader/actions/workflows/docker-publish.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/Crosis47/tmodloader/docker-ci.yml?logo=github&label=docker%20CI&style=for-the-badge)](https://github.com/Crosis47/tmodloader/actions/workflows/docker-ci.yml)
 
 ---
 
-[View on Github](https://github.com/JACOBSMILE/tmodloader1.4) |
-[View on Dockerhub](https://registry.hub.docker.com/r/jacobsmile/tmodloader1.4)
+[View on GitHub](https://github.com/Crosis47/tmodloader) |
+[View container images](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
 
 This Docker Image is designed to allow for easy configuration and setup of a modded Terraria server powered by tModLoader.
 
@@ -25,7 +14,8 @@ This Docker Image is designed to allow for easy configuration and setup of a mod
 - Scheduled World Saving
 - Graceful Shutdowns
 - Configuration Files are optional
-- Github Automation to stay up-to-date with tModLoader's release cycle
+- GitHub automation that publishes stable and preview tModLoader releases
+- Build-time .NET runtime checks to prevent broken images from being published
 
 ## Credits & Mentions
 - Terraria
@@ -39,29 +29,29 @@ This Docker Image is designed to allow for easy configuration and setup of a mod
 - [rfvgyhn](https://github.com/rfvgyhn/tmodloader-docker)'s Docker implementation of tModLoader for Terraria 1.3
 - [guillheu](https://github.com/guillheu/tmodloader-docker)'s Docker implementation of tModLoader for Terraria 1.4
 - [FlorentLM](https://github.com/FlorentLM/tmodloader1.4) For helping clean up the Dockerfile & resolving some security concerns.
-
-## Check out all of my Terraria Images!
-
-1.4 Vanilla Terraria: [Github](https://github.com/JACOBSMILE/terraria1.4) | [Dockerhub](https://hub.docker.com/r/jacobsmile/terraria1.4)
-
-1.4 tModLoader: [Github](https://github.com/JACOBSMILE/tmodloader1.4) | [Dockerhub](https://hub.docker.com/r/jacobsmile/tmodloader1.4)
+- [JACOBSMILE/tmodloader1.4](https://github.com/JACOBSMILE/tmodloader1.4), the original project this maintained fork is based on
 
 # Repository Automation & Daily Automated Builds
-The Github repository has been configured with an automated workflow to check for tModLoader updates daily and update the latest image and Dockerfile with the new tModLoader version. 
 
-Additionally, the Dockerhub registry will maintain all previous versions which are processed through this automated workflow. You can access these previous versions by pulling a repository with the tModLoader version string as the tag.
+The publisher checks the official tModLoader releases every day. It publishes immutable release tags plus two moving channels:
+
+- `latest` is the newest stable tModLoader release.
+- `preview` is the newest release when that release is a prerelease.
+- `vYYYY.MM.X.Y` tags select one exact tModLoader release.
+
+The publisher passes each release as a Docker build argument instead of rewriting the Dockerfile. This prevents stable and preview jobs from repeatedly reverting each other's commits.
 
 ## To Pull the Latest tModLoader Image
 
 ```bash
-# ":latest" will pull the most recent tModLoader version from https://github.com/tModLoader/tModLoader/releases/latest
-docker pull jacobsmile/tmodloader1.4:latest
+# ":latest" is always the newest stable tModLoader release.
+docker pull ghcr.io/crosis47/tmodloader:latest
 ```
 
 ## To Pull a Specific tModLoader Image Version
 ```bash
 # Replace 'v2022.09.47.13' with the version string found at https://github.com/tModLoader/tModLoader/releases
-docker pull jacobsmile/tmodloader1.4:v2022.09.47.13
+docker pull ghcr.io/crosis47/tmodloader:v2022.09.47.13
 ```
 
 # Container Preparation
@@ -138,8 +128,10 @@ The following are all of the environment variables that are supported by the con
 | TMOD_SHUTDOWN_MESSAGE | Server is shutting down NOW! | The message which will be sent to the in-game chat upon container shutdown.
 | TMOD_AUTOSAVE_INTERVAL   | 10 | The autosave interval (in minutes) in which the World will be saved.
 | TMOD_AUTODOWNLOAD | N/A | A Comma Separated list of Workshop Mod IDs to download from Steam upon container startup.
+| TMOD_DOWNLOAD_RETRIES | 3 | Number of SteamCMD download attempts before startup fails.
+| TMOD_DOWNLOAD_RETRY_DELAY | 10 | Seconds to wait between SteamCMD download attempts.
 | TMOD_ENABLEDMODS | N/A | A Comma Separated list of Workshop Mod IDs to enable on the tModLoader server upon startup.
-| TMOD_USECONFIGFILE | No | If you wish to use a config file to specify server settings, set this variable to "Yes". Please note, this has been deprecated.
+| TMOD_USECONFIGFILE | No | Set to `Yes` to use a file mounted at `/terraria-server/customconfig.txt` instead of generated environment-variable settings.
 | TMOD_MOTD | A tModLoader server powered by Docker! | The Message of the Day which prints in the chat upon joining the server.
 | TMOD_PASS | docker | The password players must supply to join the server. Set this variable to "N/A" to disable requiring a password on join. (Not Recommended)
 | TMOD_MAXPLAYERS | 8 | The maximum number of players which can join the server at once.
@@ -182,11 +174,11 @@ Refer to the [Terraria Server Wiki](https://terraria.fandom.com/wiki/Server) for
 
 ```bash
 # Pull the image
-docker pull jacobsmile/tmodloader1.4:latest
+docker pull ghcr.io/crosis47/tmodloader:latest
 
 # Execute the container
 docker run -p 7777:7777 --name tmodloader --rm \
-  -v /path/to/data:/data
+  -v /path/to/data:/data \
   -e TMOD_SHUTDOWN_MESSAGE='Goodbye!' \
   -e TMOD_AUTOSAVE_INTERVAL='15' \
   -e TMOD_AUTODOWNLOAD='2824688072,2824688266' \
@@ -198,17 +190,20 @@ docker run -p 7777:7777 --name tmodloader --rm \
   -e TMOD_WORLDSIZE='2' \
   -e TMOD_WORLDSEED='not the bees!' \
   -e TMOD_DIFFICULTY='3' \
-  jacobsmile/tmodloader1.4
+  ghcr.io/crosis47/tmodloader:latest
 ```
 
 ## Docker Compose
 
 Included in the Github repository is a sample `docker-compose.yml` file. Refer to the contents of this file to learn how to configure this file. 
 
-Once you are satisfied with the compose file, start it with the following command.
+Once you are satisfied with the Compose file, pull and start it with the following commands.
 ```bash
-docker compose up --build
+docker compose pull
+docker compose up -d
 ```
+
+An image tag changing in a registry does not replace an already-created container. Run those commands again to update it. The included Compose file also uses `pull_policy: always`, so each `up` checks for a newer image.
 
 # Interacting with the Server
 
@@ -217,7 +212,7 @@ To send commands to the server once it has started, use the following command on
 ```bash
 docker exec tmodloader inject "say Hello World!"
 ```
-You can alernatively use the UID of the container in place of `tmodloader` if you did not name your configuration.
+You can alternatively use the ID of the container in place of `tmodloader` if you did not name your configuration.
 
 _Credit to [ldericher](https://github.com/ldericher/tmodloader-docker) for this method of command injection to tModLoader's console._
 

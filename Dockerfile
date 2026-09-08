@@ -1,17 +1,23 @@
-# Builder is ubuntu-based because we need i386 libs
-FROM steamcmd/steamcmd:ubuntu-22 as builder
+# syntax=docker/dockerfile:1
+
+# The Steam client is still 32-bit, so use its Ubuntu image as the source for
+# steamcmd and the i386 libraries it needs.
+FROM steamcmd/steamcmd:ubuntu-22 AS builder
 
 # Install prerequisites to download steamcmd
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl tar
+    && apt-get install -y --no-install-recommends ca-certificates curl tar \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /root/installer
 
 # Download and unpack installer
-# Insecure was added, apparently some Steam CDN certificate expired.
-RUN curl -sqL --insecure https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxvf -
+RUN curl --fail --silent --show-error --location \
+        https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz \
+    | tar --extract --gzip --verbose
 
-#FROM alpine:latest
-FROM ubuntu:latest
+# Pin the runtime distribution. Tracking ubuntu:latest allowed Ubuntu 26.04 to
+# land without its matching .NET native dependencies and broke every new image.
+FROM ubuntu:24.04
 
 
 # The TMOD Version. Ensure that you follow the correct format. Version releases can be found at https://github.com/tModLoader/tModLoader/releases if you're lost.
@@ -29,6 +35,10 @@ ENV TMOD_AUTOSAVE_INTERVAL="10"
 # Mods which should be downloaded from Steam upon starting the server.
 # Example format: 2824688072,2824688266,2835214226
 ENV TMOD_AUTODOWNLOAD=""
+
+# Retry transient Steam Workshop failures before aborting startup.
+ENV TMOD_DOWNLOAD_RETRIES="3"
+ENV TMOD_DOWNLOAD_RETRY_DELAY="10"
 
 # The mods we want to enable on the server on startup. Any omitted mods will not be loaded.
 # Example format: 2824688072,2824688266,2835214226
@@ -110,19 +120,32 @@ ENV TMOD_JOURNEY_SPAWN_RATE="0"
 COPY --from=builder /root/installer/steamcmd.sh /usr/lib/games/steam/
 COPY --from=builder /root/installer/linux32/steamcmd /usr/lib/games/steam/
 COPY --from=builder /usr/games/steamcmd /usr/bin/steamcmd
-COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 COPY --from=builder /lib/i386-linux-gnu /lib/
 COPY --from=builder /root/installer/linux32/libstdc++.so.6 /lib/
-RUN chown -R root:root /usr/bin/ /etc/ssl/certs /lib/ /usr/lib/
+RUN chown -R root:root /usr/bin/ /lib/ /usr/lib/
 
 RUN apt-get update \
-    && apt-get install -y wget unzip tmux bash libsdl2-2.0-0
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        libc6 \
+        libgcc-s1 \
+        libgssapi-krb5-2 \
+        libicu74 \
+        libsdl2-2.0-0 \
+        libssl3 \
+        libstdc++6 \
+        tmux \
+        tzdata \
+        unzip \
+        wget \
+        zlib1g \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir /data
-RUN mkdir /data/tModLoader
-RUN mkdir /data/tModLoader/Worlds
-RUN mkdir /data/tModLoader/Mods
-RUN mkdir /data/steamMods
+RUN mkdir -p \
+        /data/steamMods \
+        /data/tModLoader/Mods \
+        /data/tModLoader/Worlds
 
 EXPOSE 7777
 
@@ -130,8 +153,9 @@ WORKDIR /terraria-server
 
 RUN steamcmd /terraria-server +login anonymous +quit
 
-RUN wget https://github.com/tModLoader/tModLoader/releases/download/${TMOD_VERSION}/tModLoader.zip
-RUN unzip -o tModLoader.zip \
+RUN wget --no-verbose --output-document=tModLoader.zip \
+        "https://github.com/tModLoader/tModLoader/releases/download/${TMOD_VERSION}/tModLoader.zip" \
+    && unzip -o tModLoader.zip \
     && rm tModLoader.zip
 
 COPY DotNetInstall.sh ./LaunchUtils
@@ -148,7 +172,11 @@ RUN chmod 755 ./LaunchUtils/DotNetInstall.sh \
     && chmod 755 ./prepare-config.sh \
     && chmod 755 ./start-tModLoaderServer.sh
 
-RUN ./LaunchUtils/DotNetInstall.sh
+RUN ./LaunchUtils/DotNetInstall.sh \
+    && dotnet_executable="$(find ./dotnet -type f -name dotnet -print -quit)" \
+    && test -n "$dotnet_executable" \
+    && "$dotnet_executable" --info
 
+STOPSIGNAL SIGTERM
 
 ENTRYPOINT ["./entrypoint.sh"]

@@ -1,0 +1,48 @@
+name: Docker CI
+
+on:
+  push:
+    branches-ignore:
+      - master
+    paths:
+      - Dockerfile
+      - "*.sh"
+      - docker-compose.yml
+      - .github/workflows/docker-ci.yml
+  pull_request:
+    paths:
+      - Dockerfile
+      - "*.sh"
+      - docker-compose.yml
+      - .github/workflows/docker-ci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Validate shell syntax
+        run: bash -n ./*.sh
+
+      - name: Lint runtime scripts
+        run: shellcheck autosave.sh entrypoint.sh inject.sh prepare-config.sh
+
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          tags: tmodloader:ci
+          cache-from: type=gha,scope=ci

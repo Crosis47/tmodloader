@@ -1,45 +1,90 @@
-name: Custom Build of tModLoader Repository
+name: Publish a custom tModLoader release
+
 on:
   workflow_dispatch:
     inputs:
       release:
-        description: 'The tModLoader Release to download and build.'
+        description: Exact tModLoader release tag, such as v2026.07.3.0
         required: true
         type: string
-      aslatest:
-        description: 'Should this push as latest?'
+      floating_tag:
+        description: Optionally move a floating tag to this release
         required: true
-        type: boolean
+        default: version-only
+        type: choice
+        options:
+          - version-only
+          - latest
+          - preview
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-tmodloader-images
+  cancel-in-progress: false
+
 jobs:
-  manual-run:
+  publish:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v2
-      with:
-        path: ./
-    - name: Get Current Version
-      run: echo "CURRENT_VERSION=$(grep -oP '(?<=\bTMOD_VERSION=)[^;]+' ./Dockerfile)" >> $GITHUB_ENV
-    - name: Print Stored Version Number
-      run: echo ${{ env.CURRENT_VERSION }}
-    - name: Get Repository Version
-      run: echo "REPO_VERSION=$(curl -sL https://api.github.com/repos/tModLoader/tModLoader/releases | jq -r "first | .tag_name")" >> $GITHUB_ENV
-    - name: Print Repository Version
-      run: echo ${{ env.REPO_VERSION }}
-    - name: Print Version to Download
-      run: echo ${{ inputs.release }}
-    - name: Update Dockerfile Version
-      if: ${{ env.CURRENT_VERSION != inputs.release }}
-      run: sed -i "s/${{ env.CURRENT_VERSION }}/${{ inputs.release }}/" ./Dockerfile
-    - name: Login to Dockerhub
-      env:
-        DOCKER_USER: ${{ secrets.DOCKER_USER }}
-        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      run: docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
-    - name: Build Docker Image
-      run: "docker build . --file ./Dockerfile --tag ${{ secrets.DOCKER_USER }}/tmodloader1.4:${{ inputs.release }} --tag ${{ secrets.DOCKER_USER }}/tmodloader1.4:latest"
-    - name: Push Image to DockerHub as Version
-      run: docker push ${{ secrets.DOCKER_USER }}/tmodloader1.4:${{ inputs.release }}
-    - name: Push Image to DockerHub as Latest
-      if: github.event.inputs.aslatest == 'true'
-      run: docker push ${{ secrets.DOCKER_USER }}/tmodloader1.4:latest
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Validate release and prepare tags
+        id: release
+        env:
+          RELEASE: ${{ inputs.release }}
+          FLOATING_TAG: ${{ inputs.floating_tag }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$RELEASE" =~ ^v[0-9]{4}\.[0-9]{1,2}\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid tModLoader release tag: $RELEASE" >&2
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --location --head \
+            "https://github.com/tModLoader/tModLoader/releases/download/${RELEASE}/tModLoader.zip" \
+            >/dev/null
+
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          image="ghcr.io/${owner}/tmodloader"
+          {
+            echo 'tags<<EOF'
+            echo "$image:$RELEASE"
+            if [[ "$FLOATING_TAG" != "version-only" ]]; then
+              echo "$image:$FLOATING_TAG"
+            fi
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            TMOD_VERSION=${{ inputs.release }}
+          tags: ${{ steps.release.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ inputs.release }}
+            org.opencontainers.image.title=tModLoader dedicated server
+          cache-from: type=gha,scope=custom
+          cache-to: type=gha,mode=max,scope=custom
+          provenance: mode=max
+          sbom: true

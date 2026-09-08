@@ -3,8 +3,12 @@
 
 # Print Env variables
 configPath=/terraria-server/serverconfig.txt
-echo -e "[COFNIG] Config File Path: $configPath"
+echo -e "[CONFIG] Config File Path: $configPath"
 echo -e "[CONFIG] Setting Config Values..."
+
+# A restarted container keeps its writable layer. Recreate the generated file
+# so settings are not duplicated on every restart.
+: > "$configPath"
 
 echo -e "[CONFIG] TERRARIA CONFIG SETTINGS"
 echo -e "[CONFIG] MOTD Set to: $TMOD_MOTD"
