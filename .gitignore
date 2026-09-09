@@ -1,2 +1,6 @@
 temp
 .env
+/data/
+/backups/
+__pycache__/
+*.pyc

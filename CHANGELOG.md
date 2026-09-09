@@ -10,6 +10,17 @@ immutable deployment identifier.
 
 No unreleased container changes.
 
+## 1.3.0 - 2026-09-08
+
+### Added
+
+- Linux host backup and restore tooling for local Docker bind mounts, with
+  verified archives, image identity recording, retention, exclusive operation
+  locking, and preservation of original data during restore.
+- Example systemd service and daily timer for scheduled cold backups.
+- Archive corruption, unsafe-entry, image compatibility, retention, and restore
+  failure regression tests.
+
 ## 1.2.1 - 2026-09-08
 
 ### Fixed

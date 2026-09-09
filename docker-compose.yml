@@ -4,6 +4,8 @@ services:
     #   docker compose logs --tail=100 --follow tmodloader
     #   docker compose exec -T tmodloader inject "save"
     # Use inject for console commands; stdin_open/tty and docker attach are not required.
+    # Linux host backups: sudo python3 backup.py backup --keep 7
+    # See examples/tmodloader-backup.timer for scheduled backups with downtime.
     image: ghcr.io/crosis47/tmodloader:latest
     pull_policy: always
     container_name: tmodloader

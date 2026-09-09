@@ -440,6 +440,68 @@ image: ghcr.io/crosis47/tmodloader@sha256:replace-with-reviewed-digest
 
 ## Backups
 
+Use the host-side `backup.py` tool for verified cold backups and staged restore.
+It requires Python 3.12 or newer and root on the local Linux Docker host to
+preserve ownership. It supports the supplied `/data` bind mount; remote Docker
+daemons, Docker Desktop, named volumes, nested mounts, links, and special files
+are not supported by this first version. Keep the tool and backup directory
+writable only by trusted administrators.
+
+```bash
+sudo python3 backup.py backup --data ./data --backups ./backups --keep 7
+python3 backup.py verify --archive ./backups/tmod-backup-TIMESTAMP-ID
+```
+
+Backup stops a running server using its graceful shutdown handler, archives all
+of `/data` (worlds, mod configuration, Workshop state, and logs), checks the
+archive contents and SHA-256 checksum, then restarts the server and waits for
+health. A previously stopped server stays stopped. Backup failures attempt to
+restart a previously running server and return a nonzero status. Retention runs
+only after success and removes only verified backup bundles; incomplete and
+unrecognized files are left for inspection. The newest backup is always kept.
+
+The archive does not include `.env`, custom configuration mounted outside
+`/data`, or password files. Back those up separately in protected storage.
+Backups record the exact image ID and image reference without copying the
+container environment. Backups and logs may still contain private server data.
+Checksums detect corruption, not malicious modifications: restore only trusted
+archives. Allow disk space for the archive, extracted data, and original data.
+This format preserves file ownership and traditional permission bits; filesystem
+ACLs, extended attributes, and sparse-file layout are not preserved. Deployments
+that depend on those features should use their host backup system instead.
+
+```bash
+sudo python3 backup.py restore --data ./data \
+  --archive ./backups/tmod-backup-TIMESTAMP-ID --confirm
+```
+
+Restore validates and extracts the archive before stopping the server. It
+requires the container's image ID to match the backup; image rollback will be a
+separate feature. The original directory is moved beside `data` with a unique
+`data.before-restore-*` name and is never deleted by retention. If the restored
+server fails health validation it is stopped, with both data sets preserved for
+manual recovery. A restore of a stopped server remains stopped and needs a
+subsequent startup/health check. Never start a second writer against these paths
+or change files during a backup or restore. An exclusive sibling lock prevents
+overlapping tool invocations; after a host crash, check for active jobs before
+removing a leftover `.data.backup-lock` directory.
+
+For daily backups, edit the absolute paths in
+[`examples/tmodloader-backup.service`](examples/tmodloader-backup.service), then
+install it with [`examples/tmodloader-backup.timer`](examples/tmodloader-backup.timer):
+
+```bash
+sudo install -m 0644 examples/tmodloader-backup.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now tmodloader-backup.timer
+sudo journalctl -u tmodloader-backup.service
+```
+
+The timer runs at 04:00 host time and catches missed runs after boot. Backups
+cause downtime for shutdown, compression, and restart. Adjust the timer for your
+maintenance window and monitor service failures in your host monitoring system.
+This host tool does not require mounting the Docker socket in the game container.
+
 The complete persistent state is under `./data`. For a consistent cold backup,
 stop the container, copy that directory to protected storage, and start the
 container again:

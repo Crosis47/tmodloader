@@ -1,0 +1,12 @@
+[Unit]
+Description=Verified tModLoader cold backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/tmodloader
+ExecStart=/usr/bin/python3 /opt/tmodloader/backup.py backup --container tmodloader --data /opt/tmodloader/data --backups /var/backups/tmodloader --keep 7
+TimeoutStartSec=infinity
+UMask=0077
