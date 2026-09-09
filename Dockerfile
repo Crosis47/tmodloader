@@ -150,6 +150,7 @@ RUN apt-get update \
         libssl3 \
         libstdc++6 \
         locales \
+        python3 \
         tini \
         tzdata \
         unzip \
@@ -180,6 +181,7 @@ RUN case "$TMOD_UID" in ''|*[!0-9]*|0) echo "TMOD_UID must be a positive integer
     && install -d -m 0755 -o tml -g tml \
         /home/tml/.steam \
         /data \
+        /backups \
         /data/steamMods \
         /data/tModLoader \
         /data/tModLoader/Logs \
@@ -214,6 +216,12 @@ COPY --chown=tml:tml inject.sh /usr/local/bin/inject
 COPY --chown=tml:tml healthcheck.sh /usr/local/bin/healthcheck
 COPY --chown=tml:tml autosave.sh .
 COPY --chown=tml:tml prepare-config.sh .
+COPY --chown=tml:tml backup.py .
+COPY --chown=tml:tml container-backup.py /usr/local/bin/tmod-backup
+COPY --chown=tml:tml VERSION .
+
+ENV TMOD_BACKUP_INTERVAL="0"
+ENV TMOD_BACKUP_KEEP="7"
 
 RUN find ./LaunchUtils -type f -name '*.sh' -exec chmod 755 {} + \
     && chmod 755 ./entrypoint.sh \
@@ -224,6 +232,7 @@ RUN find ./LaunchUtils -type f -name '*.sh' -exec chmod 755 {} + \
     && chmod 755 /usr/local/bin/healthcheck \
     && chmod 755 /usr/local/bin/inject \
     && chmod 755 ./prepare-config.sh \
+    && chmod 755 /usr/local/bin/tmod-backup \
     && chmod 755 ./start-tModLoaderServer.sh
 
 RUN bash -c 'set -Eeo pipefail; \
@@ -236,6 +245,9 @@ RUN bash -c 'set -Eeo pipefail; \
     && ./dotnet/dotnet --info \
     && rm -rf ./tModLoader-Logs \
     && ln -s /data/tModLoader/Logs ./tModLoader-Logs
+
+RUN sha256sum VERSION tModLoader.dll entrypoint.sh run-server.sh backup.py \
+        /usr/local/bin/tmod-backup | sha256sum | cut -d ' ' -f 1 > backup-build-id
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10m --retries=3 CMD ["healthcheck"]
 

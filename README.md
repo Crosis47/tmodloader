@@ -440,6 +440,78 @@ image: ghcr.io/crosis47/tmodloader@sha256:replace-with-reviewed-digest
 
 ## Backups
 
+Backups run **inside the container**, as its normal non-root user, using the
+`./backups:/backups` bind mount included in the example Compose file. No Docker
+socket, host Python, root job, or systemd timer is needed. Create `./backups`
+and grant the runtime user effective read/write/search access, just like `./data`.
+The tool refuses backup storage that is not a separate mount.
+
+```bash
+docker compose exec -T tmodloader tmod-backup backup
+docker compose exec -T tmodloader tmod-backup verify --archive /backups/tmod-backup-TIMESTAMP-ID
+```
+
+Set `TMOD_BACKUP_INTERVAL=1440` in `.env` for a backup every 24 hours, then
+recreate the container with `docker compose up -d`. The default `0` disables
+scheduling; manual backups still work. `TMOD_BACKUP_KEEP=7` retains seven
+verified backups for this data directory. Intervals restart when the container
+starts or a manual backup completes; this is not a wall-clock cron schedule and
+missed runs are not replayed. Scheduled runs wait for a healthy server.
+
+Backups **disconnect players**: the supervisor sends `exit` to save and stop the
+game, archives worlds, mod configuration, Workshop state, and logs, validates
+the archive and SHA-256 checksum, then restarts the game and checks health.
+The container stays running. Health probes can report unhealthy during this
+maintenance window; configure external auto-heal tools not to restart it then.
+An unclean stop prevents archiving. Backup failures attempt to restart the game
+and are reported in container logs and the manual command's exit status.
+Retention runs only after backup and restart validation succeed. Incomplete,
+invalid, and unrelated bundles are left alone. Monitor `[BACKUP]` messages with
+`docker compose logs --tail=100 --follow tmodloader`.
+
+The archive does not include `.env`, custom configuration mounted outside
+`/data`, or password files. Back those up separately in protected storage.
+Backups record a fingerprint of the bundled server and backup/runtime scripts,
+not the Docker image digest (which is unavailable without daemon access).
+Keep the original image digest separately for recovery. Backups and logs may
+still contain private server data.
+Checksums detect corruption, not malicious modifications: restore only trusted
+archives. Allow disk space for the archive, extracted data, and original data.
+Restored files belong to the container runtime user and retain traditional
+permission bits; arbitrary ownership, filesystem ACLs, extended attributes,
+links, nested mounts, special files, and sparse-file layout are not supported. Deployments
+that depend on those features should use their host backup system instead.
+
+```bash
+docker compose stop tmodloader
+docker compose run --rm --no-deps --entrypoint tmod-backup tmodloader restore \
+  --archive /backups/tmod-backup-TIMESTAMP-ID --confirm
+# Only start after restore reports success:
+docker compose start tmodloader
+docker compose ps
+docker compose logs --tail=100 tmodloader
+```
+
+Restore checks the build fingerprint and validates/extracts the archive before
+replacing data. A filesystem lock rejects restore while this image's server is
+running. Use local storage with working POSIX locks; do not use network shares
+or let other tools write to the same data. Image rollback remains a separate feature.
+
+Original files are retained in `/data/.tmod-control/before-restore-*`, never
+pruned automatically. This reserved control/recovery directory is excluded from
+archives. Restore requires space for both original and restored data. The server
+stays stopped until you start it and verify health; a restore success alone does
+not prove the world is playable.
+
+If restore is interrupted, `/data/.tmod-control/restore-pending` blocks startup.
+Keep the container stopped, inspect that file for the original-data location,
+and preserve both the current data and originals before manual recovery. Moves
+occur per top-level entry, so an interrupted move can leave originals in both
+locations. Only remove the marker after recovering a complete data set. Do not
+delete or replace `server.lock`; its kernel lock is released automatically when
+the processes exit. Remove retained originals manually only after validating
+recovery and keeping an independent backup.
+
 The complete persistent state is under `./data`. For a consistent cold backup,
 stop the container, copy that directory to protected storage, and start the
 container again:

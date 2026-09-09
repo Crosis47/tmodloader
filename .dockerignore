@@ -2,3 +2,6 @@
 *.md
 docker-compose.yml
 .env
+data
+backups
+__pycache__

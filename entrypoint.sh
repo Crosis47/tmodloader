@@ -135,7 +135,7 @@ cleanup() {
     if [[ -e "/proc/$$/fd/3" ]]; then
         exec 3>&-
     fi
-    rm -f "$control_pipe" "$pid_path"
+    rm -f "$control_pipe" "$pid_path" "$runtime_dir/supervisor.pid"
 }
 
 [[ "$(id -u)" != "0" ]] || fail "The server refuses to run as root. Use the image's built-in tml user."
@@ -153,6 +153,16 @@ TMOD_CRASH_LOG_LINES="${TMOD_CRASH_LOG_LINES:-200}"
 export TMOD_LOG_LEVEL TMOD_CRASH_LOG_LINES TMOD_CONTROL_PIPE TMOD_SERVER_PID_FILE
 
 ensure_writable_directory /data
+ensure_writable_directory /data/.tmod-control
+exec 9>/data/.tmod-control/server.lock
+flock -n 9 || fail "Another server or restore is using /data."
+[[ ! -e /data/.tmod-control/restore-pending ]] || fail "An interrupted restore requires recovery; inspect /data/.tmod-control/restore-pending before starting."
+[[ "${TMOD_BACKUP_INTERVAL:-0}" =~ ^[0-9]{1,7}$ ]] || fail "TMOD_BACKUP_INTERVAL must be a non-negative integer (minutes, maximum 9999999)."
+[[ "${TMOD_BACKUP_KEEP:-7}" =~ ^[1-9][0-9]{0,5}$ ]] || fail "TMOD_BACKUP_KEEP must be a positive integer (maximum 999999)."
+backup_interval=$((10#${TMOD_BACKUP_INTERVAL:-0} * 60))
+if ((backup_interval > 0)); then
+    tmod-backup _preflight || fail "Scheduled backups require a writable /backups mount."
+fi
 ensure_writable_directory /data/steamMods
 ensure_writable_directory /data/tModLoader/Logs
 ensure_writable_directory /data/tModLoader/ModConfigs
@@ -161,6 +171,8 @@ ensure_writable_directory /data/tModLoader/Worlds
 ensure_writable_directory /terraria-server
 ensure_writable_directory "$HOME"
 install -d -m 0700 "$runtime_dir"
+printf '%s\n' "$$" > "$runtime_dir/supervisor.pid"
+rm -f "$runtime_dir/backup-request" "$runtime_dir/backup-result"
 
 printf '[SYSTEM] Runtime identity: uid=%s gid=%s; init: tini; supervisor: direct PID\n' "$(id -u)" "$(id -g)"
 printf '[SYSTEM] Persistent tModLoader logs: /data/tModLoader/Logs\n'
@@ -193,6 +205,7 @@ mkfifo -m 0600 "$control_pipe"
 # blocking while the server process inherits its read end as standard input.
 exec 3<> "$control_pipe"
 
+start_server() {
 printf '[SYSTEM] Launching tModLoader with %s\n' "$config_path"
 setsid --wait "$server_runner" "$config_path" <&3 &
 server_pid=$!
@@ -204,6 +217,75 @@ if ((10#$TMOD_AUTOSAVE_INTERVAL > 0)); then
 else
     printf '[SYSTEM] Scheduled autosave commands are disabled.\n'
 fi
+}
+
+perform_backup() {
+    local request_id="$1" status=0 deadline archive
+    if ! healthcheck; then
+        printf '%s\n1\nServer is not healthy; backup was not started.\n' "$request_id" > "$runtime_dir/backup-result.tmp"
+        mv "$runtime_dir/backup-result.tmp" "$runtime_dir/backup-result"
+        return
+    fi
+    stop_autosave
+    printf '[BACKUP] Stopping the game process for a consistent backup.\n'
+    inject "say Server restarting for backup." || true
+    inject "exit" || true
+    deadline=$((SECONDS + ${TMOD_SHUTDOWN_TIMEOUT:-90}))
+    if ! wait_for_server_exit "$deadline"; then
+        printf '[BACKUP] Graceful stop timed out; skipping backup.\n' >&2
+        signal_server_group TERM
+        wait_for_server_exit "$((SECONDS + 5))" || signal_server_group KILL
+        status=1
+    fi
+    wait "$server_pid" || status=1
+    server_pid=""
+    rm -f "$pid_path" "$runtime_dir/backup-archive"
+    if ((status == 0)); then
+        tmod-backup _cold || status=1
+    fi
+    # Drain any queued commands from the previous server before restarting.
+    exec 3>&-
+    rm -f "$control_pipe"
+    mkfifo -m 0600 "$control_pipe"
+    exec 3<> "$control_pipe"
+    start_server
+    deadline=$((SECONDS + 600))
+    while ! healthcheck; do
+        if ! server_is_running || ((SECONDS >= deadline)); then
+            printf '[BACKUP] Server failed restart health validation.\n' >&2
+            status=1
+            break
+        fi
+        sleep 2
+    done
+    if ((status == 0)); then
+        archive="$(<"$runtime_dir/backup-archive")"
+        tmod-backup _retain --archive "$archive" || status=1
+    fi
+    printf '%s\n%s\nBackup status: %s (0=success); inspect container logs for details.\n' \
+        "$request_id" "$status" "$status" > "$runtime_dir/backup-result.tmp"
+    mv "$runtime_dir/backup-result.tmp" "$runtime_dir/backup-result"
+    printf '[BACKUP] Finished with status %s.\n' "$status"
+}
+
+start_server
+next_backup=$((SECONDS + backup_interval))
+while server_is_running; do
+    if [[ -f "$runtime_dir/backup-request" ]]; then
+        request_id="$(<"$runtime_dir/backup-request")"
+        rm -f "$runtime_dir/backup-request"
+        perform_backup "$request_id"
+        next_backup=$((SECONDS + backup_interval))
+    elif ((backup_interval > 0 && SECONDS >= next_backup)); then
+        if healthcheck; then
+            perform_backup scheduled
+            next_backup=$((SECONDS + backup_interval))
+        else
+            next_backup=$((SECONDS + 30))
+        fi
+    fi
+    sleep 1
+done
 
 set +e
 wait "$server_pid"

@@ -10,6 +10,18 @@ immutable deployment identifier.
 
 No unreleased container changes.
 
+## 1.3.0 - 2026-09-08
+
+### Added
+
+- Container-native non-root backups using a /backups mount, with verified
+  archives, build fingerprint recording, retention, and interval scheduling.
+- Offline staged restore with a shared-data lock, preserved original data,
+  and fail-closed startup after interrupted restores. No Docker socket or
+  host Python installation is required.
+- Archive corruption, unsafe-entry, image compatibility, retention, and restore
+  failure regression tests.
+
 ## 1.2.1 - 2026-09-08
 
 ### Fixed
