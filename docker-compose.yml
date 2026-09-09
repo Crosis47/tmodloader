@@ -4,8 +4,8 @@ services:
     #   docker compose logs --tail=100 --follow tmodloader
     #   docker compose exec -T tmodloader inject "save"
     # Use inject for console commands; stdin_open/tty and docker attach are not required.
-    # Linux host backups: sudo python3 backup.py backup --keep 7
-    # See examples/tmodloader-backup.timer for scheduled backups with downtime.
+    # Manual backup: docker compose exec -T tmodloader tmod-backup backup
+    # Backups briefly stop/restart the game process, not the container.
     image: ghcr.io/crosis47/tmodloader:latest
     pull_policy: always
     container_name: tmodloader
@@ -31,6 +31,8 @@ services:
       TMOD_SHUTDOWN_MESSAGE: "${TMOD_SHUTDOWN_MESSAGE:-Server is shutting down NOW!}"
       TMOD_SHUTDOWN_TIMEOUT: "${TMOD_SHUTDOWN_TIMEOUT:-90}"
       TMOD_AUTOSAVE_INTERVAL: "${TMOD_AUTOSAVE_INTERVAL:-10}"
+      TMOD_BACKUP_INTERVAL: "${TMOD_BACKUP_INTERVAL:-0}"
+      TMOD_BACKUP_KEEP: "${TMOD_BACKUP_KEEP:-7}"
       TMOD_LOG_LEVEL: "${TMOD_LOG_LEVEL:-normal}"
       TMOD_CRASH_LOG_LINES: "${TMOD_CRASH_LOG_LINES:-200}"
       TMOD_USECONFIGFILE: "${TMOD_USECONFIGFILE:-No}"
@@ -68,6 +70,8 @@ services:
       # On Linux, UID 1000 or GID 1000 needs effective write/search access.
       # Owner and group write bits are not both required; POSIX precedence still applies.
       - "./data:/data"
+      # Must be writable by the runtime user, just like ./data.
+      - "./backups:/backups"
       # For TMOD_USECONFIGFILE=Yes:
       # - "./customconfig.txt:/terraria-server/customconfig.txt:ro"
       # For TMOD_PASS_FILE=/run/secrets/tmod-password:

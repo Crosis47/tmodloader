@@ -14,10 +14,11 @@ No unreleased container changes.
 
 ### Added
 
-- Linux host backup and restore tooling for local Docker bind mounts, with
-  verified archives, image identity recording, retention, exclusive operation
-  locking, and preservation of original data during restore.
-- Example systemd service and daily timer for scheduled cold backups.
+- Container-native non-root backups using a /backups mount, with verified
+  archives, build fingerprint recording, retention, and interval scheduling.
+- Offline staged restore with a shared-data lock, preserved original data,
+  and fail-closed startup after interrupted restores. No Docker socket or
+  host Python installation is required.
 - Archive corruption, unsafe-entry, image compatibility, retention, and restore
   failure regression tests.
 

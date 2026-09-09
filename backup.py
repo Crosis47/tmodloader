@@ -73,6 +73,8 @@ def stop(container, timeout):
 
 def scan_tree(data):
     for root, dirs, files in os.walk(data, followlinks=False):
+        if Path(root) == data:
+            dirs[:] = [name for name in dirs if name != '.tmod-control']
         for name in dirs + files:
             path = Path(root) / name
             if path.is_symlink() or not (path.is_dir() or path.is_file()):
@@ -93,6 +95,7 @@ def validate(bundle):
             path = PurePosixPath(member.name)
             if (path.is_absolute() or '..' in path.parts or not path.parts
                     or path.parts[0] != 'data' or '\\' in member.name
+                    or '.tmod-control' in path.parts
                     or not (member.isdir() or member.isfile())
                     or member.name in names or (member.isfile() and member.mode & 0o7000)):
                 raise ValueError(f'Unsafe archive entry: {member.name}')
@@ -116,9 +119,10 @@ def create_backup(data, destination, info):
         staging = Path(temp)
         archive = staging / 'data.tar.gz'
         with tarfile.open(archive, 'w:gz', dereference=False) as tar:
-            tar.add(data, arcname='data')
+            tar.add(data, arcname='data', filter=lambda member: None
+                    if '.tmod-control' in PurePosixPath(member.name).parts else member)
         metadata = {'format': 1, 'created': stamp, 'image_id': info['Image'],
-                    'source': str(data),
+                    'source': info.get('Source', str(data)),
                     'image_reference': info['Config']['Image'],
                     'sha256': digest(archive)}
         (staging / 'manifest.json').write_text(json.dumps(metadata, indent=2) + '\n')

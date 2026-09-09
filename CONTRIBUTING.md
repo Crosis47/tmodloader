@@ -27,8 +27,8 @@ breaking change.
 
 ## Required validation
 
-Backup tooling requires Python 3.12+. Run `python3 -m unittest discover -s tests
--p 'test_backup.py' -v`. On a local Linux Docker host, also run
+The image includes Python 3.12 for container-native backups. Run
+`python3 -m unittest discover -s tests -p 'test_backup*.py' -v` on Linux. Also run
 `sudo python3 tests/backup-integration-test.py tmodloader:dev` after building the
 image. This creates disposable data and checks an actual server backup/restore
 cycle with ownership and health verification.
