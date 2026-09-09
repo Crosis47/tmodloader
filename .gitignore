@@ -2,5 +2,8 @@ temp
 .env
 /data/
 /backups/
+/data.before-restore-*/
+/.data-restore-*/
+/.data.backup-lock/
 __pycache__/
 *.pyc
