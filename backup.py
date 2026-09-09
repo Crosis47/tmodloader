@@ -26,6 +26,15 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def sync_directory(path):
+    if os.name == 'posix':
+        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+
 def inspect(container, data):
     info = json.loads(docker('inspect', container))[0]
     mounts = [m for m in info['Mounts'] if m['Destination'] == '/data']
@@ -85,7 +94,7 @@ def validate(bundle):
             if (path.is_absolute() or '..' in path.parts or not path.parts
                     or path.parts[0] != 'data' or '\\' in member.name
                     or not (member.isdir() or member.isfile())
-                    or member.name in names or member.mode & 0o7000):
+                    or member.name in names or (member.isfile() and member.mode & 0o7000)):
                 raise ValueError(f'Unsafe archive entry: {member.name}')
             names.add(member.name)
             if member.name == 'data':
@@ -114,7 +123,12 @@ def create_backup(data, destination, info):
                     'sha256': digest(archive)}
         (staging / 'manifest.json').write_text(json.dumps(metadata, indent=2) + '\n')
         validate(staging)
+        for path in (archive, staging / 'manifest.json'):
+            with path.open('r+b') as stream:
+                os.fsync(stream.fileno())
+        sync_directory(staging)
         staging.rename(final)
+        sync_directory(destination)
     print(f'Verified backup: {final}', flush=True)
     return final
 
@@ -177,6 +191,7 @@ def restore(bundle, data, info, args):
                 docker('start', args.container)
                 wait_healthy(args.container, args.health_timeout)
             raise
+        sync_directory(data.parent)
         print(f'Original data retained at: {old}', flush=True)
         if running:
             try:

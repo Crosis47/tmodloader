@@ -34,7 +34,10 @@ with tempfile.TemporaryDirectory(prefix='tmod-backup-integration-') as temp:
         assert marker.read_text() == 'before backup'
         previous = next(Path(temp).glob('data.before-restore-*'))
         assert (previous / marker.name).read_text() == 'after backup'
-        assert list((data / 'tModLoader/Worlds').glob('*.wld'))
+        worlds = list((data / 'tModLoader/Worlds').glob('*.wld'))
+        assert worlds
+        assert all(world.stat().st_uid == 1000 for world in worlds)
+        assert data.stat().st_uid == 1000
         assert json.loads(backup.docker('inspect', name))[0]['State']['Health']['Status'] == 'healthy'
         print('Real-server backup, restore, ownership, and health checks passed.')
     finally:
