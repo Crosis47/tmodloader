@@ -48,12 +48,19 @@ for a fix and rebuilt image before public disclosure.
 - Publish only the configured Terraria TCP port. Never mount the Docker socket
   or unrelated host directories into this container.
 - Keep `/data` writable only by trusted host users and include it in backups.
-- The published image runs as the dedicated `tml` user (`1000:1000`). The
-  supplied Compose file drops all Linux capabilities and prevents privilege
-  escalation. Do not override it to run as root.
-- The image does not recursively change `/data` ownership. Prepare bind mounts
-  explicitly and investigate an ownership failure instead of granting broad
-  write access.
+- The published image uses root only for its ownership-repair initializer. It
+  then changes to the dedicated `tml` user (`1000:1000`) and replaces the root
+  process with `tini`; the supervisor and server retain no effective Linux
+  capabilities. Do not override the container user or entrypoint.
+- Compose drops every capability except `CHOWN`, `DAC_OVERRIDE`, `FOWNER`,
+  `SETGID`, and `SETUID`, which initialization needs for `/data` and `/backups`.
+  The UID/GID switch clears them, and `no-new-privileges` prevents reacquisition.
+- Because the configured startup identity is root, run arbitrary interactive
+  commands with `docker compose exec --user tml:tml`. The supplied healthcheck,
+  console injector, and backup command drop privileges themselves.
+- Startup recursively assigns `/data` and `/backups` to `tml:tml` and grants
+  owner access on directories. Mount only dedicated persistent paths there and
+  review the host targets before starting the container.
 - Keep Docker, the host operating system, and the deployed image updated.
 - Use an image digest when deployment policy requires a reviewed, immutable
   artifact.

@@ -40,15 +40,16 @@ and this project is not affiliated with Re-Logic or the tModLoader team.
 - Validated environment-based server configuration or an optional custom file.
 - Password redaction and file-based password support.
 - Scheduled saves, console command injection, and graceful shutdown.
-- Non-root execution with `tini`, direct process supervision, and hardened
-  Compose capability defaults.
+- Root-assisted persistent-directory repair followed by non-root execution with
+  `tini`, direct process supervision, and hardened Compose capability defaults.
 
 ## Requirements
 
 - Docker Engine with the Compose plugin, or Docker Desktop.
 - Enough memory for the selected world and mod pack; requirements vary greatly
   between mod collections.
-- A host directory for `/data` writable by container UID/GID `1000:1000`.
+- Host storage for persistent data and backups. The container prepares its
+  ownership automatically at startup.
 - The configured TCP port allowed through the host firewall when remote players
   will connect.
 
@@ -76,17 +77,17 @@ Copy-Item .env.example .env
 The `.env` file is excluded from Git. Do not commit it if it contains a server
 password or other deployment-specific information.
 
-On Linux, prepare the bind-mounted data directory for the image's non-root
-runtime identity. Review the target before changing ownership if it already
-contains server data:
+Optionally create the bind-mounted directories before starting. Compose also
+creates them when they do not exist:
 
 ```bash
-mkdir -p ./data
-sudo chown -R 1000:1000 ./data
+mkdir -p ./data ./backups
 ```
 
-Docker Desktop handles bind-mounted directory access through its file-sharing
-layer, so the ownership command is normally unnecessary on Windows and macOS.
+On every start, the container assigns these trees to its `tml` runtime identity
+and ensures that identity can access their directories. On Linux bind mounts,
+this changes the corresponding host ownership to UID/GID `1000:1000` for the
+published image. Review the mount targets before starting the container.
 
 ### 2. Configure the server
 
@@ -163,33 +164,43 @@ Replacing the container does not remove this directory. Worlds, downloaded
 Workshop items, enabled-mod state, mod configuration, logs, and collection
 membership cache therefore survive normal upgrades.
 
-The image deliberately does not recursively change mounted-file ownership at
-startup. If `/data` is not writable, startup stops with the runtime UID/GID and
-the affected path, owner/group, and mode instead of partially modifying a host
-directory. The check performs a real create/write probe; it does not require
-both owner and group write bits.
-
-Linux selects exactly one traditional permission class. Mode `700` works when
-UID 1000 owns the directory. Mode `070` works when UID 1000 is not the owner but
-GID 1000 is the applicable group. Mode `770` works for either case. If UID 1000
-owns a mode-`070` directory, Linux uses the empty owner bits and does not fall
-back to the group bits, so that layout is correctly rejected. POSIX ACLs are
-also honored by the real access probe.
+At startup, a root-only initialization stage recursively assigns `/data` and
+`/backups` to `tml:tml` without following symlinks or crossing into nested
+filesystems. It also adds owner read/write/search access to directories that
+lack it. Entries that already have the correct ownership and directory access
+are left unchanged, avoiding needless metadata rewrites on large Workshop
+trees. After the repair, startup drops permanently to `tml` and performs a real
+create/write probe. A read-only or otherwise unsupported mount therefore fails
+before the server starts with the affected path, owner/group, and mode.
 
 ## Runtime security and process model
 
-Published images run SteamCMD and tModLoader as the dedicated `tml` user with
-UID/GID `1000:1000`. `tini` is PID 1 and reaps orphaned processes, while the
-entrypoint directly tracks the server process group and feeds console commands
-through a private FIFO. The supplied Compose deployment drops all Linux
-capabilities, prevents privilege escalation, and provides a bounded temporary
-filesystem for runtime control files. That `/tmp` filesystem permits executable
-mappings because MonoMod creates a short-lived native helper there during
-startup; it remains isolated, size-limited, `nosuid`, and `nodev`.
+Published images start a small initializer as root and run `tini`, SteamCMD,
+tModLoader, the supervisor, the admin page, and scheduled backups as the
+dedicated `tml` user with UID/GID `1000:1000`. The initializer changes identity
+and replaces itself with `tini`, so no root wrapper remains. `tini` is PID 1 and
+reaps orphaned processes, while the entrypoint directly tracks the server
+process group and feeds console commands through a private FIFO. Compose drops
+all Linux capabilities except the five required to repair ownership/access and
+switch UID/GID. The identity switch clears those capabilities, and
+`no-new-privileges` prevents the runtime from reacquiring them. Compose also
+provides a bounded temporary filesystem for runtime control files. That `/tmp`
+filesystem permits executable mappings because MonoMod creates a short-lived
+native helper there during startup; it remains isolated, size-limited,
+`nosuid`, and `nodev`.
+
+The image must declare root as its initial Docker user for this initialization
+stage. Consequently, arbitrary `docker exec` commands default to root even
+though the running process tree is non-root. Use `docker exec --user tml:tml`
+or `docker compose exec --user tml:tml` for interactive commands. The supplied
+`healthcheck`, `inject`, and `tmod-backup` commands also drop to `tml`
+themselves when Docker invokes them as root.
 
 If a Linux host requires a different fixed identity, build a local image with
-`TMOD_UID` and `TMOD_GID` build arguments and make `/data` writable by that
-identity. Overriding a published image to run as root is intentionally rejected.
+`TMOD_UID` and `TMOD_GID` build arguments. The initializer resolves the `tml`
+account in that image and applies its selected numeric UID/GID automatically.
+Do not override the container user: initialization must begin as root, and the
+image drops privileges before launching `tini` and the application.
 
 ## Configuration model
 
@@ -342,16 +353,16 @@ viewer; it does not stop the container.
 In the second terminal, send one console command at a time:
 
 ```bash
-docker exec tmodloader inject "help"
-docker exec tmodloader inject "playing"
-docker exec tmodloader inject "say Server restart in 10 minutes"
-docker exec tmodloader inject "save"
+docker exec --user tml:tml tmodloader inject "help"
+docker exec --user tml:tml tmodloader inject "playing"
+docker exec --user tml:tml tmodloader inject "say Server restart in 10 minutes"
+docker exec --user tml:tml tmodloader inject "save"
 ```
 
 The Compose-native equivalent is:
 
 ```bash
-docker compose exec -T tmodloader inject "save"
+docker compose exec --user tml:tml -T tmodloader inject "save"
 ```
 
 `inject` verifies that the supervised server process is running, rejects empty
@@ -361,7 +372,7 @@ No interactive TTY or `stdin_open` Compose setting is required.
 For the unfiltered upstream console, follow the persistent raw log instead:
 
 ```bash
-docker exec tmodloader tail -n 100 -F /data/tModLoader/Logs/container-console.log
+docker exec --user tml:tml tmodloader tail -n 100 -F /data/tModLoader/Logs/container-console.log
 ```
 
 ### Console log levels
@@ -607,8 +618,8 @@ it as an administrative credential.
 
 Backups run **inside the container**, as its normal non-root user, using the
 `./backups:/backups` bind mount included in the example Compose file. No Docker
-socket, host Python, root job, or systemd timer is needed. Create `./backups`
-and grant the runtime user effective read/write/search access, just like `./data`.
+socket, host Python, root job, or systemd timer is needed. Startup prepares the
+backup mount alongside `/data`.
 The tool refuses backup storage that is not a separate mount.
 
 `TMOD_BACKUP_MIN_FREE_MB=1024` reserves a minimum of 1 GiB of free backup storage.
@@ -619,8 +630,8 @@ stored under `/data/.tmod-control/backup-status.json`; the admin page exposes
 them along with archive count/size and remaining disk space.
 
 ```bash
-docker compose exec -T tmodloader tmod-backup backup
-docker compose exec -T tmodloader tmod-backup verify --archive /backups/tmod-backup-TIMESTAMP-ID
+docker compose exec --user tml:tml -T tmodloader tmod-backup backup
+docker compose exec --user tml:tml -T tmodloader tmod-backup verify --archive /backups/tmod-backup-TIMESTAMP-ID
 ```
 
 Set `TMOD_BACKUP_INTERVAL=1440` in `.env` for a backup every 24 hours, then
@@ -733,14 +744,14 @@ The fatal message names the invalid variable and range. Correct `.env`, run
 Existing worlds are not regenerated merely because world-generation variables
 change.
 
-### Data directory is not writable
+### Persistent directory is not writable
 
-The fatal startup message includes the container UID/GID and the failing path.
-It also reports the directory owner/group and numeric mode. For the published
-image on Linux, grant UID 1000 or one of its groups write and search permission
-through the applicable owner, group, ACL, or other class. Owner and group write
-bits are not both required. The container will not automatically run a
-recursive ownership change over existing worlds or Workshop content.
+The initializer first tries to repair `/data` and `/backups`, then the
+low-privilege entrypoint verifies access. A fatal message includes the runtime
+UID/GID, failing path, owner/group, and numeric mode. Check for a read-only
+mount, a filesystem that rejects Linux ownership changes, or a deployment that
+removed the initializer's `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETGID`, or
+`SETUID` capability. The supplied Compose file includes only those capabilities.
 
 ## Image automation
 

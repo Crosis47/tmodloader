@@ -2,17 +2,28 @@ services:
   tmodloader:
     # Operator quick reference (run these commands on the Docker host):
     #   docker compose logs --tail=100 --follow tmodloader
-    #   docker compose exec -T tmodloader inject "save"
+    #   docker compose exec --user tml:tml -T tmodloader inject "save"
     # Use inject for console commands; stdin_open/tty and docker attach are not required.
-    # Manual backup: docker compose exec -T tmodloader tmod-backup backup
+    # Manual backup: docker compose exec --user tml:tml -T tmodloader tmod-backup backup
     # Backups briefly stop/restart the game process, not the container.
     image: ghcr.io/crosis47/tmodloader:latest
     pull_policy: always
     container_name: tmodloader
     restart: unless-stopped
     stop_grace_period: 2m
+    # The initializer starts as root, repairs only /data and /backups, then
+    # launches the supervisor and game server as the image's tml user.
+    user: "0:0"
     cap_drop:
       - ALL
+    cap_add:
+      # Required only by the root initializer; the UID/GID switch clears them,
+      # and no-new-privileges prevents reacquisition.
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     security_opt:
       - no-new-privileges:true
     tmpfs:
@@ -76,10 +87,9 @@ services:
       TMOD_JOURNEY_SPAWN_RATE: "${TMOD_JOURNEY_SPAWN_RATE:-0}"
 
     volumes:
-      # On Linux, UID 1000 or GID 1000 needs effective write/search access.
-      # Owner and group write bits are not both required; POSIX precedence still applies.
+      # Startup assigns mounted content to the runtime UID/GID (1000:1000 in
+      # the published image) and ensures owner access on directories.
       - "./data:/data"
-      # Must be writable by the runtime user, just like ./data.
       - "./backups:/backups"
       # Admin interface: set TMOD_WEB_TOKEN_FILE=/run/secrets/tmod-admin-token
       # - "./secrets/tmod-admin-token:/run/secrets/tmod-admin-token:ro"

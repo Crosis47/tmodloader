@@ -21,8 +21,6 @@ with tempfile.TemporaryDirectory(prefix='tmod-admin-integration-') as temp:
     root = Path(temp)
     for directory in ('data', 'backups'):
         (root / directory).mkdir()
-        if hasattr(os, 'chown'):
-            os.chown(root / directory, 1000, 1000)
     secret = root / 'token'
     secret.write_text(token)
     secret.chmod(0o600)
@@ -31,7 +29,10 @@ with tempfile.TemporaryDirectory(prefix='tmod-admin-integration-') as temp:
     try:
         backup.docker('run', '-d', '--name', name,
                       '--tmpfs', '/tmp:rw,exec,nosuid,nodev,size=64m,mode=1777',
-                      '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
+                      '--cap-drop', 'ALL',
+                      '--cap-add', 'CHOWN', '--cap-add', 'DAC_OVERRIDE',
+                      '--cap-add', 'FOWNER', '--cap-add', 'SETGID', '--cap-add', 'SETUID',
+                      '--security-opt', 'no-new-privileges:true',
                       '--mount', f'type=bind,source={root / "data"},target=/data',
                       '--mount', f'type=bind,source={root / "backups"},target=/backups',
                       '--mount', f'type=bind,source={secret},target=/run/secrets/admin-token,readonly',

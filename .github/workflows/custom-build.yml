@@ -56,7 +56,7 @@ jobs:
       - name: Validate repository
         run: |
           bash -n ./*.sh tests/*.sh
-          shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh log-filter.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh tests/*.sh
+          shellcheck --severity=warning autosave.sh container-init.sh entrypoint.sh healthcheck.sh inject.sh log-filter.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh tests/*.sh
           bash tests/release-metadata-test.sh
           docker compose config --quiet
 
@@ -114,23 +114,23 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
           IMAGE: ${{ steps.metadata.outputs.image }}
         run: |
-          docker run --rm --entrypoint bash \
+          docker run --rm --user tml:tml --entrypoint bash \
             --mount type=bind,source="$PWD",target=/repo,readonly \
             "$IMAGE@$DIGEST" \
             /repo/tests/manage-mods-test.sh /terraria-server/manage-mods.sh
-          docker run --rm --entrypoint bash \
+          docker run --rm --user tml:tml --entrypoint bash \
             --mount type=bind,source="$PWD",target=/repo,readonly \
             "$IMAGE@$DIGEST" \
             /repo/tests/locale-test.sh /usr/bin/steamcmd
-          docker run --rm --entrypoint bash \
+          docker run --rm --user tml:tml --entrypoint bash \
             --mount type=bind,source="$PWD",target=/repo,readonly \
             "$IMAGE@$DIGEST" \
             /repo/tests/config-test.sh /terraria-server/prepare-config.sh
-          docker run --rm --entrypoint bash \
+          docker run --rm --user tml:tml --entrypoint bash \
             --mount type=bind,source="$PWD",target=/repo,readonly \
             "$IMAGE@$DIGEST" \
             /repo/tests/log-filter-test.sh /terraria-server/log-filter.sh /terraria-server/run-server.sh
-          docker run --rm --entrypoint bash \
+          docker run --rm --user tml:tml --entrypoint bash \
             --mount type=bind,source="$PWD",target=/repo,readonly \
             "$IMAGE@$DIGEST" \
             /repo/tests/runtime-control-test.sh /usr/local/bin/inject
