@@ -1,6 +1,10 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 set -Eeuo pipefail
+
+if [[ "$(id -u)" == "0" ]]; then
+    exec /usr/bin/setpriv --reuid=tml --regid=tml --init-groups --no-new-privs -- "$0" "$@"
+fi
 
 runtime_dir="${TMOD_RUNTIME_DIR:-/tmp/tmodloader}"
 control_pipe="${TMOD_CONTROL_PIPE:-$runtime_dir/console}"

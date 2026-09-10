@@ -18,10 +18,8 @@ name = 'tmod-backup-test-' + uuid.uuid4().hex[:12]
 with tempfile.TemporaryDirectory(prefix='tmod-backup-integration-') as temp:
     data = Path(temp) / 'data'
     data.mkdir()
-    os.chown(data, 1000, 1000)
     bundles = Path(temp) / 'backups'
     bundles.mkdir()
-    os.chown(bundles, 1000, 1000)
     try:
         backup.docker('run', '-d', '--name', name, '--mount', f'type=bind,source={data},target=/data',
                       '--mount', f'type=bind,source={bundles},target=/backups',

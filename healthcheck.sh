@@ -1,6 +1,10 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 set -Eeuo pipefail
+
+if [[ "$(id -u)" == "0" ]]; then
+    exec /usr/bin/setpriv --reuid=tml --regid=tml --init-groups --no-new-privs -- "$0" "$@"
+fi
 
 port="${TMOD_PORT:-7777}"
 log_path="/data/tModLoader/Logs/server.log"

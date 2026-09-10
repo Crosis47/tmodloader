@@ -45,7 +45,7 @@ set:
 
 ```bash
 bash -n ./*.sh tests/*.sh
-shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh \
+shellcheck --severity=warning autosave.sh container-init.sh entrypoint.sh healthcheck.sh inject.sh \
   log-filter.sh manage-mods.sh prepare-config.sh run-server.sh tests/*.sh
 docker compose config --quiet
 docker build --tag tmodloader:dev .
@@ -54,27 +54,27 @@ docker build --tag tmodloader:dev .
 Run the script tests against the built image:
 
 ```bash
-docker run --rm --entrypoint bash \
+docker run --rm --user tml:tml --entrypoint bash \
   --mount type=bind,source="$PWD",target=/repo,readonly \
   tmodloader:dev \
   /repo/tests/manage-mods-test.sh /terraria-server/manage-mods.sh
 
-docker run --rm --entrypoint bash \
+docker run --rm --user tml:tml --entrypoint bash \
   --mount type=bind,source="$PWD",target=/repo,readonly \
   tmodloader:dev \
   /repo/tests/locale-test.sh /usr/bin/steamcmd
 
-docker run --rm --entrypoint bash \
+docker run --rm --user tml:tml --entrypoint bash \
   --mount type=bind,source="$PWD",target=/repo,readonly \
   tmodloader:dev \
   /repo/tests/config-test.sh /terraria-server/prepare-config.sh
 
-docker run --rm --entrypoint bash \
+docker run --rm --user tml:tml --entrypoint bash \
   --mount type=bind,source="$PWD",target=/repo,readonly \
   tmodloader:dev \
   /repo/tests/log-filter-test.sh /terraria-server/log-filter.sh /terraria-server/run-server.sh
 
-docker run --rm --entrypoint bash \
+docker run --rm --user tml:tml --entrypoint bash \
   --mount type=bind,source="$PWD",target=/repo,readonly \
   tmodloader:dev \
   /repo/tests/runtime-control-test.sh /usr/local/bin/inject
@@ -84,8 +84,9 @@ bash tests/server-smoke-test.sh tmodloader:dev
 
 The smoke test creates temporary Docker resources, starts a real tModLoader
 server, verifies health and command injection, stops it, checks the exit status,
-verifies the non-root identity and hardened runtime, and verifies persistent
-logs. It can take several minutes on an uncached host.
+verifies root initialization, repaired persistent-volume ownership, the
+low-privilege server identity and hardened runtime, and persistent logs. It can
+take several minutes on an uncached host.
 
 When invoking bind mounts from PowerShell, replace `$PWD` with an absolute
 Windows path. GitHub Actions runs the same build and runtime checks on pull

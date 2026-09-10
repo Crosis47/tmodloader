@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 """Non-root, container-native backup commands. No Docker socket required."""
 import argparse
 import contextlib
@@ -12,6 +12,21 @@ import tarfile
 import tempfile
 import time
 import uuid
+
+
+def drop_runtime_privileges():
+    """Replace a root CLI invocation with this command running as tml."""
+    if os.geteuid() != 0:
+        return
+    os.execv('/usr/bin/setpriv', [
+        'setpriv', '--reuid=tml', '--regid=tml', '--init-groups',
+        '--no-new-privs', '--', sys.executable, os.path.realpath(__file__),
+        *sys.argv[1:],
+    ])
+
+
+if __name__ == '__main__':
+    drop_runtime_privileges()
 
 sys.path.insert(0, '/terraria-server')
 import backup

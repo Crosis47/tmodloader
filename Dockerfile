@@ -23,7 +23,8 @@ FROM ubuntu:24.04
 ARG TMOD_VERSION=v2026.07.3.0
 
 # Published images use an unprivileged runtime identity. Custom local builds can
-# select another fixed identity to match an existing host-owned data directory.
+# select another fixed identity. The root-only initializer repairs mounted data
+# ownership before dropping permanently to this identity.
 ARG TMOD_UID=1000
 ARG TMOD_GID=1000
 
@@ -215,16 +216,17 @@ COPY --chown=tml:tml console_tee.py .
 COPY --chown=tml:tml filter_client_mods.py .
 COPY --chown=tml:tml log-filter.sh .
 COPY --chown=tml:tml manage-mods.sh .
-COPY --chown=tml:tml inject.sh /usr/local/bin/inject
-COPY --chown=tml:tml healthcheck.sh /usr/local/bin/healthcheck
+COPY --chown=root:root --chmod=0755 inject.sh /usr/local/bin/inject
+COPY --chown=root:root --chmod=0755 healthcheck.sh /usr/local/bin/healthcheck
 COPY --chown=tml:tml autosave.sh .
 COPY --chown=tml:tml prepare-config.sh .
-COPY --chown=tml:tml backup.py .
-COPY --chown=tml:tml container-backup.py /usr/local/bin/tmod-backup
+COPY --chown=root:root backup.py .
+COPY --chown=root:root --chmod=0755 container-backup.py /usr/local/bin/tmod-backup
 COPY --chown=tml:tml VERSION .
 COPY --chown=tml:tml admin_settings.py admin_metrics.py admin_workshop.py admin_server.py ./
 COPY --chown=tml:tml admin_schema.py ./
 COPY --chown=tml:tml web ./web
+COPY --chown=root:root --chmod=0755 container-init.sh /usr/local/bin/tmod-init
 
 ENV TMOD_BACKUP_INTERVAL="0"
 ENV TMOD_BACKUP_KEEP="7"
@@ -241,10 +243,7 @@ RUN find ./LaunchUtils -type f -name '*.sh' -exec chmod 755 {} + \
     && chmod 755 ./log-filter.sh \
     && chmod 755 ./manage-mods.sh \
     && chmod 755 ./autosave.sh \
-    && chmod 755 /usr/local/bin/healthcheck \
-    && chmod 755 /usr/local/bin/inject \
     && chmod 755 ./prepare-config.sh \
-    && chmod 755 /usr/local/bin/tmod-backup \
     && chmod 755 ./start-tModLoaderServer.sh
 
 RUN bash -c 'set -Eeo pipefail; \
@@ -259,10 +258,16 @@ RUN bash -c 'set -Eeo pipefail; \
     && ln -s /data/tModLoader/Logs ./tModLoader-Logs
 
 RUN sha256sum VERSION tModLoader.dll entrypoint.sh run-server.sh backup.py \
-        /usr/local/bin/tmod-backup | sha256sum | cut -d ' ' -f 1 > backup-build-id
+        /usr/local/bin/tmod-backup /usr/local/bin/tmod-init \
+        | sha256sum | cut -d ' ' -f 1 > backup-build-id
+
+# Startup needs root only long enough to repair /data and /backups. tmod-init
+# then changes identity and replaces itself with non-root tini and the existing
+# entrypoint, leaving no root-owned wrapper process behind.
+USER root:root
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10m --retries=3 CMD ["healthcheck"]
 
 STOPSIGNAL SIGTERM
 
-ENTRYPOINT ["/usr/bin/tini", "--", "./entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/tmod-init", "/usr/bin/tini", "--", "./entrypoint.sh"]

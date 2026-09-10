@@ -10,6 +10,10 @@ immutable deployment identifier.
 
 ### Fixed
 
+- Start with a root-only initializer that repairs ownership and directory access
+  for `/data` and `/backups`, then replaces itself with non-root `tini` and the
+  existing `tml` supervisor/server process tree.
+
 - Seed editable web settings from Compose on first boot and preserve saved web
   values over later Compose changes. Remove known client-only IDs from saved
   Workshop selections as well as the enabled mod list.
