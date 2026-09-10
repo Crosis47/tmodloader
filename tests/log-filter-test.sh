@@ -66,6 +66,9 @@ EOF
 
 mkdir -p "$test_root/logs"
 printf '%s\n' 'previous launch' > "$test_root/logs/container-console.log"
+printf '%s\n' 'oldest launch' > "$test_root/logs/container-console.previous.log"
+printf '%s\n' '2026-09-01T00:00:00+00:00' > "$test_root/logs/container-console.previous.log.first"
+printf '%s\n' '2026-09-02T00:00:00+00:00' > "$test_root/logs/container-console.log.first"
 
 set +e
 TMOD_SCRIPT_CALLER="$mock_caller" \
@@ -82,5 +85,9 @@ grep -Fq 'replaying the last 20 raw console lines' "$test_root/crash-output.log"
 grep -Fq 'Launch command:' "$test_root/crash-output.log"
 grep -Fq 'Launch command:' "$test_root/logs/container-console.log"
 grep -Fxq 'previous launch' "$test_root/logs/container-console.previous.log"
+grep -Fxq 'oldest launch' "$test_root"/logs/console-history/run-*.log
+grep -Fxq '2026-09-01T00:00:00+00:00' "$test_root"/logs/console-history/run-*.log.first
+grep -Fxq '2026-09-02T00:00:00+00:00' "$test_root/logs/container-console.previous.log.first"
+test -s "$test_root/logs/container-console.log.first"
 
 echo "console log filter tests passed."

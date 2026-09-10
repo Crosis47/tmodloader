@@ -12,11 +12,21 @@ raw_log="$log_dir/container-console.log"
 previous_log="$log_dir/container-console.previous.log"
 
 mkdir -p "$log_dir"
+umask 077
 if [[ -f "$raw_log" ]]; then
+    if [[ -f "$previous_log" ]]; then
+        mkdir -p "$log_dir/console-history"
+        archive="$(mktemp "$log_dir/console-history/run-$(date -u -r "$previous_log" +%Y%m%dT%H%M%SZ)-XXXXXX.log")"
+        mv -- "$previous_log" "$archive"
+        if [[ -f "$previous_log.first" ]]; then mv -- "$previous_log.first" "$archive.first"; fi
+    fi
     mv -f "$raw_log" "$previous_log"
+    rm -f "$previous_log.first"
+    if [[ -f "$raw_log.first" ]]; then mv -- "$raw_log.first" "$previous_log.first"; fi
 fi
 umask 077
 : > "$raw_log"
+rm -f "$raw_log.first"
 
 set +e
 bash "$script_caller" \
@@ -24,7 +34,7 @@ bash "$script_caller" \
     -tmlsavedirectory /data/tModLoader \
     -steamworkshopfolder /data/steamMods/steamapps/workshop \
     -config "$config_path" \
-    2>&1 | tee "$raw_log" | bash "$log_filter" "$log_level"
+    2>&1 | python3 "$(dirname "${BASH_SOURCE[0]}")/console_tee.py" "$raw_log" | bash "$log_filter" "$log_level"
 pipeline_status=("${PIPESTATUS[@]}")
 set -e
 

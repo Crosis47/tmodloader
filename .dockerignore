@@ -4,4 +4,5 @@ docker-compose.yml
 .env
 data
 backups
+secrets
 __pycache__

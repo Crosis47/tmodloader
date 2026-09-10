@@ -8,7 +8,56 @@ immutable deployment identifier.
 
 ## Unreleased
 
-No unreleased container changes.
+### Fixed
+
+- Seed editable web settings from Compose on first boot and preserve saved web
+  values over later Compose changes. Remove known client-only IDs from saved
+  Workshop selections as well as the enabled mod list.
+
+- Keep Workshop URL/ID import available without a Steam API key; only search and
+  catalog browsing require the key.
+
+- Readiness checks inspect the listening socket without connecting to the game;
+  frequent dashboard polling no longer consumes anonymous player slots.
+
+### Added
+
+- Workshop Apply changes button sharing Configuration's draft review and
+  blocking restart-progress dialog.
+
+- Apply progress lists the names of client-only mods automatically removed from
+  its draft or enabled list, retaining the notice through completion or failure.
+
+- Filter explicitly client-only Workshop mods from the server enabled list on
+  load; label and gray their search/lookup cards and prevent adding them.
+
+- Overview lists confirmed loaded mods by display name and version from server
+  loading records, independently of Workshop API access.
+
+- Workshop controls stay locked with setup guidance until a readable, nonempty
+  Steam API key is configured; console history labels show first-to-last output
+  ranges, with unknown first times explicitly marked for legacy logs.
+
+- Timestamped console-run selector and persistent archives of older console runs
+  for browsing historical output across restarts.
+
+- Blocking apply-progress dialog that prevents dashboard interaction during
+  changes, resumes on reconnect, and can be dismissed after success or failure.
+
+- Supervisor-reported apply stages, elapsed time, and completion/failure feedback
+  directly on Configuration; paged browsing of the full retained console log.
+
+- Grouped configuration sections with setting descriptions and running-value
+  comparisons, plus an authenticated interactive game console with bounded
+  output, command history, and stop-command confirmation.
+
+- Opt-in authenticated in-container dashboard for server health, backup activity,
+  archive verification, storage usage, and low-space warnings.
+- Persistent staged configuration with explicit web-managed mode and confirmed
+  game restart. Environment-managed deployments remain the default.
+- Workshop search with an optional server-side Steam API key, URL/ID lookup,
+  and staged mod/collection selection.
+- Persistent last-success/failure backup status and configurable free-space reserve.
 
 ## 1.3.0 - 2026-09-08
 

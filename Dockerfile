@@ -151,6 +151,7 @@ RUN apt-get update \
         libstdc++6 \
         locales \
         python3 \
+        python3-waitress \
         tini \
         tzdata \
         unzip \
@@ -210,6 +211,8 @@ RUN curl --fail --silent --show-error --location \
 
 COPY --chown=tml:tml entrypoint.sh .
 COPY --chown=tml:tml run-server.sh .
+COPY --chown=tml:tml console_tee.py .
+COPY --chown=tml:tml filter_client_mods.py .
 COPY --chown=tml:tml log-filter.sh .
 COPY --chown=tml:tml manage-mods.sh .
 COPY --chown=tml:tml inject.sh /usr/local/bin/inject
@@ -219,9 +222,18 @@ COPY --chown=tml:tml prepare-config.sh .
 COPY --chown=tml:tml backup.py .
 COPY --chown=tml:tml container-backup.py /usr/local/bin/tmod-backup
 COPY --chown=tml:tml VERSION .
+COPY --chown=tml:tml admin_settings.py admin_metrics.py admin_workshop.py admin_server.py ./
+COPY --chown=tml:tml admin_schema.py ./
+COPY --chown=tml:tml web ./web
 
 ENV TMOD_BACKUP_INTERVAL="0"
 ENV TMOD_BACKUP_KEEP="7"
+ENV TMOD_BACKUP_MIN_FREE_MB="1024"
+ENV TMOD_WEB_ENABLED="0"
+ENV TMOD_CONFIG_SOURCE="env"
+ENV TMOD_WEB_ORIGIN="http://localhost:8080"
+ENV TMOD_WEB_TOKEN_FILE=""
+ENV TMOD_WORKSHOP_KEY_FILE=""
 
 RUN find ./LaunchUtils -type f -name '*.sh' -exec chmod 755 {} + \
     && chmod 755 ./entrypoint.sh \

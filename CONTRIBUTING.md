@@ -27,6 +27,13 @@ breaking change.
 
 ## Required validation
 
+For the administration page, run `python3 -m unittest discover -s tests -p
+'test_admin.py' -v` and `node --check web/app.js`. Test an opt-in container with
+disposable bind mounts and a test token: authentication rejection, stage without
+apply, confirmed apply/restart, backup/verify, and environment-mode read-only
+behavior. Live Workshop search requires a separately supplied Steam API key;
+mocked API tests do not establish live key access.
+
 The image includes Python 3.12 for container-native backups. Run
 `python3 -m unittest discover -s tests -p 'test_backup*.py' -v` on Linux. Also run
 `sudo python3 tests/backup-integration-test.py tmodloader:dev` after building the

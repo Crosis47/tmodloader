@@ -2,6 +2,7 @@ temp
 .env
 /data/
 /backups/
+/secrets/
 /data.before-restore-*/
 /.data-restore-*/
 /.data.backup-lock/

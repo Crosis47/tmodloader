@@ -438,6 +438,171 @@ immutable:
 image: ghcr.io/crosis47/tmodloader@sha256:replace-with-reviewed-digest
 ```
 
+## Built-in administration page (opt-in)
+
+The private dashboard runs inside the game container on port 8080. It shows
+server readiness, persistent backup success/failure status, archive sizes,
+free-space warnings, and checksum verification. It can request cold backups,
+stage configuration/mod changes, and apply them with a confirmed game restart.
+No Docker socket is required. The interface is disabled by default.
+
+Readiness checks observe the server process, startup log, and listening socket
+without opening game connections or taking player slots. They do not simulate
+a complete player login or verify world playability.
+
+### Enable private access
+
+1. Create a random admin token (at least 32 characters), store it in
+   `./secrets/tmod-admin-token`, and make the file readable by the container's
+   UID/GID 1000. Keep it private and out of Git. For example, on Linux:
+
+   ```bash
+   mkdir -p secrets
+   umask 077
+   openssl rand -hex 32 > secrets/tmod-admin-token
+   sudo chown 1000:1000 secrets/tmod-admin-token
+   ```
+
+2. Uncomment the admin token bind mount and loopback-only port mapping in
+   `docker-compose.yml`. Set these values in `.env`:
+
+   ```dotenv
+   TMOD_WEB_ENABLED=1
+   TMOD_WEB_TOKEN_FILE=/run/secrets/tmod-admin-token
+   TMOD_WEB_ORIGIN=http://localhost:8080
+   TMOD_CONFIG_SOURCE=env
+   ```
+
+3. Recreate with `docker compose up -d`, open `http://localhost:8080`, and enter
+   the token. Use the exact origin configured above (localhost and 127.0.0.1 are
+   different origins). The token stays in tab memory, never browser storage or
+   a cookie; reloading or locking the page clears it. Rotate it by replacing the
+   secret file and recreating the container.
+
+For a remote Docker host, use an SSH tunnel (for example,
+`ssh -L 8080:127.0.0.1:8080 your-server`) or an authenticated HTTPS reverse proxy.
+Do not publish the HTTP port directly to the internet or send the token over
+unencrypted remote HTTP. For a reverse proxy, set `TMOD_WEB_ORIGIN` to the exact
+external HTTPS origin, preserve its Host header, and forward to container port
+8080 over a private network. CORS is not enabled. Requests with another Host or
+Origin are rejected. No proxy-provided identity headers grant access.
+
+### Environment mode versus web-managed mode
+
+`TMOD_CONFIG_SOURCE=env` keeps settings read-only and preserves existing Compose
+behavior. Backup and verification controls remain available. To allow edits,
+set `TMOD_CONFIG_SOURCE=web` and recreate the container. Web mode cannot be
+combined with `TMOD_USECONFIGFILE=Yes`.
+
+In web mode, environment values provide the initial defaults. Saved overrides
+live in `/data/admin/settings.json` and take precedence on subsequent starts.
+Drafts live in `/data/admin/pending.json`. Both are included in data backups.
+Saving a draft never changes the running game. **Review & apply** shows the
+saved changes and requires confirmation before disconnecting players, stopping
+the game, preparing configuration/mods, and restarting it. Unsubmitted form
+edits are not applied. A failed mod update or startup leaves the game stopped
+and the dashboard available: correct the draft and apply again. Check logs for
+the detailed cause. This is not automated image rollback.
+
+Docker ports/mounts, admin/Steam credentials, the game password, and configuration
+mode remain Compose-managed. Password values are never returned by the API.
+In web-managed mode, first boot saves editable Compose values as initial web
+defaults. Saved web values override Compose on later boots, including empty
+values. Compose supplies defaults only for newly introduced or absent fields.
+World creation settings do not rewrite an existing world. When switching back
+to `env`, saved web overrides are ignored, not deleted.
+
+### Browse and choose Workshop mods
+
+Mods explicitly tagged `Client` are removed from `enabled.json` on startup and
+settings apply, including client-only members of collections. Cached downloads
+are preserved. Confirmed client-only IDs are also removed from saved web-managed
+`TMOD_MODS` values and drafts; Compose files themselves are never rewritten.
+Collection entries remain intact, with client-only members filtered from the
+enabled list. The filter runs on each load.
+The apply popup lists client-only mods removed while saving its draft or loading
+mods, using installed mod names. The notice remains visible in the final result;
+cached files are retained. A missing installed name is explicitly identified.
+Unknown or conflicting classifications are not removed. Workshop cards label
+client-only mods and prevent adding them, while allowing existing selections to
+be removed. This uses publisher metadata, not a complete compatibility check.
+
+In-page search and graphical browsing remain hidden and locked
+until a readable, nonempty Steam API key file is configured. A setup notice
+explains how to unlock them. URL/ID import and its preview results remain available
+without a Steam API key (dashboard authentication is still required).
+With a Steam Web API key stored in
+`./secrets/steam-api-key`, uncomment its secret bind mount and set
+`TMOD_WORKSHOP_KEY_FILE=/run/secrets/steam-api-key`. Recreate the container.
+The key is used only server-side, not sent to your browser or the game process.
+
+The browser supports keyword search, an optional exact tag, popular/newest/
+updated sorting, and pagination. Results are restricted to tModLoader, with
+short-lived caching to limit Steam requests. Steam availability, rate limits,
+and API access can affect search; failures do not change the selected mods.
+Adding/removing an item only changes the saved draft. Apply from Configuration
+or use **Apply changes** on Workshop when ready. Both review the complete saved
+draft and use the same restart/progress dialog. Collection entries use the
+existing `collection:ID` mechanism.
+Steam metadata is not proof of multiplayer compatibility, supported server
+version, or complete dependencies. Review the mod's Workshop page before use.
+
+### Interactive server console
+
+Applying opens a blocking progress dialog with live stages (save/stop, write settings, update mods,
+start game, and health check), elapsed time, and the final result. Progress updates
+every two seconds during an apply; stages are not a percentage or time estimate.
+The dashboard cannot be edited and Escape cannot dismiss the dialog while the
+operation is running. A completion or failure result enables Return to dashboard.
+Reconnecting during an apply reopens progress; connection errors keep controls
+blocked while status checks retry. Closing the browser does not cancel the apply.
+
+Choose **Browse full history** in the console to read the retained raw log from
+the beginning in pages of up to 64 KiB. Beginning, Previous page, and Next page
+let you navigate without loading a potentially large log into browser memory.
+History view pauses live updates; **Return to live output** resumes the tail.
+The run dropdown lists first-to-last output time ranges in your browser's local
+timezone. New runs record the first received output in a companion `.first` file;
+the log's last-write time supplies the end of the range. Older logs without a
+recorded first time explicitly show "First output unknown".
+Older runs are preserved under `/data/tModLoader/Logs/console-history` as the
+current/previous logs rotate. They survive container recreation with the data
+bind mount. No automatic history deletion is performed: monitor disk usage and
+remove unwanted archived logs manually. Previously discarded logs cannot be
+recovered. Log contents can contain private information.
+
+Overview lists running mods by display name and version, using completed loading
+records from the game server log—not staged IDs or downloaded files. This does
+not require a Steam API key. Unhealthy servers or unavailable loading records are
+shown as unconfirmed rather than implying that cached mods are running.
+
+Choose **Interactive console** in the navigation or **Open console** on Overview.
+Recent raw output refreshes every two seconds while that tab is visible (up to
+200 lines / 64 KiB). Toggle **Follow output** to pause automatic scrolling.
+Enter commands such as `help`, `playing`, `save`, or `say Hello everyone` and
+select **Send command**. The up/down arrows recall the last 40 commands in this
+tab; history is not saved to browser storage. Delivery acknowledgement is not
+proof that the game accepted or completed a command: check subsequent output.
+
+This uses the same `inject` channel as the CLI, not a Linux shell. It requires
+admin authentication, rejects multiline/control-character commands, and blocks
+commands while a backup or administration operation is active. Commands act
+immediately even in environment-managed mode; they are not staged settings.
+`exit` and `exit-nosave` require confirmation and may stop the entire container,
+disconnecting the dashboard. Start it through Docker afterward if necessary.
+Mod commands can also change or destroy game state; only trusted administrators
+should have access. Logs and commands may contain private information.
+
+Configuration is grouped into Server, World, Backups, Mods & Workshop,
+Runtime & logs, and Journey permissions, with explanations and running values
+beside each editable setting. Compose-only settings remain separate.
+
+The admin API has no Linux shell endpoint, filesystem browser, uploads, archive
+downloads, or online restore. Use the
+documented offline restore workflow below for recovery. Anyone holding the
+admin token can change the server's configuration and installed mods; treat
+it as an administrative credential.
+
 ## Backups
 
 Backups run **inside the container**, as its normal non-root user, using the
@@ -445,6 +610,13 @@ Backups run **inside the container**, as its normal non-root user, using the
 socket, host Python, root job, or systemd timer is needed. Create `./backups`
 and grant the runtime user effective read/write/search access, just like `./data`.
 The tool refuses backup storage that is not a separate mount.
+
+`TMOD_BACKUP_MIN_FREE_MB=1024` reserves a minimum of 1 GiB of free backup storage.
+Preflight rejects low space before stopping the game; set a larger reserve for
+large worlds/mod sets. This is a free-space threshold, not an exact prediction
+of compressed archive size. Persistent activity and last-success timestamps are
+stored under `/data/.tmod-control/backup-status.json`; the admin page exposes
+them along with archive count/size and remaining disk space.
 
 ```bash
 docker compose exec -T tmodloader tmod-backup backup

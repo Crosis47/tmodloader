@@ -7,6 +7,8 @@ on:
     paths:
       - VERSION
       - "*backup.py"
+      - "admin_*.py"
+      - "web/**"
       - CHANGELOG.md
       - Dockerfile
       - "*.sh"
@@ -17,6 +19,8 @@ on:
     paths:
       - VERSION
       - "*backup.py"
+      - "admin_*.py"
+      - "web/**"
       - CHANGELOG.md
       - Dockerfile
       - "*.sh"
@@ -40,6 +44,12 @@ jobs:
 
       - name: Test backup and restore safety
         run: python3 -m unittest discover -s tests -p 'test_backup*.py' -v
+
+      - name: Test administration API safety
+        run: python3 -m unittest discover -s tests -p 'test_admin.py' -v
+
+      - name: Validate administration JavaScript
+        run: node --check web/app.js
 
       - name: Lint runtime scripts
         run: shellcheck --severity=warning autosave.sh entrypoint.sh healthcheck.sh inject.sh log-filter.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh tests/*.sh
@@ -104,3 +114,7 @@ jobs:
       - name: Test real-server backup and restore
         timeout-minutes: 15
         run: sudo python3 tests/backup-integration-test.py tmodloader:ci
+
+      - name: Test real-server administration controls
+        timeout-minutes: 15
+        run: sudo python3 tests/admin-integration-test.py tmodloader:ci
