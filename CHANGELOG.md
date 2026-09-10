@@ -8,6 +8,8 @@ immutable deployment identifier.
 
 ## Unreleased
 
+## 1.4.0 - 2026-09-10
+
 ### Fixed
 
 - Start with a root-only initializer that repairs ownership and directory access
