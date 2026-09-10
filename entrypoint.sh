@@ -11,6 +11,8 @@ config_path="$generated_config_path"
 server_runner="${TMOD_SERVER_RUNNER:-/terraria-server/run-server.sh}"
 server_pid=""
 autosave_pid=""
+admin_pid=""
+admin_failed=0
 shutdown_requested=0
 
 fail() {
@@ -127,6 +129,10 @@ shutdown() {
 
 cleanup() {
     stop_autosave
+    if [[ -n "$admin_pid" ]]; then
+        kill "$admin_pid" 2>/dev/null || true
+        wait "$admin_pid" 2>/dev/null || true
+    fi
     if server_is_running; then
         signal_server_group KILL
         wait "$server_pid" 2>/dev/null || true
@@ -139,6 +145,11 @@ cleanup() {
 }
 
 [[ "$(id -u)" != "0" ]] || fail "The server refuses to run as root. Use the image's built-in tml user."
+admin_exports="$(python3 /terraria-server/admin_settings.py boot)" || fail "Invalid web-managed configuration."
+# Only allowlisted keys and shlex-quoted values are emitted by admin_settings.
+eval "$admin_exports"
+unset admin_exports
+[[ "${TMOD_WEB_ENABLED:-0}" =~ ^[01]$ ]] || fail "TMOD_WEB_ENABLED must be 0 or 1."
 reject_line_breaks TMOD_SHUTDOWN_MESSAGE "$TMOD_SHUTDOWN_MESSAGE"
 [[ "${TMOD_AUTOSAVE_INTERVAL:-}" =~ ^[0-9]+$ ]] || fail "TMOD_AUTOSAVE_INTERVAL must be a non-negative integer."
 [[ "${TMOD_SHUTDOWN_TIMEOUT:-90}" =~ ^[1-9][0-9]*$ ]] || fail "TMOD_SHUTDOWN_TIMEOUT must be a positive integer."
@@ -159,6 +170,7 @@ flock -n 9 || fail "Another server or restore is using /data."
 [[ ! -e /data/.tmod-control/restore-pending ]] || fail "An interrupted restore requires recovery; inspect /data/.tmod-control/restore-pending before starting."
 [[ "${TMOD_BACKUP_INTERVAL:-0}" =~ ^[0-9]{1,7}$ ]] || fail "TMOD_BACKUP_INTERVAL must be a non-negative integer (minutes, maximum 9999999)."
 [[ "${TMOD_BACKUP_KEEP:-7}" =~ ^[1-9][0-9]{0,5}$ ]] || fail "TMOD_BACKUP_KEEP must be a positive integer (maximum 999999)."
+[[ "${TMOD_BACKUP_MIN_FREE_MB:-1024}" =~ ^[0-9]{1,9}$ ]] || fail "TMOD_BACKUP_MIN_FREE_MB must be a non-negative integer (maximum 999999999)."
 backup_interval=$((10#${TMOD_BACKUP_INTERVAL:-0} * 60))
 if ((backup_interval > 0)); then
     tmod-backup _preflight || fail "Scheduled backups require a writable /backups mount."
@@ -171,6 +183,8 @@ ensure_writable_directory /data/tModLoader/Worlds
 ensure_writable_directory /terraria-server
 ensure_writable_directory "$HOME"
 install -d -m 0700 "$runtime_dir"
+python3 /terraria-server/admin_settings.py snapshot
+python3 /terraria-server/admin_metrics.py startup
 printf '%s\n' "$$" > "$runtime_dir/supervisor.pid"
 rm -f "$runtime_dir/backup-request" "$runtime_dir/backup-result"
 
@@ -196,8 +210,16 @@ fi
 # in the generated configuration and must not be copied into environment logs.
 unset TMOD_PASS TMOD_PASS_FILE
 
+if [[ "${TMOD_WEB_ENABLED:-0}" == 1 ]]; then
+    python3 /terraria-server/admin_server.py &
+    admin_pid=$!
+    sleep 1
+    kill -0 "$admin_pid" 2>/dev/null || fail "Admin interface could not start. Check its origin and secret file."
+fi
+
 # Download missing/outdated Workshop items and enable the requested mods.
 ./manage-mods.sh
+python3 /terraria-server/admin_settings.py snapshot
 
 rm -f "$control_pipe" "$pid_path"
 mkfifo -m 0600 "$control_pipe"
@@ -221,8 +243,16 @@ fi
 
 perform_backup() {
     local request_id="$1" status=0 deadline archive
+    python3 /terraria-server/admin_metrics.py running "Preparing cold backup" || true
     if ! healthcheck; then
+        python3 /terraria-server/admin_metrics.py failed "Server is not healthy; backup was not started" || true
         printf '%s\n1\nServer is not healthy; backup was not started.\n' "$request_id" > "$runtime_dir/backup-result.tmp"
+        mv "$runtime_dir/backup-result.tmp" "$runtime_dir/backup-result"
+        return
+    fi
+    if ! tmod-backup _preflight; then
+        python3 /terraria-server/admin_metrics.py failed "Backup mount or free-space check failed; server was not stopped" || true
+        printf '%s\n1\nBackup preflight failed; inspect storage and container logs.\n' "$request_id" > "$runtime_dir/backup-result.tmp"
         mv "$runtime_dir/backup-result.tmp" "$runtime_dir/backup-result"
         return
     fi
@@ -266,12 +296,96 @@ perform_backup() {
         "$request_id" "$status" "$status" > "$runtime_dir/backup-result.tmp"
     mv "$runtime_dir/backup-result.tmp" "$runtime_dir/backup-result"
     printf '[BACKUP] Finished with status %s.\n' "$status"
+    if ((status == 0)); then
+        python3 /terraria-server/admin_metrics.py success "Backup verified and game restart validated" || true
+    else
+        python3 /terraria-server/admin_metrics.py failed "Backup or game restart failed; inspect container logs" || true
+    fi
+}
+
+admin_progress() {
+    jq -n --arg id "$request_id" --arg stage "$1" --arg detail "$2" '{id:$id,stage:$stage,detail:$detail}' > "$runtime_dir/admin-progress.tmp"
+    mv "$runtime_dir/admin-progress.tmp" "$runtime_dir/admin-progress"
+}
+
+perform_admin_apply() {
+    local request_id="$1" status=0 deadline
+    admin_progress stopping 'Saving the world and stopping the game. Players will disconnect.'
+    stop_autosave
+    if server_is_running; then
+        inject "say Server restarting to apply administrator changes." || true
+        inject "exit" || true
+        if ! wait_for_server_exit "$((SECONDS + ${TMOD_SHUTDOWN_TIMEOUT:-90}))"; then
+            signal_server_group TERM
+            wait_for_server_exit "$((SECONDS + 5))" || signal_server_group KILL
+            status=1
+        fi
+        wait "$server_pid" || status=1
+    fi
+    server_pid=""
+    rm -f "$pid_path"
+    if ((status == 0)); then
+        admin_progress settings 'Validating and writing the staged server configuration.'
+        if TMOD_ADMIN_REQUEST_ID="$request_id" python3 /terraria-server/admin_settings.py apply; then
+            # shellcheck disable=SC1091
+            source "$runtime_dir/admin.env"
+            admin_progress mods 'Resolving Workshop selections and checking/downloading mods. This may take several minutes.'
+            TMOD_ADMIN_REQUEST_ID="$request_id" ./manage-mods.sh || status=1
+        else
+            status=1
+        fi
+    fi
+    if ((status == 0)); then
+        admin_progress starting 'Starting the game with the new configuration.'
+        exec 3>&-
+        rm -f "$control_pipe"
+        mkfifo -m 0600 "$control_pipe"
+        exec 3<> "$control_pipe"
+        start_server
+        admin_progress health 'Waiting for world loading and the game listener to become healthy (up to 10 minutes).'
+        deadline=$((SECONDS + 600))
+        while ! healthcheck; do
+            if ! server_is_running || ((SECONDS >= deadline)); then
+                status=1
+                break
+            fi
+            sleep 2
+        done
+    fi
+    if ((status != 0)); then
+        if server_is_running; then
+            signal_server_group TERM
+            wait_for_server_exit "$((SECONDS + 5))" || signal_server_group KILL
+            wait "$server_pid" 2>/dev/null || true
+        fi
+        stop_autosave
+        server_pid=""
+        rm -f "$pid_path"
+        admin_failed=1
+        printf '[ADMIN] Apply failed. Game stopped; correct settings in the dashboard and apply again.\n' >&2
+    else
+        admin_failed=0
+        rm -f /data/admin/pending.json
+        python3 /terraria-server/admin_settings.py snapshot
+        printf '[ADMIN] Settings applied and game health validated.\n'
+    fi
+    backup_interval=$((10#${TMOD_BACKUP_INTERVAL:-0} * 60))
+    next_backup=$((SECONDS + backup_interval))
+    jq -n --arg id "$request_id" --argjson status "$status" '{id:$id,status:$status}' > "$runtime_dir/admin-result.tmp"
+    mv "$runtime_dir/admin-result.tmp" "$runtime_dir/admin-result"
 }
 
 start_server
 next_backup=$((SECONDS + backup_interval))
-while server_is_running; do
-    if [[ -f "$runtime_dir/backup-request" ]]; then
+while server_is_running || ((admin_failed)); do
+    if [[ -n "$admin_pid" ]] && ! kill -0 "$admin_pid" 2>/dev/null; then
+        fail "Admin interface exited unexpectedly; inspect container logs."
+    fi
+    if [[ -f "$runtime_dir/admin-request" ]]; then
+        request_id="$(jq -r .id "$runtime_dir/admin-request")"
+        rm -f "$runtime_dir/admin-request"
+        perform_admin_apply "$request_id"
+    elif [[ -f "$runtime_dir/backup-request" ]]; then
         request_id="$(<"$runtime_dir/backup-request")"
         rm -f "$runtime_dir/backup-request"
         perform_backup "$request_id"

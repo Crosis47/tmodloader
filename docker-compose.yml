@@ -21,6 +21,9 @@ services:
     ports:
       # TMOD_HOST_PORT is the host-facing port; TMOD_PORT is the port inside the container.
       - "${TMOD_HOST_PORT:-7777}:${TMOD_PORT:-7777}/tcp"
+      # Optional admin page: uncomment after creating the admin secret below.
+      # Loopback only; use an SSH tunnel or HTTPS reverse proxy for remote access.
+      # - "127.0.0.1:${TMOD_WEB_HOST_PORT:-8080}:8080/tcp"
     environment:
       # Copy .env.example to .env and make deployment-specific changes there.
       TMOD_MODS: "${TMOD_MODS:-}"
@@ -33,6 +36,12 @@ services:
       TMOD_AUTOSAVE_INTERVAL: "${TMOD_AUTOSAVE_INTERVAL:-10}"
       TMOD_BACKUP_INTERVAL: "${TMOD_BACKUP_INTERVAL:-0}"
       TMOD_BACKUP_KEEP: "${TMOD_BACKUP_KEEP:-7}"
+      TMOD_BACKUP_MIN_FREE_MB: "${TMOD_BACKUP_MIN_FREE_MB:-1024}"
+      TMOD_WEB_ENABLED: "${TMOD_WEB_ENABLED:-0}"
+      TMOD_CONFIG_SOURCE: "${TMOD_CONFIG_SOURCE:-env}"
+      TMOD_WEB_ORIGIN: "${TMOD_WEB_ORIGIN:-http://localhost:8080}"
+      TMOD_WEB_TOKEN_FILE: "${TMOD_WEB_TOKEN_FILE:-}"
+      TMOD_WORKSHOP_KEY_FILE: "${TMOD_WORKSHOP_KEY_FILE:-}"
       TMOD_LOG_LEVEL: "${TMOD_LOG_LEVEL:-normal}"
       TMOD_CRASH_LOG_LINES: "${TMOD_CRASH_LOG_LINES:-200}"
       TMOD_USECONFIGFILE: "${TMOD_USECONFIGFILE:-No}"
@@ -72,6 +81,10 @@ services:
       - "./data:/data"
       # Must be writable by the runtime user, just like ./data.
       - "./backups:/backups"
+      # Admin interface: set TMOD_WEB_TOKEN_FILE=/run/secrets/tmod-admin-token
+      # - "./secrets/tmod-admin-token:/run/secrets/tmod-admin-token:ro"
+      # Optional Workshop search: set TMOD_WORKSHOP_KEY_FILE=/run/secrets/steam-api-key
+      # - "./secrets/steam-api-key:/run/secrets/steam-api-key:ro"
       # For TMOD_USECONFIGFILE=Yes:
       # - "./customconfig.txt:/terraria-server/customconfig.txt:ro"
       # For TMOD_PASS_FILE=/run/secrets/tmod-password:

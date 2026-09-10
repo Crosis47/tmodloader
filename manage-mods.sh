@@ -563,3 +563,4 @@ main() {
 }
 
 main "$@"
+python3 "$(dirname "${BASH_SOURCE[0]}")/filter_client_mods.py" "$data_dir"

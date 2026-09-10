@@ -32,7 +32,7 @@ def exclusive(path):
         yield
 
 
-def preflight():
+def preflight(check_reserve=True):
     if not DEST.is_mount() or os.path.samefile(DEST, DATA):
         raise ValueError('/backups must be a separate writable mount, not container storage.')
     for root, dirs, files in os.walk(DATA, followlinks=False):
@@ -40,6 +40,11 @@ def preflight():
             raise ValueError('/backups cannot refer to a directory inside /data.')
     with tempfile.TemporaryFile(dir=DEST):
         pass
+    reserve = int(os.environ.get('TMOD_BACKUP_MIN_FREE_MB', '1024')) * 1024 * 1024
+    if reserve < 0:
+        raise ValueError('TMOD_BACKUP_MIN_FREE_MB must be non-negative.')
+    if check_reserve and shutil.disk_usage(DEST).free < reserve:
+        raise ValueError('Backup storage is below TMOD_BACKUP_MIN_FREE_MB; free space before retrying.')
 
 
 def identity():
@@ -61,7 +66,12 @@ def cold_backup():
 
 
 def request_backup():
-    preflight()
+    try:
+        preflight()
+    except Exception:
+        import admin_metrics
+        admin_metrics.record('failed', 'Backup mount or free-space preflight failed; server was not stopped')
+        raise
     if not (RUNTIME / 'supervisor.pid').exists():
         raise RuntimeError('No running supervisor; use docker compose exec for backup.')
     with exclusive(RUNTIME / 'backup-client.lock'):
@@ -90,7 +100,7 @@ def request_backup():
 
 
 def restore(bundle):
-    preflight()
+    preflight(check_reserve=False)
     CONTROL.mkdir(mode=0o700, exist_ok=True)
     with exclusive(CONTROL / 'server.lock'):
         pending = CONTROL / 'restore-pending'
