@@ -22,6 +22,11 @@ fi
 while IFS= read -r line || [[ -n "$line" ]]; do
     line="${line%$'\r'}"
 
+    # Explicit world creation starts a second launcher after saving the world.
+    if [[ "$line" == *"[WORLDGEN] World saved;"* ]]; then
+        launcher_startup=true
+    fi
+
     if [[ "$mode" == "quiet" ]]; then
         lower_line="${line,,}"
         case "$lower_line" in

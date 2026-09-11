@@ -8,7 +8,7 @@ immutable deployment identifier.
 
 ## Unreleased
 
-## 2.0.0 - 2026-09-10
+## 2.0.0 - 2026-09-11
 
 ### Breaking changes
 
@@ -27,6 +27,8 @@ immutable deployment identifier.
   only the salted hash is persisted with owner-only permissions.
 - Verify setup, hash persistence across restart, and authentication using the
   container's installed dependencies and disposable integration-test volumes.
+- Preserve normal console filtering across world creation and the subsequent
+  game launch; complete launcher output remains available in the raw log.
 
 - Add `TMOD_WORLDEVIL` and a dashboard world-evil selector. Explicit Corruption
   or Crimson selections create missing worlds through the dedicated-server menu
