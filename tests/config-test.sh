@@ -22,6 +22,25 @@ fi
 grep -Fxq "password=$secret" "$config_path"
 grep -Fxq 'port=7777' "$config_path"
 
+for evil in random corruption crimson; do
+    TMOD_CONFIG_PATH="$config_path" TMOD_DATA_DIR="$test_root/data" TMOD_WORLDEVIL="$evil" bash "$script_under_test"
+    if [[ "$evil" == random ]]; then
+        ! grep -q '^# tmod-worldevil=' "$config_path"
+    else
+        grep -Fxq "# tmod-worldevil=$evil" "$config_path"
+    fi
+done
+if TMOD_CONFIG_PATH="$config_path" TMOD_DATA_DIR="$test_root/data" TMOD_WORLDEVIL=invalid bash "$script_under_test"; then
+    echo "Invalid world evil unexpectedly passed validation." >&2
+    exit 1
+fi
+printf 'existing world fixture' > "$test_root/data/tModLoader/Worlds/$TMOD_WORLDNAME.wld"
+TMOD_CONFIG_PATH="$config_path" TMOD_DATA_DIR="$test_root/data" TMOD_WORLDEVIL=crimson bash "$script_under_test"
+! grep -Eq '^(autocreate=|# tmod-worldevil=)' "$config_path"
+grep -Fxq 'existing world fixture' "$test_root/data/tModLoader/Worlds/$TMOD_WORLDNAME.wld"
+TMOD_CONFIG_PATH="$config_path" TMOD_DATA_DIR="$test_root/data" TMOD_WORLDNAME=AnotherWorld TMOD_WORLDEVIL=corruption bash "$script_under_test"
+grep -Fxq '# tmod-worldevil=corruption' "$config_path"
+
 if TMOD_CONFIG_PATH="$config_path" TMOD_DATA_DIR="$test_root/data" TMOD_PORT=70000 bash "$script_under_test"; then
     echo "An invalid port unexpectedly passed validation." >&2
     exit 1

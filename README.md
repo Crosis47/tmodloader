@@ -248,6 +248,7 @@ removed before tModLoader logs its process environment.
 | `TMOD_MAXPLAYERS` | `8` | `1` through `255`. |
 | `TMOD_WORLDNAME` | `Docker` | World display name and filename; path separators are rejected. |
 | `TMOD_WORLDSIZE` | `3` | `1` small, `2` medium, `3` large; new worlds only. |
+| `TMOD_WORLDEVIL` | `random` | `random`, `corruption`, or `crimson`; new worlds only. Explicit evil uses supervised menu creation before normal server startup. |
 | `TMOD_WORLDSEED` | `Docker` | Seed used for a new world. |
 | `TMOD_DIFFICULTY` | `1` | `0` normal, `1` expert, `2` master, `3` journey; new worlds only. |
 | `TMOD_SECURE` | `0` | `0` disabled or `1` enabled. |
@@ -463,32 +464,42 @@ a complete player login or verify world playability.
 
 ### Enable private access
 
-1. Create a random admin token (at least 32 characters), store it in
-   `./secrets/tmod-admin-token`, and make the file readable by the container's
-   UID/GID 1000. Keep it private and out of Git. For example, on Linux:
+1. Uncomment the loopback-only dashboard port mapping in `docker-compose.yml`.
+   Set `TMOD_WEB_ENABLED=1` and `TMOD_WEB_ORIGIN=http://localhost:8080` in `.env`.
+   Leave `TMOD_WEB_TOKEN_FILE` empty to use `/data/admin/token.argon2`.
+2. Start with `docker compose up -d` and read `docker compose logs tmodloader`.
+   Without a hash, only the setup interface starts; mod downloads and the game
+   wait. The logs show a random one-time setup code.
+3. Open `http://localhost:8080`. Enter the setup code, choose a unique 8–256
+   character ASCII admin token without whitespace, and confirm it. Keep the
+   token in your password manager. The server atomically saves only a salted
+   Argon2id hash (0600 permissions) in the persistent data volume and resumes
+   startup automatically. Sign in with the original token, not the hash.
 
-   ```bash
-   mkdir -p secrets
-   umask 077
-   openssl rand -hex 32 > secrets/tmod-admin-token
-   sudo chown 1000:1000 secrets/tmod-admin-token
-   ```
+Setup requires the configured Host/Origin and the one-time code; the code expires
+when setup completes or the container restarts. Remote first-run setup requires
+an HTTPS origin or a localhost SSH tunnel. Terminate HTTPS at your trusted reverse
+proxy and keep the backend private. Treat access to container logs as privileged.
+The token stays in browser tab memory after sign-in, not browser storage or cookies.
 
-2. Uncomment the admin token bind mount and loopback-only port mapping in
-   `docker-compose.yml`. Set these values in `.env`:
+Upgrading to container 2.0.0: existing plaintext admin secret files are no longer accepted. Remove the old
+plaintext mount and leave `TMOD_WEB_TOKEN_FILE` empty to provision through the UI,
+or mount a pre-created Argon2id hash at the path in `TMOD_WEB_TOKEN_FILE`. Missing
+hashes enter setup; malformed or unsupported hashes fail startup. Read-only secret
+mounts must be provisioned externally before starting. The image includes the
+`argon2` CLI and Python library. An interactive helper is also included:
 
-   ```dotenv
-   TMOD_WEB_ENABLED=1
-   TMOD_WEB_TOKEN_FILE=/run/secrets/tmod-admin-token
-   TMOD_WEB_ORIGIN=http://localhost:8080
-   TMOD_CONFIG_SOURCE=env
-   ```
+```bash
+docker compose exec --user tml tmodloader python3 /terraria-server/admin_auth.py setup
+```
 
-3. Recreate with `docker compose up -d`, open `http://localhost:8080`, and enter
-   the token. Use the exact origin configured above (localhost and 127.0.0.1 are
-   different origins). The token stays in tab memory, never browser storage or
-   a cookie; reloading or locking the page clears it. Rotate it by replacing the
-   secret file and recreating the container.
+Use this helper to rotate credentials, then restart the container. To create an
+external hash, use `setup --file /writable/path/token.argon2` in a container with
+that directory mounted, then mount the resulting file read-only. The helper asks
+for the token without echoing it and uses Argon2id v19, 64 MiB, 3 iterations, and
+4 lanes. External hashes must use Argon2id v19, 19–256 MiB, 2–10 iterations,
+1–8 lanes, and at least 16-byte salts and outputs. Plaintext is never migrated
+automatically. Setup gating applies only when `TMOD_WEB_ENABLED=1`.
 
 For a remote Docker host, use an SSH tunnel (for example,
 `ssh -L 8080:127.0.0.1:8080 your-server`) or an authenticated HTTPS reverse proxy.
@@ -522,6 +533,41 @@ defaults. Saved web values override Compose on later boots, including empty
 values. Compose supplies defaults only for newly introduced or absent fields.
 World creation settings do not rewrite an existing world. When switching back
 to `env`, saved web overrides are ignored, not deleted.
+
+#### Create a world with a chosen evil
+
+For the initial world, set `TMOD_WORLDEVIL=crimson` (or `corruption`) and
+`TMOD_WORLDNAME=MyNewWorld` in `.env`, then start with `docker compose up -d`.
+The name must not already have a matching `.wld` file. `random` preserves the
+existing automatic creation behavior. This applies to generated configuration
+(`TMOD_USECONFIGFILE=No`); mounted custom configurations remain operator-managed.
+
+In the WebUI with `TMOD_CONFIG_SOURCE=web`, open **World configuration**, choose
+**New world evil**, and enter an **unused World name**. Stage the settings and
+apply changes. Apply saves and stops the current game, disconnects players,
+generates the new world, and starts it. The old world is retained. Choosing an
+existing name loads that world without changing its evil. Changing only the evil
+setting does not convert or regenerate the current world.
+
+Explicit evil creation accepts names up to 26 characters and seeds up to 39
+characters, matching the dedicated server menu. The selected mods are loaded
+before generation. Special seeds and mods can alter generation or include both
+evils. Generation progress is recorded in the normal console log. Apply waits
+up to ten minutes for generation and startup; very large modded worlds may exceed
+that limit. Failed creation stops startup and reports the error.
+
+For the bundled Terraria 1.4.4 tModLoader server, the evil menu is **1 Random, 2 Corruption, 3 Crimson**, and the
+world-name prompt is followed by a seed prompt. After generation and saving, it
+returns to world selection, not directly to “Server started”. Our helper waits
+for that return and a nonempty world file before ending the creation process
+and starting the configured server. It uses a temporary English-language config
+for predictable prompts; the game server retains the selected language.
+
+The [upstream server configuration example](https://github.com/tModLoader/tModLoader/blob/v2026.07.3.0/patches/tModLoader/Terraria/release_extras/serverconfig.txt)
+documents `world`, `autocreate`, and `seed`, but no evil configuration key.
+The [dedicated-server flow](https://github.com/tModLoader/tModLoader/blob/v2026.07.3.0/patches/tModLoader/Terraria/Main.cs.patch)
+uses the startup world-selection menu. A running game does not switch worlds
+through this menu; the WebUI's existing stop/start process handles the transition.
 
 ### Browse and choose Workshop mods
 

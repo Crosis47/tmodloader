@@ -29,6 +29,11 @@ Listening on port 7777
 Server started
 Ordinary player chat
 ERROR: illustrative failure
+Choose World:[WORLDGEN] World saved; starting the configured game server.
+You are on platform: Linux
+Attempting Launch...
+Launched Using Local Dotnet. Launch command: dotnet tModLoader.dll -server
+Server started
 EOF
 
 bash "$filter_under_test" debug < "$fixture" > "$test_root/debug.log"
@@ -65,6 +70,7 @@ exit 42
 EOF
 
 mkdir -p "$test_root/logs"
+: > "$test_root/serverconfig.txt"
 printf '%s\n' 'previous launch' > "$test_root/logs/container-console.log"
 printf '%s\n' 'oldest launch' > "$test_root/logs/container-console.previous.log"
 printf '%s\n' '2026-09-01T00:00:00+00:00' > "$test_root/logs/container-console.previous.log.first"

@@ -29,7 +29,7 @@ umask 077
 rm -f "$raw_log.first"
 
 set +e
-bash "$script_caller" \
+python3 "$(dirname "${BASH_SOURCE[0]}")/create_world.py" "$config_path" bash "$script_caller" \
     -server \
     -tmlsavedirectory /data/tModLoader \
     -steamworkshopfolder /data/steamMods/steamapps/workshop \
