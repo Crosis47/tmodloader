@@ -8,6 +8,31 @@ immutable deployment identifier.
 
 ## Unreleased
 
+## 2.0.0 - 2026-09-10
+
+### Breaking changes
+
+- Admin secret files must contain an Argon2id hash; plaintext tokens are no
+  longer accepted. Remove the old plaintext mount and leave
+  `TMOD_WEB_TOKEN_FILE` empty to provision through the Web UI, or mount a
+  pre-created Argon2id hash. Existing game worlds and settings are retained.
+
+### Added
+
+- First-run Web UI setup protected by a one-time code from container logs.
+  Game startup waits until the admin hash is saved, then resumes automatically.
+  Remote setup requires HTTPS or a localhost SSH tunnel.
+- Include the Argon2 CLI and Python library, plus an interactive hash creation
+  and rotation helper. Admin tokens accept 8–256 non-whitespace ASCII characters;
+  only the salted hash is persisted with owner-only permissions.
+- Verify setup, hash persistence across restart, and authentication using the
+  container's installed dependencies and disposable integration-test volumes.
+
+- Add `TMOD_WORLDEVIL` and a dashboard world-evil selector. Explicit Corruption
+  or Crimson selections create missing worlds through the dedicated-server menu
+  before normal startup. Existing worlds are retained; the WebUI explains how
+  to choose an unused world name and apply changes to generate a different evil.
+
 ## 1.4.0 - 2026-09-10
 
 ### Fixed

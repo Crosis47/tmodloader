@@ -29,6 +29,7 @@ JOURNEY = ('SETFROZEN SETDAWN SETNOON SETDUSK SETMIDNIGHT GODMODE WIND_STRENGTH 
            'SET_DIFFICULTY BIOME_SPREAD SPAWN_RATE').split()
 RANGES.update({'TMOD_JOURNEY_' + key: (0, 2) for key in JOURNEY})
 CHOICES = {'TMOD_LOG_LEVEL': ['quiet', 'normal', 'debug'],
+           'TMOD_WORLDEVIL': ['random', 'corruption', 'crimson'],
            'TMOD_MOD_OFFLINE_POLICY': ['use-cache', 'strict']}
 TEXT = ['TMOD_MOTD', 'TMOD_WORLDNAME', 'TMOD_WORLDSEED', 'TMOD_LANGUAGE',
         'TMOD_SHUTDOWN_MESSAGE', 'TMOD_MODS']

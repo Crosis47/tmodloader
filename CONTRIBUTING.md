@@ -27,12 +27,22 @@ breaking change.
 
 ## Required validation
 
+For local Python tests, install `argon2-cffi`. Also run admin tests inside the
+built image to verify compatibility with Ubuntu's packaged Argon2 library.
+
 For the administration page, run `python3 -m unittest discover -s tests -p
-'test_admin.py' -v` and `node --check web/app.js`. Test an opt-in container with
-disposable bind mounts and a test token: authentication rejection, stage without
+'test_admin.py' -v`, `node --check web/app.js`, and `node --check web/setup.js`. Test an opt-in container with
+disposable volumes and a test token: first-run setup, saved-hash restart, authentication rejection, stage without
 apply, confirmed apply/restart, backup/verify, and environment-mode read-only
 behavior. Live Workshop search requires a separately supplied Steam API key;
 mocked API tests do not establish live key access.
+
+For world creation, also run `python3 -m unittest discover -s tests -p
+'test_world_creation.py' -v` and the configuration tests. Validate real generation
+with disposable data for both `TMOD_WORLDEVIL=corruption` and `crimson`; check
+the generation log and saved `.wld`/`.twld` files. Reuse the world name to check
+that startup loads it without regeneration, then apply an unused name in web
+mode to check creation during the save/stop/start workflow.
 
 The image includes Python 3.12 for container-native backups. Run
 `python3 -m unittest discover -s tests -p 'test_backup*.py' -v` on Linux. Also run

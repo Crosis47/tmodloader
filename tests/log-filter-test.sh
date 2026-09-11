@@ -65,6 +65,7 @@ exit 42
 EOF
 
 mkdir -p "$test_root/logs"
+: > "$test_root/serverconfig.txt"
 printf '%s\n' 'previous launch' > "$test_root/logs/container-console.log"
 printf '%s\n' 'oldest launch' > "$test_root/logs/container-console.previous.log"
 printf '%s\n' '2026-09-01T00:00:00+00:00' > "$test_root/logs/container-console.previous.log.first"

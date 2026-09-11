@@ -70,6 +70,7 @@ ENV TMOD_MAXPLAYERS="8"
 ENV TMOD_WORLDNAME="Docker"
 # autocreate
 ENV TMOD_WORLDSIZE="3"
+ENV TMOD_WORLDEVIL="random"
 # seed
 ENV TMOD_WORLDSEED="Docker"
 # difficulty
@@ -153,6 +154,8 @@ RUN apt-get update \
         locales \
         python3 \
         python3-waitress \
+        python3-argon2 \
+        argon2 \
         tini \
         tzdata \
         unzip \
@@ -212,6 +215,7 @@ RUN curl --fail --silent --show-error --location \
 
 COPY --chown=tml:tml entrypoint.sh .
 COPY --chown=tml:tml run-server.sh .
+COPY --chown=tml:tml create_world.py .
 COPY --chown=tml:tml console_tee.py .
 COPY --chown=tml:tml filter_client_mods.py .
 COPY --chown=tml:tml log-filter.sh .
@@ -224,7 +228,7 @@ COPY --chown=root:root backup.py .
 COPY --chown=root:root --chmod=0755 container-backup.py /usr/local/bin/tmod-backup
 COPY --chown=tml:tml VERSION .
 COPY --chown=tml:tml admin_settings.py admin_metrics.py admin_workshop.py admin_server.py ./
-COPY --chown=tml:tml admin_schema.py ./
+COPY --chown=tml:tml admin_schema.py admin_auth.py ./
 COPY --chown=tml:tml web ./web
 COPY --chown=root:root --chmod=0755 container-init.sh /usr/local/bin/tmod-init
 
@@ -257,7 +261,7 @@ RUN bash -c 'set -Eeo pipefail; \
     && rm -rf ./tModLoader-Logs \
     && ln -s /data/tModLoader/Logs ./tModLoader-Logs
 
-RUN sha256sum VERSION tModLoader.dll entrypoint.sh run-server.sh backup.py \
+RUN sha256sum VERSION tModLoader.dll entrypoint.sh run-server.sh create_world.py backup.py \
         /usr/local/bin/tmod-backup /usr/local/bin/tmod-init \
         | sha256sum | cut -d ' ' -f 1 > backup-build-id
 
