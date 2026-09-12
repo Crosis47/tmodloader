@@ -85,7 +85,8 @@ printf '## Validation\n\n'
 printf 'The candidate digest passed Bash and configuration regression tests, '
 printf 'a real dedicated-server startup and healthcheck, command injection, '
 printf 'graceful shutdown, password-leak detection, and persistent-log verification '
-printf 'before these tags were assigned.\n\n'
+printf 'on both linux/amd64 and linux/arm64 before these tags were assigned.\n\n'
+printf 'Native executable architecture and live Workshop download/cache reuse were also verified.\n\n'
 printf '## Upstream and source\n\n'
 printf -- '- [tModLoader %s release notes](https://github.com/tModLoader/tModLoader/releases/tag/%s)\n' \
     "$tml_version" "$tml_version"

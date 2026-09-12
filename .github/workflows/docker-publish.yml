@@ -8,6 +8,7 @@ on:
       - VERSION
       - Dockerfile
       - "*.sh"
+      - workshop_download.py
       - .github/workflows/docker-publish.yml
   schedule:
     - cron: "17 2 * * *"
@@ -67,7 +68,7 @@ jobs:
     name: Publish ${{ matrix.channel }} (${{ matrix.tml_version }})
     needs: releases
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 90
     permissions:
       contents: write
       packages: write
@@ -86,6 +87,9 @@ jobs:
         run: |
           container_version="$(tr -d '\r\n' < VERSION)"
           bash release-metadata.sh "$container_version" "$TMODLOADER_VERSION" "$CHANNEL"
+
+      - name: Set up build emulation
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -136,7 +140,7 @@ jobs:
         if: steps.publication.outputs.publish == 'true'
         run: |
           bash -n ./*.sh tests/*.sh
-          shellcheck --severity=warning autosave.sh container-init.sh entrypoint.sh healthcheck.sh inject.sh log-filter.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh tests/*.sh
+          shellcheck --severity=warning autosave.sh container-init.sh entrypoint.sh healthcheck.sh inject.sh log-filter.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh steamcmd-wrapper.sh tests/*.sh
           bash tests/release-metadata-test.sh
           docker compose config --quiet
 
@@ -146,7 +150,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           build-args: |
             TMOD_VERSION=${{ matrix.tml_version }}
           outputs: type=image,name=${{ needs.releases.outputs.image }},push-by-digest=true,name-canonical=true,push=true
@@ -169,33 +173,46 @@ jobs:
           IMAGE: ${{ needs.releases.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
-          docker run --rm --user tml:tml --entrypoint bash \
-            --mount type=bind,source="$PWD",target=/repo,readonly \
-            "$IMAGE@$DIGEST" \
-            /repo/tests/manage-mods-test.sh /terraria-server/manage-mods.sh
-          docker run --rm --user tml:tml --entrypoint bash \
-            --mount type=bind,source="$PWD",target=/repo,readonly \
-            "$IMAGE@$DIGEST" \
-            /repo/tests/locale-test.sh /usr/bin/steamcmd
-          docker run --rm --user tml:tml --entrypoint bash \
-            --mount type=bind,source="$PWD",target=/repo,readonly \
-            "$IMAGE@$DIGEST" \
-            /repo/tests/config-test.sh /terraria-server/prepare-config.sh
-          docker run --rm --user tml:tml --entrypoint bash \
-            --mount type=bind,source="$PWD",target=/repo,readonly \
-            "$IMAGE@$DIGEST" \
-            /repo/tests/log-filter-test.sh /terraria-server/log-filter.sh /terraria-server/run-server.sh
-          docker run --rm --user tml:tml --entrypoint bash \
-            --mount type=bind,source="$PWD",target=/repo,readonly \
-            "$IMAGE@$DIGEST" \
-            /repo/tests/runtime-control-test.sh /usr/local/bin/inject
+          for platform in linux/amd64 linux/arm64; do
+            export DOCKER_DEFAULT_PLATFORM="$platform"
+            docker run --rm --user tml:tml --entrypoint bash \
+              --mount type=bind,source="$PWD",target=/repo,readonly \
+              "$IMAGE@$DIGEST" /repo/tests/architecture-test.sh
+            docker run --rm --user tml:tml --entrypoint bash \
+              --mount type=bind,source="$PWD",target=/repo,readonly \
+              "$IMAGE@$DIGEST" /repo/tests/workshop-download-test.sh
+            docker run --rm --user tml:tml --entrypoint bash \
+              --mount type=bind,source="$PWD",target=/repo,readonly \
+              "$IMAGE@$DIGEST" \
+              /repo/tests/manage-mods-test.sh /terraria-server/manage-mods.sh
+            docker run --rm --user tml:tml --entrypoint bash \
+              --mount type=bind,source="$PWD",target=/repo,readonly \
+              "$IMAGE@$DIGEST" \
+              /repo/tests/locale-test.sh /usr/bin/steamcmd
+            docker run --rm --user tml:tml --entrypoint bash \
+              --mount type=bind,source="$PWD",target=/repo,readonly \
+              "$IMAGE@$DIGEST" \
+              /repo/tests/config-test.sh /terraria-server/prepare-config.sh
+            docker run --rm --user tml:tml --entrypoint bash \
+              --mount type=bind,source="$PWD",target=/repo,readonly \
+              "$IMAGE@$DIGEST" \
+              /repo/tests/log-filter-test.sh /terraria-server/log-filter.sh /terraria-server/run-server.sh
+            docker run --rm --user tml:tml --entrypoint bash \
+              --mount type=bind,source="$PWD",target=/repo,readonly \
+              "$IMAGE@$DIGEST" \
+              /repo/tests/runtime-control-test.sh /usr/local/bin/inject
+          done
 
       - name: Smoke-test candidate server
         if: steps.publication.outputs.publish == 'true'
         env:
           IMAGE: ${{ needs.releases.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
-        run: bash tests/server-smoke-test.sh "$IMAGE@$DIGEST"
+        run: |
+          for platform in linux/amd64 linux/arm64; do
+            export DOCKER_DEFAULT_PLATFORM="$platform"
+            bash tests/server-smoke-test.sh "$IMAGE@$DIGEST"
+          done
 
       - name: Publish verified image tags
         if: steps.publication.outputs.publish == 'true'

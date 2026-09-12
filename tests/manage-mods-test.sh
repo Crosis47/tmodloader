@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
+export TMOD_WORKSHOP_BACKEND=steamcmd
 
 script_under_test="${1:-/terraria-server/manage-mods.sh}"
 test_root="$(mktemp -d)"
@@ -136,7 +137,7 @@ run_manager
 
 grep -Fxq "222" "$steamcmd_log"
 if grep -Fxq "111" "$steamcmd_log"; then
-    echo "Current mod 111 was unexpectedly sent to SteamCMD." >&2
+    echo "Current mod 111 was unexpectedly sent to Workshop downloader." >&2
     exit 1
 fi
 jq -e '. == ["CurrentMod", "OutdatedMod"]' "$data_root/tModLoader/Mods/enabled.json" >/dev/null
@@ -144,13 +145,13 @@ jq -e '. == ["CurrentMod", "OutdatedMod"]' "$data_root/tModLoader/Mods/enabled.j
 rm -f "$steamcmd_log"
 run_manager
 if [[ -e "$steamcmd_log" ]]; then
-    echo "SteamCMD was unexpectedly called when every mod was current." >&2
+    echo "Workshop downloader was unexpectedly called when every mod was current." >&2
     exit 1
 fi
 
 run_manager "collection:333,111"
 if [[ -e "$steamcmd_log" ]]; then
-    echo "SteamCMD was unexpectedly called for a current expanded collection." >&2
+    echo "Workshop downloader was unexpectedly called for a current expanded collection." >&2
     exit 1
 fi
 jq -e '. == ["CurrentMod", "OutdatedMod"]' "$data_root/tModLoader/Mods/enabled.json" >/dev/null
@@ -161,7 +162,7 @@ export TEST_CURL_FAIL=true
 run_manager "collection:333"
 unset TEST_CURL_FAIL
 if [[ -e "$steamcmd_log" ]]; then
-    echo "SteamCMD was unexpectedly called while complete cached collection data was available offline." >&2
+    echo "Workshop downloader was unexpectedly called while complete cached collection data was available offline." >&2
     exit 1
 fi
 

@@ -9,6 +9,12 @@ if [[ "$(locale charmap)" != "UTF-8" ]]; then
     exit 1
 fi
 
+if [[ "${TMOD_WORKSHOP_BACKEND:-steamcmd}" == depotdownloader ]]; then
+    depotdownloader --version
+    echo "Native Workshop downloader locale tests passed."
+    exit 0
+fi
+
 if ! output="$("$steamcmd_under_test" /terraria-server +login anonymous +quit 2>&1)"; then
     printf '%s\n' "$output" >&2
     echo "SteamCMD failed during the locale regression test." >&2

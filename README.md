@@ -46,12 +46,42 @@ and this project is not affiliated with Re-Logic or the tModLoader team.
 ## Requirements
 
 - Docker Engine with the Compose plugin, or Docker Desktop.
+- A 64-bit AMD64 or ARM64 Linux container host. ARMv7/32-bit ARM is not supported.
 - Enough memory for the selected world and mod pack; requirements vary greatly
   between mod collections.
 - Host storage for persistent data and backups. The container prepares its
   ownership automatically at startup.
 - The configured TCP port allowed through the host firewall when remote players
   will connect.
+
+## ARM64 support
+
+The source builds for `linux/amd64` and `linux/arm64`. The publisher builds both
+architectures into one image tag and tests each before assigning public tags.
+Docker selects the matching architecture automatically; Compose needs no
+`platform` override. Older published tags remain unchanged and may be AMD64-only.
+
+On ARM64, tModLoader, .NET, the administration page, and backups run natively.
+Workshop downloads use [DepotDownloader 3.4.0](https://github.com/SteamRE/DepotDownloader/tree/DepotDownloader_3.4.0),
+which also runs natively. No x86 emulator, privileged container, or host binary
+registration is needed. AMD64 retains SteamCMD. Both use the same `TMOD_MODS`,
+collection expansion, retry settings, and persistent Workshop directory.
+
+Native downloads are staged and checked before replacing a cached item. A
+failed update preserves its previous files, and successful downloads record
+their manifest for subsequent update checks. Allow free space for both the
+cached item and its replacement during an update.
+
+Build an ARM64 image locally:
+
+```bash
+docker buildx build --platform linux/arm64 --load -t tmodloader:arm64 .
+```
+
+Use a 64-bit OS on Raspberry Pi and other ARM boards. Mods that ship their own
+native libraries still need ARM64 support from their authors. Local tests on an
+AMD64 Docker Desktop host exercise the ARM64 image through Docker's emulation;
+CI also runs the full integration suite on a native ARM64 runner.
 
 ## Quick start with Docker Compose
 
@@ -129,7 +159,7 @@ docker compose up -d
 docker compose logs --tail=100 --follow tmodloader
 ```
 
-The first start can take several minutes while SteamCMD initializes, mods are
+The first start can take several minutes while the Workshop downloader initializes, mods are
 downloaded, and the world is generated. Stop following logs with `Ctrl+C`; that
 does not stop the container.
 
@@ -175,7 +205,7 @@ before the server starts with the affected path, owner/group, and mode.
 
 ## Runtime security and process model
 
-Published images start a small initializer as root and run `tini`, SteamCMD,
+Published images start a small initializer as root and run `tini`, the Workshop downloader,
 tModLoader, the supervisor, the admin page, and scheduled backups as the
 dedicated `tml` user with UID/GID `1000:1000`. The initializer changes identity
 and replaces itself with `tini`, so no root wrapper remains. `tini` is PID 1 and
@@ -229,8 +259,8 @@ removed before tModLoader logs its process environment.
 | `TMOD_MODS` | empty | Comma-separated mod IDs and `collection:ID` entries to update and enable. |
 | `TMOD_MOD_OFFLINE_POLICY` | `use-cache` | Use complete cached mods during a Steam outage; `strict` requires successful verification. |
 | `TMOD_COLLECTION_MAX_ITEMS` | `1000` | Maximum recursively expanded collection items and nested collections. |
-| `TMOD_DOWNLOAD_RETRIES` | `3` | SteamCMD attempts for required downloads or updates. |
-| `TMOD_DOWNLOAD_RETRY_DELAY` | `10` | Seconds between SteamCMD attempts. |
+| `TMOD_DOWNLOAD_RETRIES` | `3` | Workshop download attempts for required downloads or updates. |
+| `TMOD_DOWNLOAD_RETRY_DELAY` | `10` | Seconds between Workshop download attempts. |
 | `TMOD_AUTOSAVE_INTERVAL` | `10` | Minutes between save commands; `0` disables scheduled commands. |
 | `TMOD_SHUTDOWN_MESSAGE` | `Server is shutting down NOW!` | Chat message sent during a Docker stop. |
 | `TMOD_SHUTDOWN_TIMEOUT` | `90` | Seconds allowed for graceful shutdown before the directly supervised server process group is terminated. |
@@ -289,7 +319,7 @@ At startup, the container:
 Collection membership is cached under
 `/data/tModLoader/Mods/collection-cache`. With the default
 `TMOD_MOD_OFFLINE_POLICY=use-cache`, the server can start during a Steam API or
-SteamCMD outage only when the collection membership and every requested mod are
+Steam Workshop outage only when the collection membership and every requested mod are
 already cached. It will never silently ignore a requested mod that is missing.
 Use `strict` when any inability to verify or update should block startup.
 
@@ -783,5 +813,5 @@ not required for this repository's release workflow.
 - [FlorentLM/tmodloader1.4](https://github.com/FlorentLM/tmodloader1.4)
 
 The repository's container code and scripts are distributed under
-[LICENSE.md](LICENSE.md). Terraria, tModLoader, SteamCMD, and their respective
+[LICENSE.md](LICENSE.md). Terraria, tModLoader, SteamCMD, DepotDownloader, and their respective
 assets remain the property of their owners.

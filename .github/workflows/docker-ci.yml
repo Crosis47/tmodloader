@@ -8,6 +8,7 @@ on:
       - VERSION
       - "*backup.py"
       - "admin_*.py"
+      - workshop_download.py
       - "web/**"
       - CHANGELOG.md
       - Dockerfile
@@ -20,6 +21,7 @@ on:
       - VERSION
       - "*backup.py"
       - "admin_*.py"
+      - workshop_download.py
       - "web/**"
       - CHANGELOG.md
       - Dockerfile
@@ -34,7 +36,16 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    name: Validate ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -48,17 +59,23 @@ jobs:
       - name: Test administration API safety
         run: python3 -m unittest discover -s tests -p 'test_admin.py' -v
 
+      - name: Test native Workshop cache safety
+        run: python3 -m unittest discover -s tests -p 'test_workshop_download.py' -v
+
       - name: Validate administration JavaScript
         run: node --check web/app.js
 
       - name: Lint runtime scripts
-        run: shellcheck --severity=warning autosave.sh container-init.sh entrypoint.sh healthcheck.sh inject.sh log-filter.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh tests/*.sh
+        run: shellcheck --severity=warning autosave.sh container-init.sh entrypoint.sh healthcheck.sh inject.sh log-filter.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh steamcmd-wrapper.sh tests/*.sh
 
       - name: Test release metadata and notes
         run: bash tests/release-metadata-test.sh
 
       - name: Validate Compose configuration
         run: docker compose config --quiet
+
+      - name: Set up build emulation
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -67,10 +84,17 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          platforms: linux/${{ matrix.arch }}
           push: false
           load: true
           tags: tmodloader:ci
-          cache-from: type=gha,scope=ci
+          cache-from: type=gha,scope=ci-${{ matrix.arch }}
+
+      - name: Verify native runtime architecture
+        run: >-
+          docker run --rm --user tml:tml --entrypoint bash
+          --mount type=bind,source="$PWD",target=/repo,readonly
+          tmodloader:ci /repo/tests/architecture-test.sh
 
       - name: Test Workshop mod management
         run: >-
@@ -79,7 +103,13 @@ jobs:
           tmodloader:ci
           /repo/tests/manage-mods-test.sh /terraria-server/manage-mods.sh
 
-      - name: Test SteamCMD locale
+      - name: Test live Workshop download and cache reuse
+        run: >-
+          docker run --rm --user tml:tml --entrypoint bash
+          --mount type=bind,source="$PWD",target=/repo,readonly
+          tmodloader:ci /repo/tests/workshop-download-test.sh
+
+      - name: Test downloader locale
         run: >-
           docker run --rm --user tml:tml --entrypoint bash
           --mount type=bind,source="$PWD",target=/repo,readonly
