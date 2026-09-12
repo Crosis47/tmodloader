@@ -8,6 +8,17 @@ immutable deployment identifier.
 
 ## Unreleased
 
+## 2.1.0 - 2026-09-11
+
+### Added
+
+- Native Linux ARM64 image alongside AMD64, including native .NET and
+  DepotDownloader for anonymous Steam Workshop downloads without x86 emulation.
+- Staged native Workshop updates that preserve cached mods on failure and track
+  downloaded manifests for cache reuse.
+- Native ARM64 CI coverage, executable architecture checks, live Workshop
+  download/cache tests, and dual-architecture validation before publication.
+
 ## 2.0.0 - 2026-09-11
 
 ### Breaking changes

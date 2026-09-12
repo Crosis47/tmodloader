@@ -16,6 +16,8 @@ collection_cache_dir="$data_dir/tModLoader/Mods/collection-cache"
 workshop_api_url="${TMOD_WORKSHOP_API_URL:-https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/}"
 collection_api_url="${TMOD_WORKSHOP_COLLECTION_API_URL:-https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/}"
 steamcmd_bin="${TMOD_STEAMCMD_BIN:-steamcmd}"
+workshop_backend="${TMOD_WORKSHOP_BACKEND:-steamcmd}"
+depotdownloader_bin="${TMOD_DEPOTDOWNLOADER_BIN:-depotdownloader}"
 curl_bin="${TMOD_CURL_BIN:-curl}"
 jq_bin="${TMOD_JQ_BIN:-jq}"
 
@@ -272,6 +274,11 @@ local_manifest_field() {
     local mod_id="$1"
     local field="$2"
 
+    if [[ "$workshop_backend" == depotdownloader && -f "$content_root/$mod_id/.tmodloader-download.json" ]]; then
+        "$jq_bin" -r --arg field "$field" '.[$field] // empty' "$content_root/$mod_id/.tmodloader-download.json"
+        return
+    fi
+
     [[ -f "$workshop_manifest" ]] || return 0
     awk -v target="$mod_id" -v requested_field="$field" '
         $1 == "\"WorkshopItemsInstalled\"" { in_installed = 1; next }
@@ -331,12 +338,12 @@ fetch_remote_details() {
         done
 
         if ! response="$("$curl_bin" "${curl_args[@]}" "$workshop_api_url")"; then
-            warn "Could not query Steam Workshop metadata; SteamCMD will check every requested mod."
+            warn "Could not query Steam Workshop metadata; Workshop downloader will check every requested mod."
             all_batches_succeeded=false
             continue
         fi
         if ! "$jq_bin" -e '.response.publishedfiledetails | type == "array"' >/dev/null <<< "$response"; then
-            warn "Steam Workshop returned an unexpected response; SteamCMD will check every requested mod."
+            warn "Steam Workshop returned an unexpected response; Workshop downloader will check every requested mod."
             all_batches_succeeded=false
             continue
         fi
@@ -402,18 +409,20 @@ download_required_mods() {
             fi
         elif [[ "$local_updated" =~ ^[0-9]+$ && "$remote_updated" =~ ^[0-9]+$ && "$local_updated" -ge "$remote_updated" ]]; then
             log "Mod $mod_id is already current (updated $local_updated)."
+        elif [[ "$workshop_backend" == depotdownloader && -n "$remote_content_manifest" ]]; then
+            download_candidates+=("$mod_id")
         elif [[ "$offline_policy" == "use-cache" ]]; then
             warn "Could not verify mod $mod_id with Steam; continuing with its cached .tmod file."
         else
             if [[ "$api_succeeded" == "true" ]]; then
-                log "Mod $mod_id could not be version-matched and will be checked by SteamCMD."
+                log "Mod $mod_id could not be version-matched and will be checked by Workshop downloader."
             fi
             download_candidates+=("$mod_id")
         fi
     done
 
     if ((${#download_candidates[@]} == 0)); then
-        log "All requested mods are already current; skipping SteamCMD."
+        log "All requested mods are already current; skipping Workshop downloader."
         return 0
     fi
 
@@ -432,12 +441,12 @@ download_required_mods() {
     done
 
     for ((attempt=1; attempt<=${TMOD_DOWNLOAD_RETRIES:-3}; attempt++)); do
-        if "$steamcmd_bin" "${steamcmd_args[@]}" +quit; then
+        if download_workshop_candidates; then
             download_succeeded=true
             break
         fi
         if ((attempt < ${TMOD_DOWNLOAD_RETRIES:-3})); then
-            warn "SteamCMD attempt $attempt failed; retrying in ${TMOD_DOWNLOAD_RETRY_DELAY:-10} seconds."
+            warn "Workshop downloader attempt $attempt failed; retrying in ${TMOD_DOWNLOAD_RETRY_DELAY:-10} seconds."
             sleep "${TMOD_DOWNLOAD_RETRY_DELAY:-10}"
         fi
     done
@@ -446,20 +455,20 @@ download_required_mods() {
         if [[ "$offline_policy" == "use-cache" ]]; then
             for mod_id in "${download_candidates[@]}"; do
                 if ! latest_tmod_for_id "$mod_id" >/dev/null; then
-                    warn "FATAL: SteamCMD failed and mod $mod_id is not available in the local cache."
+                    warn "FATAL: Workshop downloader failed and mod $mod_id is not available in the local cache."
                     return 1
                 fi
             done
-            warn "SteamCMD failed, but every requested mod is cached; starting with the cached versions."
+            warn "Workshop downloader failed, but every requested mod is cached; starting with the cached versions."
             return 0
         fi
-        warn "FATAL: SteamCMD failed after ${TMOD_DOWNLOAD_RETRIES:-3} attempts."
+        warn "FATAL: Workshop downloader failed after ${TMOD_DOWNLOAD_RETRIES:-3} attempts."
         return 1
     fi
 
     for mod_id in "${download_candidates[@]}"; do
         if ! latest_tmod_for_id "$mod_id" >/dev/null; then
-            warn "FATAL: SteamCMD completed, but mod $mod_id has no .tmod file in the Workshop cache."
+            warn "FATAL: Workshop downloader completed, but mod $mod_id has no .tmod file in the Workshop cache."
             return 1
         fi
 
@@ -476,6 +485,23 @@ download_required_mods() {
     done
 
     log "Finished downloading and updating mods."
+}
+
+download_workshop_candidates() {
+    # These arrays are local to download_required_mods (Bash dynamic scope).
+    if [[ "$workshop_backend" == steamcmd ]]; then
+        "$steamcmd_bin" "${steamcmd_args[@]}" +quit
+    elif [[ "$workshop_backend" == depotdownloader ]]; then
+        local item
+        for item in "${download_candidates[@]}"; do
+            python3 "$(dirname "${BASH_SOURCE[0]}")/workshop_download.py" \
+                "$content_root" "$item" "${remote_content[$item]:-}" "${remote_times[$item]:-}" \
+                "$depotdownloader_bin" || return 1
+        done
+    else
+        warn "Unknown Workshop backend: $workshop_backend"
+        return 1
+    fi
 }
 
 write_enabled_mods() {

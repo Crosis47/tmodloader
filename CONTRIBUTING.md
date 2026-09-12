@@ -21,6 +21,19 @@ Install Git, Docker Engine or Docker Desktop, and Bash. ShellCheck and
 actionlint are recommended; both can also be run from containers. On Windows,
 Git Bash is the simplest way to run the repository's Bash tests.
 
+Build both `linux/amd64` and `linux/arm64` when changing image dependencies or
+Workshop handling. ARM64 uses native DepotDownloader; AMD64 uses SteamCMD.
+The CI matrix runs on native runners for both architectures. Docker Desktop
+can test an ARM64 image on AMD64 via its built-in emulation, but those tests
+do not measure native ARM performance.
+
+For each image, run `tests/architecture-test.sh` and
+`tests/workshop-download-test.sh` inside the container as `tml`, with the
+repository mounted read-only at `/repo`. The latter downloads Recipe Browser
+anonymously into a temporary directory and verifies that a second run reuses
+the cache. Also run `python3 -m unittest discover -s tests -p
+'test_workshop_download.py' -v` for download failure and cache replacement safety.
+
 Create a branch from the current `master`, make focused changes, and preserve
 backward compatibility unless the pull request clearly documents a necessary
 breaking change.

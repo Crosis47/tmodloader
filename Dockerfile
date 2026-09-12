@@ -2,7 +2,7 @@
 
 # The Steam client is still 32-bit, so use its Ubuntu image as the source for
 # steamcmd and the i386 libraries it needs.
-FROM steamcmd/steamcmd:ubuntu-22 AS builder
+FROM --platform=linux/amd64 steamcmd/steamcmd:ubuntu-22 AS builder
 
 # Install prerequisites to download steamcmd
 RUN apt-get update \
@@ -17,7 +17,8 @@ RUN curl --fail --silent --show-error --location \
 
 # Pin the runtime distribution. Tracking ubuntu:latest allowed Ubuntu 26.04 to
 # land without its matching .NET native dependencies and broke every new image.
-FROM ubuntu:24.04
+FROM ubuntu:24.04 AS runtime-base
+ARG TARGETARCH
 
 # The TMOD Version. Ensure that you follow the correct format. Version releases can be found at https://github.com/tModLoader/tModLoader/releases if you're lost.
 ARG TMOD_VERSION=v2026.07.3.0
@@ -126,18 +127,6 @@ ENV TMOD_JOURNEY_SPAWN_RATE="0"
 # ENV TMOD_USECONFIGFILE="No"
 
 
-# Copy steamcmd and its required libs from the builder
-COPY --from=builder /root/installer/steamcmd.sh /usr/lib/games/steam/
-COPY --from=builder /root/installer/linux32/steamcmd /usr/lib/games/steam/
-COPY --from=builder /usr/games/steamcmd /usr/bin/steamcmd
-COPY --from=builder /lib/i386-linux-gnu /lib/
-COPY --from=builder /root/installer/linux32/libstdc++.so.6 /lib/
-RUN chown -R root:root /usr/bin/ /lib/ /usr/lib/
-RUN chmod 755 \
-        /usr/bin/steamcmd \
-        /usr/lib/games/steam/steamcmd \
-        /usr/lib/games/steam/steamcmd.sh
-
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         bash \
@@ -162,6 +151,10 @@ RUN apt-get update \
         util-linux \
         wget \
         zlib1g \
+    && case "$TARGETARCH" in \
+        amd64|arm64) ;; \
+        *) echo "Unsupported architecture: $TARGETARCH (use amd64 or arm64)" >&2; exit 1 ;; \
+    esac \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -204,7 +197,34 @@ EXPOSE 7777
 
 WORKDIR /terraria-server
 
-RUN steamcmd /terraria-server +login anonymous +quit
+FROM runtime-base AS runtime-amd64
+# Valve's downloader is kept on the existing AMD64 platform only.
+COPY --from=builder /root/installer/ /opt/steamcmd-seed/
+COPY --from=builder /lib/i386-linux-gnu/ /opt/steam-runtime/lib/
+COPY --from=builder /root/installer/linux32/libstdc++.so.6 /opt/steam-runtime/lib/
+USER root:root
+RUN ln -s /opt/steam-runtime/lib/ld-linux.so.2 /lib/ld-linux.so.2
+COPY --chown=root:root --chmod=0755 steamcmd-wrapper.sh /usr/bin/steamcmd
+USER tml:tml
+ENV TMOD_WORKSHOP_BACKEND="steamcmd"
+RUN steamcmd +login anonymous +quit
+
+FROM runtime-base AS runtime-arm64
+# Native .NET downloader avoids x86 SteamCMD and any host emulation requirement.
+ARG DEPOTDOWNLOADER_VERSION=3.4.0
+USER root:root
+RUN curl --fail --silent --show-error --location --retry 5 \
+        "https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_${DEPOTDOWNLOADER_VERSION}/DepotDownloader-linux-arm64.zip" \
+        --output /tmp/depotdownloader.zip \
+    && unzip -q /tmp/depotdownloader.zip -d /opt/depotdownloader \
+    && chmod 755 /opt/depotdownloader/DepotDownloader \
+    && ln -s /opt/depotdownloader/DepotDownloader /usr/local/bin/depotdownloader \
+    && rm /tmp/depotdownloader.zip
+USER tml:tml
+ENV TMOD_WORKSHOP_BACKEND="depotdownloader"
+RUN depotdownloader --version
+
+FROM runtime-${TARGETARCH} AS runtime
 
 RUN curl --fail --silent --show-error --location \
         --retry 5 --retry-delay 5 --retry-max-time 120 --retry-all-errors \
@@ -219,7 +239,7 @@ COPY --chown=tml:tml create_world.py .
 COPY --chown=tml:tml console_tee.py .
 COPY --chown=tml:tml filter_client_mods.py .
 COPY --chown=tml:tml log-filter.sh .
-COPY --chown=tml:tml manage-mods.sh .
+COPY --chown=tml:tml manage-mods.sh workshop_download.py ./
 COPY --chown=root:root --chmod=0755 inject.sh /usr/local/bin/inject
 COPY --chown=root:root --chmod=0755 healthcheck.sh /usr/local/bin/healthcheck
 COPY --chown=tml:tml autosave.sh .
