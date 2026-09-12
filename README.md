@@ -512,9 +512,9 @@ an HTTPS origin or a localhost SSH tunnel. Terminate HTTPS at your trusted rever
 proxy and keep the backend private. Treat access to container logs as privileged.
 The token stays in browser tab memory after sign-in, not browser storage or cookies.
 
-Upgrading to container 2.0.0: existing plaintext admin secret files are no longer accepted. Remove the old
-plaintext mount and leave `TMOD_WEB_TOKEN_FILE` empty to provision through the UI,
-or mount a pre-created Argon2id hash at the path in `TMOD_WEB_TOKEN_FILE`. Missing
+Admin secret files must contain an Argon2id hash. Leave `TMOD_WEB_TOKEN_FILE` empty
+to provision through the UI, or mount a pre-created Argon2id hash at the path in
+`TMOD_WEB_TOKEN_FILE`. Missing
 hashes enter setup; malformed or unsupported hashes fail startup. Read-only secret
 mounts must be provisioned externally before starting. The image includes the
 `argon2` CLI and Python library. An interactive helper is also included:
@@ -528,8 +528,8 @@ external hash, use `setup --file /writable/path/token.argon2` in a container wit
 that directory mounted, then mount the resulting file read-only. The helper asks
 for the token without echoing it and uses Argon2id v19, 64 MiB, 3 iterations, and
 4 lanes. External hashes must use Argon2id v19, 19–256 MiB, 2–10 iterations,
-1–8 lanes, and at least 16-byte salts and outputs. Plaintext is never migrated
-automatically. Setup gating applies only when `TMOD_WEB_ENABLED=1`.
+1–8 lanes, and at least 16-byte salts and outputs. Setup gating applies only when
+`TMOD_WEB_ENABLED=1`.
 
 For a remote Docker host, use an SSH tunnel (for example,
 `ssh -L 8080:127.0.0.1:8080 your-server`) or an authenticated HTTPS reverse proxy.
