@@ -8,6 +8,13 @@ immutable deployment identifier.
 
 ## Unreleased
 
+## 2.1.1 - 2026-09-12
+
+### Fixed
+
+- Remove obsolete plaintext admin-token upgrade warnings from the documentation
+  and simplify the invalid-hash error. Admin credentials require Argon2id hashes.
+
 ## 2.1.0 - 2026-09-11
 
 ### Added
@@ -20,13 +27,6 @@ immutable deployment identifier.
   download/cache tests, and dual-architecture validation before publication.
 
 ## 2.0.0 - 2026-09-11
-
-### Breaking changes
-
-- Admin secret files must contain an Argon2id hash; plaintext tokens are no
-  longer accepted. Remove the old plaintext mount and leave
-  `TMOD_WEB_TOKEN_FILE` empty to provision through the Web UI, or mount a
-  pre-created Argon2id hash. Existing game worlds and settings are retained.
 
 ### Added
 

@@ -30,7 +30,7 @@ def read_hash(path):
                 not 2 <= params.time_cost <= 10 or not 1 <= params.parallelism <= 8 or
                 params.salt_len < 16 or params.hash_len < 16):
             raise ValueError('Unsupported Argon2id parameters.')
-        # Check the complete encoding, including base64, without accepting plaintext.
+        # Check the complete encoding, including base64.
         try:
             HASHER.verify(encoded, 'validation-probe')
         except VerificationError as error:
@@ -38,7 +38,7 @@ def read_hash(path):
             if not isinstance(error, VerifyMismatchError):
                 raise ValueError('Malformed Argon2id hash.') from error
     except InvalidHashError as error:
-        raise ValueError('Expected an Argon2id hash; plaintext token files are no longer supported.') from error
+        raise ValueError('Expected a valid Argon2id hash.') from error
     return encoded
 
 
