@@ -23,6 +23,7 @@ field('NPCSTREAM', 'server', 'NPC streaming range', 'Controls NPC streaming to c
 field('UPNP', 'server', 'UPnP port mapping', '0 disables automatic router port mapping; 1 requests it. Docker port publishing and firewall rules still need host configuration.')
 field('WORLDNAME', 'world', 'World name', 'Selects the world file by name. A different name may create a new world if no matching file exists. Do not include path separators.')
 field('WORLDSIZE', 'world', 'New world size', 'Used only when creating a world: 1 small, 2 medium, 3 large.')
+field('WORLDEVIL', 'world', 'New world evil', 'Random, Corruption, or Crimson. To change evil in the WebUI, choose an unused world name, stage the settings, and apply changes. Apply saves and stops the game, disconnects players, creates the new world, and restarts. Existing worlds are never converted; a matching name loads that world. Custom evil requires a name of at most 26 characters and seed of at most 39 characters. Special seeds and mods may generate both evils or alter generation.')
 field('WORLDSEED', 'world', 'New world seed', 'Seed used when generating a new world. Changing it does not regenerate the current world.')
 field('DIFFICULTY', 'world', 'New world difficulty', 'Used when creating a world: 0 Classic, 1 Expert, 2 Master, 3 Journey.')
 field('BACKUP_INTERVAL', 'backup', 'Backup interval (minutes)', '0 disables scheduled backups. 1440 runs approximately every 24 hours. The interval resets on container start or after a manual backup.')

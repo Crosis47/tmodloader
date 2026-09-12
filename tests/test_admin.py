@@ -27,7 +27,8 @@ class AdminTests(unittest.TestCase):
             helper.start(); self.addCleanup(helper.stop)
         helper = patch.dict(os.environ, {'TMOD_CONFIG_SOURCE': 'web', 'TMOD_WEB_ORIGIN': 'http://localhost:8080', 'TMOD_MOTD': 'Original', 'TMOD_PASS': 'do-not-leak'})
         helper.start(); self.addCleanup(helper.stop)
-        server.TOKEN = 'test-only-token-with-at-least-32-characters'
+        self.token = 'test-only-token-with-at-least-32-characters'
+        server.TOKEN_HASH = server.admin_auth.HASHER.hash(self.token)
         server.JOB = {'state': 'idle'}
         helper = patch.object(metrics, 'STATE', self.root / 'backup-status.json')
         helper.start(); self.addCleanup(helper.stop)
@@ -37,7 +38,7 @@ class AdminTests(unittest.TestCase):
         environ = {'REQUEST_METHOD': 'POST' if body is not None else 'GET', 'PATH_INFO': path,
                    'HTTP_HOST': host, 'CONTENT_TYPE': 'application/json', 'CONTENT_LENGTH': str(len(encoded)),
                    'wsgi.input': io.BytesIO(encoded)}
-        if auth: environ['HTTP_AUTHORIZATION'] = 'Bearer ' + server.TOKEN
+        if auth: environ['HTTP_AUTHORIZATION'] = 'Bearer ' + self.token
         if origin: environ['HTTP_ORIGIN'] = origin
         response = []
         body = b''.join(server.application(environ, lambda status, headers: response.append((status, headers))))
@@ -45,6 +46,64 @@ class AdminTests(unittest.TestCase):
 
     def test_authentication_required(self):
         self.assertTrue(self.request('/api/settings', auth=False)[0].startswith('403'))
+
+    def test_wrong_token_rejected(self):
+        self.token = 'wrong-token-with-at-least-32-characters'
+        self.assertTrue(self.request('/api/settings')[0].startswith('403'))
+
+    def test_eight_character_token_boundary(self):
+        self.token = 'Eight123'
+        server.TOKEN_HASH = server.admin_auth.HASHER.hash(self.token)
+        self.assertTrue(self.request('/api/settings')[0].startswith('200'))
+        for value in ('Seven12', 'x' * 257, 'has space', 'nonasciié'):
+            with self.assertRaises(ValueError):
+                server.admin_auth.validate_token(value)
+
+    def test_first_run_setup_is_code_protected_and_one_time(self):
+        path = self.root / 'token.argon2'
+        with patch.object(server, 'TOKEN_HASH', ''), patch.object(server, 'SETUP_CODE', 'one-time-code'), patch.object(server, 'SETUP_NEXT', 0), patch.object(server.admin_auth, 'token_path', return_value=path):
+            payload = {'code': 'wrong', 'token': self.token, 'confirm': self.token}
+            self.assertTrue(self.request('/api/setup', payload, auth=False)[0].startswith('403'))
+            self.assertFalse(path.exists())
+            server.SETUP_NEXT = 0
+            payload['code'] = 'one-time-code'
+            self.assertTrue(self.request('/api/setup', payload, auth=False, origin='https://evil.example')[0].startswith('403'))
+            self.assertFalse(path.exists())
+            payload['confirm'] = 'different'
+            self.assertTrue(self.request('/api/setup', payload, auth=False)[0].startswith('400'))
+            self.assertFalse(path.exists())
+            server.SETUP_NEXT = 0
+            payload['confirm'] = self.token
+            self.assertTrue(self.request('/api/setup', payload, auth=False)[0].startswith('200'))
+            self.assertNotIn(self.token, path.read_text())
+            self.assertTrue(server.admin_auth.verify(server.admin_auth.read_hash(path), self.token))
+            self.assertTrue((self.root / 'admin-auth-ready').exists())
+            self.assertEqual(server.SETUP_CODE, '')
+            self.assertTrue(self.request('/api/setup', payload, auth=False)[0].startswith('403'))
+            self.assertTrue(self.request('/api/settings')[0].startswith('200'))
+
+    def test_plaintext_and_malformed_hash_rejected(self):
+        path = self.root / 'token.argon2'
+        for value in (self.token, '$argon2id$v=19$invalid'):
+            path.write_text(value)
+            with self.assertRaises(ValueError):
+                server.admin_auth.read_hash(path)
+
+    def test_setup_page_and_saved_hash_restart(self):
+        from types import SimpleNamespace
+        path = self.root / 'token.argon2'
+        with patch.object(server, 'TOKEN_HASH', ''):
+            self.assertIn(b'Create your admin token', self.request('/', auth=False)[1])
+        server.admin_auth.save_token(path, self.token)
+        with patch.object(server.admin_auth, 'token_path', return_value=path), patch.dict(sys.modules, {'waitress': SimpleNamespace(serve=lambda *a, **kw: None)}):
+            server.main()
+        self.assertTrue((self.root / 'admin-auth-ready').exists())
+        self.assertTrue(self.request('/api/settings')[0].startswith('200'))
+
+    def test_remote_plain_http_setup_refused(self):
+        with patch.object(server, 'TOKEN_HASH', ''), patch.object(server, 'SETUP_CODE', ''), patch.object(server.admin_auth, 'token_path', return_value=self.root / 'absent'), patch.dict(os.environ, {'TMOD_WEB_ORIGIN': 'http://example.com:8080'}):
+            with self.assertRaisesRegex(ValueError, 'HTTPS'):
+                server.main()
 
     def test_cross_origin_and_rebinding_rejected(self):
         self.assertTrue(self.request('/api/settings', origin='https://evil.example')[0].startswith('403'))
@@ -81,6 +140,16 @@ class AdminTests(unittest.TestCase):
     def test_shell_exports_quote_metacharacters(self):
         result = settings.exports({'TMOD_MOTD': "$(touch /tmp/not-run); ' hello"})
         self.assertIn("export TMOD_MOTD='", result)
+
+    def test_world_evil_choices_and_persistence(self):
+        for evil in ('random', 'corruption', 'crimson'):
+            self.assertEqual(settings.validate({'TMOD_WORLDEVIL': evil})['TMOD_WORLDEVIL'], evil)
+        for evil in ('2', 'Crimson', '', 'both'):
+            with self.assertRaises(ValueError):
+                settings.validate({'TMOD_WORLDEVIL': evil})
+        settings.atomic_json(settings.ACTIVE, {'TMOD_WORLDEVIL': 'crimson'})
+        with patch.dict(os.environ, {'TMOD_WORLDEVIL': 'random'}):
+            self.assertEqual(settings.boot_values()['TMOD_WORLDEVIL'], 'crimson')
 
     def test_action_requires_confirmation(self):
         with patch.object(server, 'start_job') as start:

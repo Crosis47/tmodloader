@@ -1,9 +1,11 @@
 """Private, token-authenticated WSGI administration API and static interface."""
 import hashlib
+import hmac
+import secrets
 import codecs
 import datetime
 import re
-import hmac
+import admin_auth
 import json
 import os
 from pathlib import Path
@@ -22,7 +24,39 @@ STATIC = Path(__file__).parent / 'web'
 OPERATION = threading.Lock()
 STATE_LOCK = threading.Lock()
 JOB = {'state': 'idle'}
-TOKEN = ''
+TOKEN_HASH = ''
+SETUP_CODE = ''
+SETUP_LOCK = threading.Lock()
+SETUP_NEXT = 0.0
+
+def mark_auth_ready():
+    (settings.RUNTIME / 'admin-auth-ready').write_text('ready')
+
+def setup_request(method, payload):
+    global TOKEN_HASH, SETUP_CODE, SETUP_NEXT
+    with SETUP_LOCK:
+        if TOKEN_HASH or not SETUP_CODE:
+            raise PermissionError('Setup is unavailable.')
+        if method != 'POST':
+            raise PermissionError('Setup requires POST.')
+        if time.monotonic() < SETUP_NEXT:
+            raise PermissionError('Wait a moment before trying setup again.')
+        SETUP_NEXT = time.monotonic() + 1
+        code = payload.get('code', '')
+        if not isinstance(code, str) or not hmac.compare_digest(code.encode(), SETUP_CODE.encode()):
+            raise PermissionError('Invalid setup code. Read the container logs.')
+        token = payload.get('token', '')
+        if not isinstance(token, str):
+            raise ValueError('Expected an admin token.')
+        admin_auth.validate_token(token)
+        if token != payload.get('confirm'):
+            raise ValueError('Tokens do not match.')
+        admin_auth.save_token(admin_auth.token_path(), token)
+        TOKEN_HASH = admin_auth.read_hash(admin_auth.token_path())
+        SETUP_CODE = ''
+        mark_auth_ready()
+        return {'ready': True}
+
 CONSOLE_LOG = settings.DATA / 'tModLoader/Logs/container-console.log'
 
 
@@ -290,7 +324,7 @@ def application(environ, start_response):
             raise PermissionError('Unexpected host. Configure TMOD_WEB_ORIGIN for this address.')
         if path.startswith('/api/'):
             supplied = environ.get('HTTP_AUTHORIZATION', '')
-            if not TOKEN or not hmac.compare_digest(supplied.encode(), ('Bearer ' + TOKEN).encode()):
+            if path != '/api/setup' and (not supplied.startswith('Bearer ') or not admin_auth.verify(TOKEN_HASH, supplied[7:])):
                 raise PermissionError('Authentication required.')
             payload = {}
             if method == 'POST':
@@ -300,10 +334,12 @@ def application(environ, start_response):
                 payload = json.loads(environ['wsgi.input'].read(length))
                 if not isinstance(payload, dict):
                     raise ValueError('Expected a JSON object.')
-            body = json.dumps(api(method, path, urllib.parse.parse_qs(environ.get('QUERY_STRING', '')), payload)).encode()
-        elif method == 'GET' and path in ('/', '/app.js', '/style.css'):
-            name = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[path]
-            content_type = {'/': 'text/html', '/app.js': 'text/javascript', '/style.css': 'text/css'}[path] + '; charset=utf-8'
+            body = json.dumps(setup_request(method, payload) if path == '/api/setup' else api(method, path, urllib.parse.parse_qs(environ.get('QUERY_STRING', '')), payload)).encode()
+        elif method == 'GET' and path in ('/', '/app.js', '/style.css', '/setup.js'):
+            name = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/setup.js': 'setup.js'}[path]
+            content_type = {'/': 'text/html', '/app.js': 'text/javascript', '/style.css': 'text/css', '/setup.js': 'text/javascript'}[path] + '; charset=utf-8'
+            if path == '/' and not TOKEN_HASH:
+                name = 'setup.html'
             body = (STATIC / name).read_bytes()
         else:
             raise LookupError('Not found.')
@@ -320,13 +356,21 @@ def application(environ, start_response):
 
 
 def main():
-    global TOKEN
-    TOKEN = Path(os.environ['TMOD_WEB_TOKEN_FILE']).read_text().strip()
-    if len(TOKEN) < 32 or len(TOKEN) > 256 or not TOKEN.isascii() or any(c.isspace() for c in TOKEN):
-        raise ValueError('Admin token must contain 32–256 non-whitespace ASCII characters.')
+    global TOKEN_HASH, SETUP_CODE
+    if admin_auth.token_path().exists():
+        TOKEN_HASH = admin_auth.read_hash(admin_auth.token_path())
+    else:
+        SETUP_CODE = secrets.token_urlsafe(32)
     origin = urllib.parse.urlsplit(os.environ.get('TMOD_WEB_ORIGIN', 'http://localhost:8080'))
     if origin.scheme not in ('http', 'https') or not origin.hostname or origin.username or origin.password or origin.path not in ('', '/') or origin.query or origin.fragment:
         raise ValueError('TMOD_WEB_ORIGIN must be an http(s) origin without a path or credentials.')
+    if not TOKEN_HASH and origin.scheme != 'https' and origin.hostname not in ('localhost', '127.0.0.1', '::1'):
+        raise ValueError('First-run setup requires HTTPS or a localhost SSH tunnel.')
+    if TOKEN_HASH:
+        mark_auth_ready()
+    else:
+        print('[ADMIN] Game startup paused. Open the dashboard to create your admin token.', flush=True)
+        print('[ADMIN] One-time setup code: ' + SETUP_CODE, flush=True)
     from waitress import serve
     print('[ADMIN] Private administration interface listening on port 8080.', flush=True)
     serve(application, host='0.0.0.0', port=8080, threads=4, connection_limit=32,

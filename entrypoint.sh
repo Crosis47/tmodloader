@@ -196,6 +196,16 @@ printf '[SYSTEM] Shutdown message: configured; autosave interval: %s minute(s)\n
 trap shutdown TERM INT
 trap cleanup EXIT
 
+if [[ "${TMOD_WEB_ENABLED:-0}" == 1 ]]; then
+    rm -f "$runtime_dir/admin-auth-ready"
+    python3 /terraria-server/admin_server.py &
+    admin_pid=$!
+    while [[ ! -f "$runtime_dir/admin-auth-ready" ]]; do
+        kill -0 "$admin_pid" 2>/dev/null || fail "Admin setup could not start. Inspect container logs."
+        sleep 1
+    done
+fi
+
 if use_custom_config; then
     [[ -f "$custom_config_path" ]] || fail "TMOD_USECONFIGFILE is enabled, but $custom_config_path was not found."
     [[ -r "$custom_config_path" ]] || fail "$custom_config_path is not readable by uid $(id -u)."
@@ -209,13 +219,6 @@ fi
 # tModLoader logs its entire child-process environment. The password is already
 # in the generated configuration and must not be copied into environment logs.
 unset TMOD_PASS TMOD_PASS_FILE
-
-if [[ "${TMOD_WEB_ENABLED:-0}" == 1 ]]; then
-    python3 /terraria-server/admin_server.py &
-    admin_pid=$!
-    sleep 1
-    kill -0 "$admin_pid" 2>/dev/null || fail "Admin interface could not start. Check its origin and secret file."
-fi
 
 # Download missing/outdated Workshop items and enable the requested mods.
 ./manage-mods.sh
@@ -342,7 +345,7 @@ perform_admin_apply() {
         mkfifo -m 0600 "$control_pipe"
         exec 3<> "$control_pipe"
         start_server
-        admin_progress health 'Waiting for world loading and the game listener to become healthy (up to 10 minutes).'
+        admin_progress health 'Waiting for world creation/loading and the game listener to become healthy (up to 10 minutes).'
         deadline=$((SECONDS + 600))
         while ! healthcheck; do
             if ! server_is_running || ((SECONDS >= deadline)); then

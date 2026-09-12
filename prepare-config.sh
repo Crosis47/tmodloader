@@ -5,6 +5,7 @@ set -Eeuo pipefail
 config_path="${TMOD_CONFIG_PATH:-/terraria-server/serverconfig.txt}"
 data_dir="${TMOD_DATA_DIR:-/data}"
 world_dir="$data_dir/tModLoader/Worlds"
+TMOD_WORLDEVIL="${TMOD_WORLDEVIL:-random}"
 
 fail() {
     printf '[!!] FATAL: %s\n' "$*" >&2
@@ -53,6 +54,16 @@ reject_line_breaks TMOD_WORLDSEED "$TMOD_WORLDSEED"
 require_integer_range TMOD_MAXPLAYERS "$TMOD_MAXPLAYERS" 1 255
 require_integer_range TMOD_WORLDSIZE "$TMOD_WORLDSIZE" 1 3
 require_integer_range TMOD_DIFFICULTY "$TMOD_DIFFICULTY" 0 3
+case "$TMOD_WORLDEVIL" in
+    random|corruption|crimson) ;;
+    *) fail "TMOD_WORLDEVIL must be random, corruption, or crimson." ;;
+esac
+world_path="$world_dir/$TMOD_WORLDNAME.wld"
+if [[ ! -e "$world_path" && "$TMOD_WORLDEVIL" != random ]]; then
+    [[ -n "${TMOD_WORLDNAME//[[:space:]]/}" ]] || fail "Custom evil world creation requires a nonblank world name."
+    ((${#TMOD_WORLDNAME} <= 26)) || fail "Custom evil world creation requires a world name of at most 26 characters."
+    ((${#TMOD_WORLDSEED} <= 39)) || fail "Custom evil world creation requires a seed of at most 39 characters."
+fi
 require_integer_range TMOD_SECURE "$TMOD_SECURE" 0 1
 require_integer_range TMOD_NPCSTREAM "$TMOD_NPCSTREAM" 0 1000
 require_integer_range TMOD_UPNP "$TMOD_UPNP" 0 1
@@ -82,16 +93,19 @@ chmod 600 "$config_path"
 printf '[CONFIG] Generating %s\n' "$config_path"
 printf '[CONFIG] World: %s; size: %s; difficulty: %s; max players: %s; port: %s\n' \
     "$TMOD_WORLDNAME" "$TMOD_WORLDSIZE" "$TMOD_DIFFICULTY" "$TMOD_MAXPLAYERS" "$TMOD_PORT"
+printf '[CONFIG] New-world evil: %s (existing worlds are unchanged)\n' "$TMOD_WORLDEVIL"
 if [[ "$TMOD_PASS" == "N/A" ]]; then
     printf '[CONFIG] Server password: disabled\n'
 else
     printf '[CONFIG] Server password: configured (value redacted)\n'
 fi
 
-world_path="$world_dir/$TMOD_WORLDNAME.wld"
 append_config world "$world_path"
 append_config worldpath "$world_dir/"
 if [[ ! -e "$world_path" ]]; then
+    if [[ "$TMOD_WORLDEVIL" != random ]]; then
+        printf '# tmod-worldevil=%s\n' "$TMOD_WORLDEVIL" >> "$config_path"
+    fi
     printf '[!!] WARNING: World %s was not found at %s; tModLoader will create it. This is expected on first launch.\n' \
         "$TMOD_WORLDNAME" "$world_path"
     append_config worldname "$TMOD_WORLDNAME"

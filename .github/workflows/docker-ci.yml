@@ -57,13 +57,18 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_backup*.py' -v
 
       - name: Test administration API safety
-        run: python3 -m unittest discover -s tests -p 'test_admin.py' -v
+        run: |
+          python3 -m pip install argon2-cffi
+          python3 -m unittest discover -s tests -p 'test_admin*.py' -v
+          python3 -m unittest discover -s tests -p 'test_world_creation.py' -v
 
       - name: Test native Workshop cache safety
         run: python3 -m unittest discover -s tests -p 'test_workshop_download.py' -v
 
       - name: Validate administration JavaScript
-        run: node --check web/app.js
+        run: |
+          node --check web/app.js
+          node --check web/setup.js
 
       - name: Lint runtime scripts
         run: shellcheck --severity=warning autosave.sh container-init.sh entrypoint.sh healthcheck.sh inject.sh log-filter.sh manage-mods.sh prepare-config.sh release-metadata.sh release-notes.sh run-server.sh steamcmd-wrapper.sh tests/*.sh
@@ -95,6 +100,13 @@ jobs:
           docker run --rm --user tml:tml --entrypoint bash
           --mount type=bind,source="$PWD",target=/repo,readonly
           tmodloader:ci /repo/tests/architecture-test.sh
+
+      - name: Test administration with container dependencies
+        run: >-
+          docker run --rm --entrypoint python3
+          --mount type=bind,source="$PWD",target=/repo,readonly
+          --workdir /repo tmodloader:ci
+          -m unittest discover -s tests -p 'test_admin*.py' -v
 
       - name: Test Workshop mod management
         run: >-

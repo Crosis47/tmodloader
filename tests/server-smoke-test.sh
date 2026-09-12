@@ -103,6 +103,7 @@ docker run --detach \
     --env TMOD_MODS= \
     --env TMOD_WORLDNAME=SmokeTest \
     --env TMOD_WORLDSIZE=1 \
+    --env TMOD_WORLDEVIL=crimson \
     --env TMOD_DIFFICULTY=0 \
     --env TMOD_AUTOSAVE_INTERVAL=0 \
     --env TMOD_LOG_LEVEL=normal \
@@ -128,6 +129,9 @@ if [[ "$health_status" != "healthy" ]]; then
     echo "Smoke-test container did not become healthy within $timeout_seconds seconds." >&2
     exit 1
 fi
+
+docker exec "$container_name" bash -c \
+    'test -s /data/tModLoader/Worlds/SmokeTest.wld && test -s /data/tModLoader/Worlds/SmokeTest.twld && grep -q "Creating world .*Evil: 1," /data/tModLoader/Logs/container-console.log'
 
 [[ "$(docker inspect --format '{{.Config.User}}' "$container_name")" == "root:root" ]]
 [[ "$(docker exec --user tml:tml "$container_name" id -u)" == "1000" ]]

@@ -62,6 +62,7 @@ services:
       TMOD_MAXPLAYERS: "${TMOD_MAXPLAYERS:-8}"
       TMOD_WORLDNAME: "${TMOD_WORLDNAME:-Docker}"
       TMOD_WORLDSIZE: "${TMOD_WORLDSIZE:-3}"
+      TMOD_WORLDEVIL: "${TMOD_WORLDEVIL:-random}"
       TMOD_WORLDSEED: "${TMOD_WORLDSEED:-Docker}"
       TMOD_DIFFICULTY: "${TMOD_DIFFICULTY:-1}"
       TMOD_SECURE: "${TMOD_SECURE:-0}"
@@ -91,7 +92,7 @@ services:
       # the published image) and ensures owner access on directories.
       - "./data:/data"
       - "./backups:/backups"
-      # Admin interface: set TMOD_WEB_TOKEN_FILE=/run/secrets/tmod-admin-token
+      # Optional pre-created Argon2id hash: set TMOD_WEB_TOKEN_FILE=/run/secrets/tmod-admin-token
       # - "./secrets/tmod-admin-token:/run/secrets/tmod-admin-token:ro"
       # Optional Workshop search: set TMOD_WORKSHOP_KEY_FILE=/run/secrets/steam-api-key
       # - "./secrets/steam-api-key:/run/secrets/steam-api-key:ro"

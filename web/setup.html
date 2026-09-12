@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Create admin token · tModLoader</title><link rel="stylesheet" href="/style.css"><script src="/setup.js" defer></script></head>
+<body><main><section class="panel narrow"><h1>Create your admin token</h1>
+<p>The game is paused until you finish setup. Find the one-time setup code in your container logs using <code>docker compose logs tmodloader</code>.</p>
+<p>Choose a unique token of 8–256 ASCII characters without spaces. Save it in your password manager. Only its Argon2id hash will be stored on the server.</p>
+<form id="setup-form"><label>One-time setup code<input id="setup-code" type="password" autocomplete="off" required maxlength="128"></label>
+<label>Admin token<input id="setup-token" type="password" autocomplete="new-password" required minlength="8" maxlength="256"></label>
+<label>Confirm admin token<input id="setup-confirm" type="password" autocomplete="new-password" required minlength="8" maxlength="256"></label>
+<button id="setup-submit">Create token and start server</button></form>
+<p id="setup-message" role="status" aria-live="polite"></p>
+<p>Use HTTPS for remote access, or a localhost SSH tunnel. The setup code expires when setup finishes or the container restarts.</p>
+</section></main></body></html>
