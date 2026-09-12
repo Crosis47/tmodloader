@@ -88,6 +88,18 @@ jobs:
           container_version="$(tr -d '\r\n' < VERSION)"
           bash release-metadata.sh "$container_version" "$TMODLOADER_VERSION" "$CHANNEL"
 
+      # The candidate tests load both architectures by the same index digest.
+      # Docker's classic image store cannot retain both platform variants.
+      - name: Enable multi-platform Docker image store
+        uses: docker/setup-docker-action@v5
+        with:
+          daemon-config: |
+            {
+              "features": {
+                "containerd-snapshotter": true
+              }
+            }
+
       - name: Set up build emulation
         uses: docker/setup-qemu-action@v3
 

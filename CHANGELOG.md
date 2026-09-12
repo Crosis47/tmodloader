@@ -12,6 +12,8 @@ immutable deployment identifier.
 
 ### Fixed
 
+- Enable the publisher's containerd image store so AMD64 and ARM64 candidates
+  can be tested under the same multi-platform digest before release publication.
 - Remove obsolete plaintext admin-token upgrade warnings from the documentation
   and simplify the invalid-hash error. Admin credentials require Argon2id hashes.
 
