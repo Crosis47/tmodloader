@@ -249,6 +249,10 @@ COPY --chown=root:root --chmod=0755 container-backup.py /usr/local/bin/tmod-back
 COPY --chown=tml:tml VERSION .
 COPY --chown=tml:tml admin_settings.py admin_metrics.py admin_workshop.py admin_server.py ./
 COPY --chown=tml:tml admin_schema.py admin_auth.py ./
+COPY --chown=tml:tml admin_recovery.py ./
+COPY --chown=tml:tml admin_players.py ./
+COPY --chown=tml:tml admin_worlds.py ./
+COPY --chown=tml:tml admin_profiles.py admin_playthroughs.py ./
 COPY --chown=tml:tml web ./web
 COPY --chown=root:root --chmod=0755 container-init.sh /usr/local/bin/tmod-init
 

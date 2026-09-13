@@ -114,14 +114,51 @@ def request_backup():
             time.sleep(1)
 
 
-def restore(bundle):
+def preview(bundle):
+    import admin_recovery
+    bundle = admin_recovery.archive_path(bundle.name)
+    preflight(check_reserve=False)
+    metadata = backup.validate(bundle)
+    if metadata['image_id'] != identity():
+        raise ValueError('Backup build fingerprint differs; use the original image to restore.')
+    with tarfile.open(bundle / 'data.tar.gz', 'r:gz') as tar:
+        members = tar.getmembers()
+    required = sum(m.size for m in members if m.isfile())
+    free = shutil.disk_usage(DATA).free
+    if required > free:
+        raise ValueError('Insufficient space to stage restored data alongside original data.')
+    return {'archive': bundle.name, 'sha256': metadata['sha256'], 'created': metadata.get('created'),
+            'worlds': [Path(m.name).name for m in members if m.name.startswith('data/tModLoader/Worlds/') and m.name.endswith('.wld')],
+            'required_bytes': required, 'free_bytes': free,
+            'replaces': 'Worlds, mods, mod configuration, logs and saved dashboard settings. Current admin credentials and Compose settings are preserved.'}
+
+
+def supervisor_lock():
+    # The supervisor retains its lock throughout the operation. Never unlock it
+    # to let an external restore race a server restart.
+    if os.getppid() != int((RUNTIME / 'supervisor.pid').read_text()):
+        raise RuntimeError('Supervised restore must be called directly by the supervisor.')
+    if not os.path.samestat(os.fstat(9), (CONTROL / 'server.lock').stat()):
+        raise RuntimeError('Missing inherited server lock.')
+    fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    if (RUNTIME / 'server.pid').exists():
+        raise RuntimeError('The game must be stopped before recovery.')
+    return contextlib.nullcontext()
+
+
+def restore(bundle, supervised=False, expected=None):
+    if supervised:
+        import admin_recovery
+        bundle = admin_recovery.archive_path(bundle.name)
     preflight(check_reserve=False)
     CONTROL.mkdir(mode=0o700, exist_ok=True)
-    with exclusive(CONTROL / 'server.lock'):
+    with supervisor_lock() if supervised else exclusive(CONTROL / 'server.lock'):
         pending = CONTROL / 'restore-pending'
         if pending.exists():
             raise RuntimeError('An interrupted restore needs manual recovery; see /data/.tmod-control/restore-pending.')
         metadata = backup.validate(bundle)
+        if expected is not None and metadata['sha256'] != expected:
+            raise ValueError('Archive changed since preview. Preview it again before restoring.')
         if metadata['image_id'] != identity():
             raise ValueError('Backup build fingerprint differs; use the original image to restore.')
         backup.scan_tree(DATA)
@@ -133,6 +170,15 @@ def restore(bundle):
             stage = Path(temp)
             with tarfile.open(bundle / 'data.tar.gz', 'r:gz') as tar:
                 tar.extractall(stage, filter='fully_trusted')
+            if supervised:
+                # Keep the dashboard session and future logins on the same
+                # credential, even when the backup predates a token change.
+                import admin_auth
+                token = admin_auth.token_path()
+                if token.is_relative_to(DATA) and token.relative_to(DATA).parts[0] != '.tmod-control':
+                    target = stage / 'data' / token.relative_to(DATA)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(token, target)
             for root, dirs, files in os.walk(stage, topdown=False):
                 for name in files:
                     with (Path(root) / name).open('rb') as stream:
@@ -161,11 +207,12 @@ def restore(bundle):
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['backup', 'verify', 'restore', '_cold', '_retain', '_preflight'])
+    parser.add_argument('command', choices=['backup', 'verify', 'restore', '_cold', '_retain', '_preflight', '_preview', '_restore'])
     parser.add_argument('--archive', type=Path)
+    parser.add_argument('--sha256')
     parser.add_argument('--confirm', action='store_true')
     args = parser.parse_args()
-    if args.command in ('verify', 'restore', '_retain') and args.archive is None:
+    if args.command in ('verify', 'restore', '_retain', '_preview', '_restore') and args.archive is None:
         parser.error('--archive is required')
     if args.command == 'backup':
         request_backup()
@@ -178,6 +225,15 @@ def main():
         backup.retain(DEST, int(os.environ.get('TMOD_BACKUP_KEEP', '7')), args.archive)
     elif args.command == 'verify':
         print(json.dumps(backup.validate(args.archive), indent=2))
+    elif args.command == '_preview':
+        result = preview(args.archive)
+        if args.sha256 and result['sha256'] != args.sha256:
+            raise ValueError('Archive changed since preview. Preview it again.')
+        print(json.dumps(result))
+    elif args.command == '_restore':
+        if not args.confirm or not args.sha256:
+            parser.error('Supervised restore requires confirmation and a preview checksum.')
+        restore(args.archive, supervised=True, expected=args.sha256)
     elif args.command == 'restore':
         if not args.confirm:
             parser.error('Restore requires --confirm and a stopped server.')

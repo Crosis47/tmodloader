@@ -163,13 +163,20 @@ def main(command):
             atomic_json(ACTIVE, effective())
             if PENDING.exists():
                 atomic_json(PENDING, clean_mod_selection(read_json(PENDING)))
-    elif command == 'apply':
+    elif command in ('apply', 'recover'):
+        if command == 'apply':
+            import admin_worlds
+            admin_worlds.validate_pending()
+        if command == 'recover' and not web_mode():
+            (RUNTIME / 'admin.env').write_text('')
+            return
         if not web_mode():
             raise ValueError('Settings are environment-managed.')
         removed = []
-        values = clean_mod_selection(validate(read_json(PENDING)), removed)
+        source = ACTIVE if command == 'recover' else PENDING
+        values = clean_mod_selection(validate(read_json(source)), removed)
         record_removed(removed)
-        if not PENDING.exists():
+        if not source.exists():
             raise ValueError('No staged settings to apply.')
         environment = dict(os.environ)
         environment.update(values)

@@ -18,6 +18,81 @@ import filter_client_mods
 
 
 class AdminTests(unittest.TestCase):
+    def test_playthroughs_auth_and_operation_guard(self):
+        self.assertTrue(self.request('/api/playthroughs', auth=False)[0].startswith('403'))
+        with patch.object(server.admin_playthroughs, 'change') as change:
+            server.JOB = {'state': 'running'}
+            self.assertTrue(self.request('/api/playthroughs', {'action': 'save'})[0].startswith('400'))
+            change.assert_not_called()
+
+    def test_profiles_auth_and_operation_guard(self):
+        self.assertTrue(self.request('/api/profiles', auth=False)[0].startswith('403'))
+        with patch.object(server.admin_profiles, 'change') as change:
+            server.JOB = {'state': 'running'}
+            self.assertTrue(self.request('/api/profiles', {'action': 'save'})[0].startswith('400'))
+            change.assert_not_called()
+
+
+    def test_worlds_auth_stale_revision_and_busy_guards(self):
+        self.assertTrue(self.request('/api/worlds', auth=False)[0].startswith('403'))
+        with patch.object(server.admin_worlds, 'stage') as stage:
+            self.assertTrue(self.request('/api/worlds/stage', {'revision': 'stale', 'action': 'switch', 'name': 'Old'})[0].startswith('400'))
+            server.JOB = {'state': 'running'}
+            self.assertTrue(self.request('/api/worlds/stage', {'action': 'switch', 'name': 'Old'})[0].startswith('400'))
+            stage.assert_not_called()
+
+    def test_worlds_environment_mode_blocks_staging(self):
+        with patch.dict(os.environ, {'TMOD_CONFIG_SOURCE': 'env'}), patch.object(server.admin_worlds, 'stage') as stage:
+            self.assertTrue(self.request('/api/worlds/stage', {'action': 'create', 'name': 'New'})[0].startswith('400'))
+            stage.assert_not_called()
+    def test_players_require_auth_and_announcement_confirmation(self):
+        self.assertTrue(self.request('/api/players', auth=False)[0].startswith('403'))
+        self.assertTrue(self.request('/api/players/announce', {'message': 'hello', 'confirm': True}, auth=False)[0].startswith('403'))
+        with patch.object(server, 'health', return_value=True), patch.object(server.admin_players, 'deliver') as send:
+            self.assertTrue(self.request('/api/players/announce', {'message': 'hello'})[0].startswith('400'))
+            self.assertTrue(self.request('/api/players/announce', {'message': 'hello\nexit', 'confirm': True})[0].startswith('400'))
+            send.assert_not_called()
+
+    def test_players_report_unavailable_during_operations(self):
+        server.JOB = {'state': 'running'}
+        with patch.object(server.admin_players, 'activity', return_value=[]), patch.object(server.admin_players, 'snapshot') as snapshot:
+            status, body = self.request('/api/players')
+            self.assertTrue(status.startswith('200'))
+            self.assertFalse(json.loads(body)['available'])
+            snapshot.assert_not_called()
+
+    def test_announcement_uses_fixed_say_command(self):
+        with patch.object(server, 'health', return_value=True), patch.object(server.admin_players, 'deliver') as send, patch.object(server.admin_players, 'audit'):
+            status, body = self.request('/api/players/announce', {'message': 'Hello $(world)', 'confirm': True})
+            self.assertTrue(status.startswith('200'))
+            send.assert_called_once_with('say Hello $(world)')
+
+    def test_recovery_rejects_unsafe_or_unconfirmed_requests(self):
+        for name in ('../tmod-backup-a', 'tmod-backup-../../etc', '/backups/tmod-backup-a', 'tmod-backup-a\\b'):
+            self.assertTrue(self.request('/api/recovery/preview', {'archive': name})[0].startswith('400'))
+        self.assertTrue(self.request('/api/recovery/retry', {})[0].startswith('400'))
+        self.assertTrue(self.request('/api/recovery/restore', {'confirm': True})[0].startswith('400'))
+        self.assertTrue(self.request('/api/recovery', auth=False)[0].startswith('403'))
+
+    def test_recovery_blocks_interrupted_restore_and_scheduled_backup(self):
+        with patch.object(server.admin_recovery, 'status', return_value={'interrupted': True}):
+            self.assertTrue(self.request('/api/recovery/retry', {'confirm': True})[0].startswith('400'))
+        settings.atomic_json(metrics.STATE, {'state': 'running'})
+        with patch.object(server, 'start_job') as start:
+            self.assertTrue(self.request('/api/recovery/preview', {'archive': 'tmod-backup-a'})[0].startswith('400'))
+            start.assert_not_called()
+
+    def test_recovery_preview_dispatch_and_link_rejection(self):
+        with patch.object(metrics, 'DEST', self.root), patch.object(server, 'start_job', return_value={'state': 'running'}) as start:
+            bundle = self.root / 'tmod-backup-test'
+            bundle.mkdir()
+            (bundle / 'manifest.json').write_text('{}')
+            (bundle / 'data.tar.gz').write_bytes(b'test')
+            self.assertTrue(self.request('/api/recovery/preview', {'archive': bundle.name})[0].startswith('200'))
+            start.assert_called_once_with('preview', bundle, None)
+            with patch.object(Path, 'is_symlink', return_value=True):
+                self.assertTrue(self.request('/api/recovery/preview', {'archive': bundle.name})[0].startswith('400'))
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)

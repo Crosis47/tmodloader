@@ -50,6 +50,20 @@ apply, confirmed apply/restart, backup/verify, and environment-mode read-only
 behavior. Live Workshop search requires a separately supplied Steam API key;
 mocked API tests do not establish live key access.
 
+The administration integration test also verifies recovery previews, checksum
+rejection before downtime, live restore, retained originals, startup failure
+and startup retry. Run `node tests/admin-recovery-test.cjs` with Playwright and
+Chromium installed to exercise confirmation and recovery controls in a browser.
+Set `PLAYWRIGHT_CHANNEL=msedge` to use an installed Edge browser instead.
+Run `node tests/admin-players-test.cjs` for player filtering, moderation and
+announcement confirmations, unavailable-state controls and narrow-screen layout.
+Player parser and targeting tests are included in `test_admin*.py`; real empty
+roster queries and announcement delivery are exercised by the admin integration
+test. Connected-player kick/ban outcomes require a real game client.
+Run `node tests/admin-worlds-test.cjs` to verify world drafts, cancellation,
+confirmation and read-only controls. The administration integration test creates
+a world through the Worlds API, switches to the original world, then back again.
+
 For world creation, also run `python3 -m unittest discover -s tests -p
 'test_world_creation.py' -v` and the configuration tests. Validate real generation
 with disposable data for both `TMOD_WORLDEVIL=corruption` and `crimson`; check
@@ -153,3 +167,7 @@ publisher builds and tests an untagged candidate digest before updating GHCR
 tags. It then creates a GitHub Release from the matching versioned changelog
 section. The automation refuses to reuse exact composite tags; only documented
 channel and compatibility aliases move.
+
+Dashboard browser regression tests also include `tests/admin-profiles-test.cjs`,
+`tests/admin-playthroughs-test.cjs`, `tests/admin-overview-test.cjs`,
+`tests/admin-attention-test.cjs` and `tests/admin-unsaved-test.cjs`.

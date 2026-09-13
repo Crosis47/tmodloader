@@ -21,6 +21,7 @@ if [[ "$output" == *"$secret"* ]]; then
 fi
 grep -Fxq "password=$secret" "$config_path"
 grep -Fxq 'port=7777' "$config_path"
+grep -Fxq "banlist=$test_root/data/tModLoader/banlist.txt" "$config_path"
 
 for evil in random corruption crimson; do
     TMOD_CONFIG_PATH="$config_path" TMOD_DATA_DIR="$test_root/data" TMOD_WORLDEVIL="$evil" bash "$script_under_test"

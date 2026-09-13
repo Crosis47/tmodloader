@@ -684,11 +684,96 @@ Configuration is grouped into Server, World, Backups, Mods & Workshop,
 Runtime & logs, and Journey permissions, with explanations and running values
 beside each editable setting. Compose-only settings remain separate.
 
-The admin API has no Linux shell endpoint, filesystem browser, uploads, archive
-downloads, or online restore. Use the
-documented offline restore workflow below for recovery. Anyone holding the
-admin token can change the server's configuration and installed mods; treat
+The admin API has no Linux shell endpoint, filesystem browser, uploads or archive
+downloads. Anyone holding the admin token can restore backups and change the
+server's configuration and installed mods; treat
 it as an administrative credential.
+
+### World management
+
+Open **Worlds** to see saved `.wld` files, their `.twld` mod-data companions,
+file sizes, modification times and the active/configured world. Create a new
+world with an unused name, size, difficulty, evil and optional seed, or select
+**Review & switch** beside an existing world. Creation names are limited to
+26 UTF-16 code units and seeds to 39 to match the native generation menu.
+
+Both actions save a draft and open the existing apply confirmation. The review
+includes all pending settings and mod changes; canceling leaves the draft for
+later without stopping the game. Confirming saves and stops the game, applies
+the configuration and starts the selected world, with progress and a final
+health check. Other saved worlds remain available. Worlds share the selected
+server mod set; the page does not manage separate mod profiles per world.
+
+Creation rejects names with existing world, mod-sidecar or backup files. A switch
+requires a nonempty saved world. These conditions are checked when staging,
+before an apply is queued, and when configuration is applied. Linked files and
+path traversal are rejected. The inventory does not establish world integrity
+or mod compatibility; use **Recovery** for verified backups and restoration.
+Generation options do not change existing worlds.
+
+World selection requires web-managed generated configuration. Environment and
+custom-configuration servers can view the standard world directory but manage
+their selection through their configuration. A custom world path is not inferred
+from the standard directory list.
+
+### Player management
+
+Open **Players** for a fresh list of connected players, connection addresses,
+name filtering, confirmed kick/ban actions, announcements and recent dashboard
+activity. Queries run every ten seconds while the page is open; responses may
+be reused for up to eight seconds. A stopped server or an incomplete response
+shows an unknown count and disables controls. The page currently requires
+`TMOD_LANGUAGE=en-US`; use the console with other server languages.
+
+Moderation rechecks the player's name and connection before sending a native
+command. Names that differ only by case cannot be safely targeted and have
+disabled controls. A delivered command is distinguished from confirmed departure
+and confirmed ban persistence. Mods that override native console commands can
+make these queries unavailable; no additional server mod is required.
+
+Native bans target an IP address or Steam identifier. An IP ban can block other
+people sharing that address. Generated configurations now keep the ban list at
+`/data/tModLoader/banlist.txt`, so it survives container replacement and is included
+in backups. Dashboard bans are disabled for custom configuration files. To remove
+a ban, remove its exact address/identifier line from the ban list; the native
+server reads that file on connection. If upgrading a container with an existing
+`/terraria-server/banlist.txt`, preserve its contents in the persistent ban list
+before replacing that container.
+
+Announcements require review and confirmation. Up to 50 dashboard actions and
+their reported results are retained in `/data/.tmod-control/player-activity.json`
+(bounded to 60 KiB). Commands entered elsewhere are not included. Connection
+addresses and the activity log are available only through the authenticated
+dashboard.
+
+### Recovery page
+
+Open **Recovery**, select a backup, and choose **Verify & preview**. The preview
+checks the full checksum and archive contents, the exact container build
+fingerprint, and enough free space to stage the restored data. It lists saved
+world filenames, the backup date, and the replacement scope. Archives from a
+different build require the original image, as with the offline restore tool.
+
+**Restore this backup** asks for confirmation, verifies the archive again before
+downtime, saves and stops the game, stages the replacement, and retains the
+original data under `/data/.tmod-control/before-restore-*`. The supervisor keeps
+its exclusive data lock throughout. The dashboard stays available and reports
+progress through the final game health check. A failed preflight does not stop
+the game. A failed graceful stop does not replace data.
+
+Recovery replaces worlds, mods, mod configuration, logs and saved dashboard
+settings. It preserves the current admin credential and Compose-managed values.
+Web-managed servers load the restored active settings; saved drafts remain
+staged. Environment-managed servers keep their current environment configuration.
+Startup uses the restored cached mods without downloading updates.
+
+If startup fails, inspect **Console**, then use **Retry game startup** or preview
+and restore another archive. Original directories remain available for manual
+rollback and are excluded from automatic backup retention; allow disk space for
+them. A file-replacement interruption creates `restore-pending` and blocks
+startup and further restores. This case requires manual repair using that marker
+and the retained originals; restarting the container does not clear it. The
+offline restore workflow remains available when the dashboard cannot run.
 
 ## Backups
 
@@ -861,3 +946,13 @@ not required for this repository's release workflow.
 The repository's container code and scripts are distributed under
 [LICENSE.md](LICENSE.md). Terraria, tModLoader, SteamCMD, DepotDownloader, and their respective
 assets remain the property of their owners.
+
+### Mod profiles
+
+Use **Mod profiles** to save named running or saved draft Workshop selections, including an empty unmodded selection. Loading stages only mods, preserving other draft settings; review the complete draft before restarting. Rename, replace and delete saved profiles without changing the game. Loading requires `TMOD_CONFIG_SOURCE=web`; no Steam API key is needed. Profiles store IDs, not pinned versions or world files. Collections can change on Steam. Up to 50 profiles (60 KB total) persist in `/data/admin/mod-profiles.json` and are included in data backups.
+
+### Playthroughs
+
+Use **Playthroughs** to pair a saved world with a snapshot of world generation settings, Journey permissions and Workshop selections. Choose a world and capture running settings or the saved draft. Loading preserves unrelated draft settings and opens the full restart review. Create worlds on Worlds first; generation settings cannot convert existing worlds. Journey permissions require a Journey world. Saved playthroughs reference live world files, so progress continues across switches. They do not archive worlds or pin mod versions. Keep backups before changing a world’s mods. Records persist in `/data/admin/playthroughs.json` (50 records or 60 KB), included in backups.
+
+The read-only **Overview** summarizes server health, loaded mods, connected players, saved worlds, Journey permissions, matching profiles, pending changes and recent activity. **Backups & recovery** contains backup creation, archive verification, restoration and startup retry controls. Summary queries do not apply settings or restart the game.
