@@ -53,12 +53,14 @@ jobs:
       - name: Validate shell syntax
         run: bash -n ./*.sh tests/*.sh
 
+      - name: Install Python test dependencies
+        run: python3 -m pip install argon2-cffi
+
       - name: Test backup and restore safety
         run: python3 -m unittest discover -s tests -p 'test_backup*.py' -v
 
       - name: Test administration API safety
         run: |
-          python3 -m pip install argon2-cffi
           python3 -m unittest discover -s tests -p 'test_admin*.py' -v
           python3 -m unittest discover -s tests -p 'test_world_creation.py' -v
 

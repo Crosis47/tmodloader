@@ -102,6 +102,7 @@ fi
 
 append_config world "$world_path"
 append_config worldpath "$world_dir/"
+append_config banlist "$data_dir/tModLoader/banlist.txt"
 if [[ ! -e "$world_path" ]]; then
     if [[ "$TMOD_WORLDEVIL" != random ]]; then
         printf '# tmod-worldevil=%s\n' "$TMOD_WORLDEVIL" >> "$config_path"

@@ -8,6 +8,31 @@ immutable deployment identifier.
 
 ## Unreleased
 
+## 2.2.0 - 2026-09-13
+
+- Combine backups and recovery, and expand the read-only Overview with world, player, settings, profile and recovery summaries.
+
+- Add Playthroughs to save and switch world, Journey permission and mod selections together.
+
+- Add named mod profiles with running/draft capture, guarded loading, rename, replacement and deletion.
+
+### Added
+
+- Attention banner for pending drafts and recovery issues, amber unsaved-setting
+  cards and blue saved-but-not-applied cards. Clarify player command activity.
+
+- Worlds page with saved-world inventory, guarded creation and switching,
+  generation options, and the shared review/apply progress flow.
+
+- Player Management page with fresh native-console player queries, name filters,
+  reviewed kick/ban actions, announcements and bounded activity history. Persist
+  native bans under `/data/tModLoader/banlist.txt` for generated configurations.
+
+- Recovery dashboard with verified archive previews, confirmed supervised
+  restore, retained original data, startup retry and game health progress.
+  Restores preserve current admin credentials and enforce existing archive,
+  build, free-space and interrupted-restore safeguards.
+
 ## 2.1.1 - 2026-09-12
 
 ### Fixed

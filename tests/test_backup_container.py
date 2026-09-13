@@ -54,6 +54,37 @@ class ContainerBackupTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'Data is in use'):
                 module.restore(bundle)
 
+    def test_preview_worlds_and_changed_archive_rejected(self):
+        import admin_metrics
+        worlds = self.data / 'tModLoader/Worlds'
+        worlds.mkdir(parents=True)
+        (worlds / 'Recovery.wld').write_text('test-world')
+        bundle = module.cold_backup()
+        with patch.object(admin_metrics, 'DEST', self.dest):
+            result = module.preview(bundle)
+        self.assertEqual(result['worlds'], ['Recovery.wld'])
+        self.assertGreater(result['required_bytes'], 0)
+        with self.assertRaisesRegex(ValueError, 'changed since preview'):
+            module.restore(bundle, expected='0' * 64)
+        self.assertEqual((self.data / 'world.wld').read_text(), 'original')
+
+    def test_supervised_restore_preserves_current_credential(self):
+        import admin_auth
+        import admin_metrics
+        token = self.data / 'admin/token.argon2'
+        token.parent.mkdir()
+        token.write_text('old hash')
+        bundle = module.cold_backup()
+        token.write_text('current hash')
+        with patch.object(module, 'supervisor_lock', return_value=module.contextlib.nullcontext()), patch.object(admin_auth, 'token_path', return_value=token), patch.object(admin_metrics, 'DEST', self.dest):
+            module.restore(bundle, supervised=True)
+        self.assertEqual(token.read_text(), 'current hash')
+
+    def test_supervised_restore_rejects_external_caller(self):
+        (self.runtime / 'supervisor.pid').write_text(str(os.getpid()))
+        with self.assertRaisesRegex(RuntimeError, 'directly by the supervisor'):
+            module.supervisor_lock()
+
     def test_interrupted_restore_blocks_retry(self):
         bundle = module.cold_backup()
         (self.control / 'restore-pending').write_text('pending')

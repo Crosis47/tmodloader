@@ -368,13 +368,97 @@ perform_admin_apply() {
         printf '[ADMIN] Apply failed. Game stopped; correct settings in the dashboard and apply again.\n' >&2
     else
         admin_failed=0
-        rm -f /data/admin/pending.json
+        rm -f /data/admin/pending.json /data/admin/pending-world.json
         python3 /terraria-server/admin_settings.py snapshot
         printf '[ADMIN] Settings applied and game health validated.\n'
     fi
     backup_interval=$((10#${TMOD_BACKUP_INTERVAL:-0} * 60))
     next_backup=$((SECONDS + backup_interval))
     jq -n --arg id "$request_id" --argjson status "$status" '{id:$id,status:$status}' > "$runtime_dir/admin-result.tmp"
+    mv "$runtime_dir/admin-result.tmp" "$runtime_dir/admin-result"
+}
+
+perform_recovery() {
+    local request_id="$1" kind="$2" archive="$3" checksum="$4" status=0 deadline detail=''
+    if [[ -e /data/.tmod-control/restore-pending ]]; then
+        status=1
+        detail='Interrupted restore requires manual recovery; inspect /data/.tmod-control/restore-pending.'
+    fi
+    if ((status == 0)) && [[ "$kind" == restore ]]; then
+        admin_progress verifying 'Verifying archive integrity, build compatibility and available staging space before stopping the game.'
+        if ! tmod-backup _preview --archive "$archive" --sha256 "$checksum" > "$runtime_dir/recovery-preview" 2> "$runtime_dir/recovery-error"; then
+            status=1
+            detail="$(<"$runtime_dir/recovery-error")"
+        fi
+    fi
+    # A failed preflight leaves the current game untouched.
+    if ((status == 0)); then
+        admin_progress stopping 'Saving and stopping the game. Players will disconnect.'
+        stop_autosave
+        if server_is_running; then
+            inject 'say Server restarting for recovery.' || true
+            inject exit || true
+            if ! wait_for_server_exit "$((SECONDS + ${TMOD_SHUTDOWN_TIMEOUT:-90}))"; then
+                signal_server_group TERM
+                wait_for_server_exit "$((SECONDS + 5))" || signal_server_group KILL
+                status=1
+            fi
+            wait "$server_pid" || status=1
+        fi
+        server_pid=''
+        rm -f "$pid_path"
+        admin_failed=1
+        if ((status != 0)); then detail='Game did not stop cleanly. Data was not replaced. Inspect the console, then retry startup.'; fi
+        if ((status == 0)) && [[ "$kind" == restore ]]; then
+            admin_progress restoring 'Staging verified files and preserving original data before replacement.'
+            if ! tmod-backup _restore --archive "$archive" --sha256 "$checksum" --confirm 2> "$runtime_dir/recovery-error"; then
+                status=1
+                detail="$(<"$runtime_dir/recovery-error")"
+            fi
+        fi
+        if ((status == 0)); then
+            admin_progress settings 'Loading saved configuration. Current credentials and Compose settings are preserved.'
+            if python3 /terraria-server/admin_settings.py recover; then
+                # shellcheck disable=SC1091
+                source "$runtime_dir/admin.env"
+            else
+                status=1
+                detail='Saved settings could not be loaded. Inspect container logs.'
+            fi
+        fi
+        if ((status == 0)); then
+            admin_progress starting 'Starting the restored game using its cached mods.'
+            exec 3>&-
+            rm -f "$control_pipe"
+            mkfifo -m 0600 "$control_pipe"
+            exec 3<> "$control_pipe"
+            start_server
+            admin_progress health 'Waiting for game health (up to 10 minutes).'
+            deadline=$((SECONDS + 600))
+            while ! healthcheck; do
+                if ! server_is_running || ((SECONDS >= deadline)); then
+                    status=1
+                    detail='Game startup failed health validation. Inspect the console, then retry startup or restore another archive. Original data is retained.'
+                    break
+                fi
+                sleep 2
+            done
+            if ((status == 0)); then
+                admin_failed=0
+                python3 /terraria-server/admin_settings.py snapshot
+            else
+                signal_server_group TERM
+                wait_for_server_exit "$((SECONDS + 5))" || signal_server_group KILL
+                wait "$server_pid" 2>/dev/null || true
+                stop_autosave
+                server_pid=''
+                rm -f "$pid_path"
+            fi
+        fi
+    fi
+    backup_interval=$((10#${TMOD_BACKUP_INTERVAL:-0} * 60))
+    next_backup=$((SECONDS + backup_interval))
+    jq -n --arg id "$request_id" --argjson status "$status" --arg detail "$detail" '{id:$id,status:$status,detail:$detail}' > "$runtime_dir/admin-result.tmp"
     mv "$runtime_dir/admin-result.tmp" "$runtime_dir/admin-result"
 }
 
@@ -386,8 +470,15 @@ while server_is_running || ((admin_failed)); do
     fi
     if [[ -f "$runtime_dir/admin-request" ]]; then
         request_id="$(jq -r .id "$runtime_dir/admin-request")"
+        request_kind="$(jq -r '.kind // "apply"' "$runtime_dir/admin-request")"
+        request_archive="$(jq -r '.archive // ""' "$runtime_dir/admin-request")"
+        request_checksum="$(jq -r '.sha256 // ""' "$runtime_dir/admin-request")"
         rm -f "$runtime_dir/admin-request"
-        perform_admin_apply "$request_id"
+        if [[ "$request_kind" == restore || "$request_kind" == retry ]]; then
+            perform_recovery "$request_id" "$request_kind" "$request_archive" "$request_checksum"
+        else
+            perform_admin_apply "$request_id"
+        fi
     elif [[ -f "$runtime_dir/backup-request" ]]; then
         request_id="$(<"$runtime_dir/backup-request")"
         rm -f "$runtime_dir/backup-request"

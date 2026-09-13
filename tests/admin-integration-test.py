@@ -61,6 +61,13 @@ try:
     print('Web setup saved a private Argon2id hash; waiting for game health.', flush=True)
     backup.wait_healthy(name, 600)
     print('First-boot game startup is healthy.', flush=True)
+    roster = api('/api/players')
+    assert roster['available'] and roster['players'] == [], roster
+    assert roster['can_ban']
+    assert api('/api/players/announce', {'message': 'Dashboard player-management integration test', 'confirm': True})['detail']
+    assert api('/api/players')['activity'][0]['action'] == 'announcement'
+    backup.docker('exec', name, 'bash', '-c', 'grep -Fxq "banlist=/data/tModLoader/banlist.txt" /terraria-server/serverconfig.txt')
+    print('Native player snapshot, announcement delivery, activity and persistent ban configuration passed.', flush=True)
 
     def job(expected='success'):
         deadline = time.monotonic() + 600
@@ -91,8 +98,11 @@ try:
     assert 'test-password' not in json.dumps(original)
     old_world = Path('/data/tModLoader/Worlds') / (original['running']['TMOD_WORLDNAME'] + '.wld')
     backup.docker('exec', name, 'test', '-f', str(old_world).replace('\\', '/'))
-    staged = api('/api/settings', {'revision': original['revision'], 'settings': {
-        'TMOD_MAXPLAYERS': '5', 'TMOD_WORLDNAME': 'AdminCorruption', 'TMOD_WORLDEVIL': 'corruption'}})
+    staged = api('/api/settings', {'revision': original['revision'], 'settings': {'TMOD_MAXPLAYERS': '5'}})
+    worlds = api('/api/worlds')
+    assert any(world['selected'] for world in worlds['worlds'])
+    staged = api('/api/worlds/stage', {'revision': staged['revision'], 'action': 'create', 'name': 'AdminCorruption',
+        'creation': {'TMOD_WORLDSIZE': '1', 'TMOD_DIFFICULTY': '1', 'TMOD_WORLDEVIL': 'corruption', 'TMOD_WORLDSEED': ''}})
     assert staged['running']['TMOD_MAXPLAYERS'] == '8'
     assert staged['staged']['TMOD_MAXPLAYERS'] == '5'
     api('/api/apply', {'confirm': True, 'revision': staged['revision']})
@@ -101,11 +111,27 @@ try:
     assert applied_job['stage'] == 'health' and applied_job['started'] and applied_job['finished']
     assert api('/api/settings')['running']['TMOD_MAXPLAYERS'] == '5'
     assert api('/api/settings')['running']['TMOD_WORLDEVIL'] == 'corruption'
+    assert api('/api/worlds')['configured'] == 'AdminCorruption'
+    world_settings = api('/api/settings')
+    switched = api('/api/worlds/stage', {'revision': world_settings['revision'], 'action': 'switch', 'name': original['running']['TMOD_WORLDNAME']})
+    api('/api/apply', {'confirm': True, 'revision': switched['revision']})
+    job()
+    assert api('/api/worlds')['configured'] == original['running']['TMOD_WORLDNAME']
+    catalog = api('/api/playthroughs')
+    catalog = api('/api/playthroughs', {'action': 'save', 'name': 'Adventure', 'source': 'running',
+                                      'world': 'AdminCorruption', 'revision': catalog['revision'],
+                                      'catalog_revision': catalog['catalog_revision']})
+    switched = api('/api/playthroughs', {'action': 'stage', 'id': catalog['playthroughs'][0]['id'],
+                                       'revision': catalog['revision'], 'catalog_revision': catalog['catalog_revision']})
+    api('/api/apply', {'confirm': True, 'revision': switched['revision']})
+    job()
+    assert api('/api/settings')['running']['TMOD_WORLDNAME'] == 'AdminCorruption'
+    print('World creation and saved playthrough switching passed.', flush=True)
     backup.docker('exec', name, 'test', '-f', str(old_world).replace('\\', '/'))
     backup.docker('exec', name, 'test', '-f', '/data/tModLoader/Worlds/AdminCorruption.wld')
     backup.docker('exec', name, 'test', '-f', '/data/tModLoader/Worlds/AdminCorruption.twld')
     backup.docker('exec', name, 'bash', '-c',
-                  'grep -q "Creating world .*Evil: 0," /data/tModLoader/Logs/container-console.log')
+                  'grep -Rq "Creating world .*Evil: 0," /data/tModLoader/Logs')
     # Frequent dashboard reads must not consume anonymous player slots.
     for _ in range(20):
         assert api('/api/status')['healthy'], 'Readiness polling disrupted the game listener'
@@ -117,6 +143,36 @@ try:
     assert state['backups']['count'] == 1
     api('/api/verify', {'confirm': True, 'archive': state['backups']['archives'][0]['name']})
     job()
+    archive = state['backups']['archives'][0]['name']
+    api('/api/recovery/preview', {'archive': archive})
+    job()
+    preview = api('/api/status')['job']['preview']
+    assert 'AdminCorruption.wld' in preview['worlds']
+    backup.docker('exec', name, 'touch', '/data/recovery-marker')
+    pid = backup.docker('exec', name, 'cat', '/tmp/tmodloader/server.pid')
+    api('/api/recovery/restore', {'archive': archive, 'sha256': '0' * 64, 'confirm': True})
+    job('failed')
+    assert backup.docker('exec', name, 'cat', '/tmp/tmodloader/server.pid') == pid
+    api('/api/recovery/restore', {'archive': archive, 'sha256': preview['sha256'], 'confirm': True})
+    job()
+    assert api('/api/status')['healthy']
+    assert api('/api/recovery')['originals']
+    backup.docker('exec', name, 'test', '!', '-e', '/data/recovery-marker')
+    retained = api('/api/recovery')['originals'][-1]
+    backup.docker('exec', name, 'test', '-f', '/data/.tmod-control/' + retained + '/recovery-marker')
+    assert backup.docker('exec', name, 'cat', '/data/admin/token.argon2') == encoded
+    print('Recovery preview, changed-checksum rejection, live restore, original retention and authenticated health checks passed.', flush=True)
+    # Force startup failure, then repair the disposable runner and retry through
+    # the same dashboard that must remain available after failed recovery.
+    backup.docker('exec', name, 'bash', '-c', 'cp run-server.sh /tmp/recovery-runner-original; printf "#!/bin/bash\\nexit 1\\n" > run-server.sh')
+    api('/api/recovery/retry', {'confirm': True})
+    job('failed')
+    assert not api('/api/status')['healthy']
+    backup.docker('exec', name, 'bash', '-c', 'cp /tmp/recovery-runner-original run-server.sh')
+    api('/api/recovery/retry', {'confirm': True})
+    job()
+    assert api('/api/status')['healthy']
+    print('Failed recovery startup leaves dashboard available; repaired startup retry passed.', flush=True)
     # An impossible reserve must reject backup before the game is stopped.
     current = api('/api/settings')
     staged = api('/api/settings', {'revision': current['revision'], 'settings': {'TMOD_BACKUP_MIN_FREE_MB': '999999999'}})

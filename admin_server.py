@@ -19,6 +19,11 @@ import admin_metrics
 import admin_settings as settings
 import admin_workshop as workshop
 import admin_schema
+import admin_recovery
+import admin_players
+import admin_worlds
+import admin_profiles
+import admin_playthroughs
 
 STATIC = Path(__file__).parent / 'web'
 OPERATION = threading.Lock()
@@ -201,23 +206,27 @@ def health():
         return False
 
 
-def job_runner(kind, archive=None):
+def job_runner(kind, archive=None, checksum=None):
     global JOB
     try:
-        if kind in ('backup', 'verify'):
-            command = ['tmod-backup', kind]
+        if kind in ('backup', 'verify', 'preview'):
+            command = ['tmod-backup', '_preview' if kind == 'preview' else kind]
             if archive:
                 command += ['--archive', str(archive)]
-            result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            result = subprocess.run(command, capture_output=True, text=True)
             if result.returncode:
-                raise ValueError('Operation failed; inspect container logs and backup status.')
+                raise ValueError(result.stderr[-2000:] or 'Operation failed; inspect container logs and backup status.')
+            if kind == 'preview':
+                JOB = {**JOB, 'preview': json.loads(result.stdout)}
         else:
             request_id = uuid.uuid4().hex
-            notice_path = settings.PENDING.with_name('pending-removed.json')
-            names = settings.read_json(notice_path).get('names', [])
-            settings.atomic_json(settings.RUNTIME / 'admin-removed', {'id': request_id, 'names': names})
-            settings.atomic_json(notice_path, {'names': []})
-            settings.atomic_json(settings.RUNTIME / 'admin-request', {'id': request_id})
+            if kind == 'apply':
+                notice_path = settings.PENDING.with_name('pending-removed.json')
+                names = settings.read_json(notice_path).get('names', [])
+                settings.atomic_json(settings.RUNTIME / 'admin-removed', {'id': request_id, 'names': names})
+                settings.atomic_json(notice_path, {'names': []})
+            settings.atomic_json(settings.RUNTIME / 'admin-request', {'id': request_id, 'kind': kind,
+                                 'archive': str(archive) if archive else None, 'sha256': checksum})
             while True:
                 removals = settings.read_json(settings.RUNTIME / 'admin-removed')
                 if removals.get('id') == request_id:
@@ -231,30 +240,130 @@ def job_runner(kind, archive=None):
                     if removals.get('id') == request_id:
                         JOB = {**JOB, 'removed_client_mods': removals.get('names', [])}
                     if result.get('status') != 0:
-                        raise ValueError('Apply failed; inspect container logs. Server may be stopped.')
+                        raise ValueError(result.get('detail') or 'Operation failed; inspect container logs. Server may be stopped.')
                     break
                 pid_file = settings.RUNTIME / 'supervisor.pid'
                 if not pid_file.exists():
                     raise ValueError('Supervisor stopped before completing the operation.')
                 os.kill(int(pid_file.read_text()), 0)
                 time.sleep(1)
-        JOB = {**JOB, 'state': 'success', 'detail': 'Settings applied; game server is healthy.' if kind == 'apply' else 'Operation completed.', 'finished': admin_metrics.timestamp()}
+        JOB = {**JOB, 'state': 'success', 'detail': 'Game server is healthy.' if kind in ('apply', 'restore', 'retry') else 'Archive verified; review the preview before restoring.' if kind == 'preview' else 'Operation completed.', 'finished': admin_metrics.timestamp()}
     except Exception as error:
         JOB = {**JOB, 'state': 'failed', 'detail': str(error), 'finished': admin_metrics.timestamp()}
     finally:
-        OPERATION.release()
+        try:
+            if kind in ('restore', 'retry'):
+                admin_recovery.record(JOB)
+        finally:
+            OPERATION.release()
 
 
-def start_job(kind, archive=None):
+def start_job(kind, archive=None, checksum=None):
     global JOB
     if not OPERATION.acquire(blocking=False):
         raise ValueError('Another administration operation is running.')
     JOB = {'state': 'running', 'kind': kind, 'stage': 'queued', 'detail': 'Waiting for the supervisor.', 'started': admin_metrics.timestamp()}
-    threading.Thread(target=job_runner, args=(kind, archive), daemon=True).start()
+    if kind in ('restore', 'retry'):
+        try:
+            admin_recovery.record(JOB)
+        except Exception:
+            OPERATION.release()
+            raise
+    threading.Thread(target=job_runner, args=(kind, archive, checksum), daemon=True).start()
     return JOB
 
 
 def api(method, path, query, payload):
+    if path == '/api/playthroughs' and method in ('GET', 'POST'):
+        with STATE_LOCK:
+            current = configuration()
+            busy = JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running'
+            if method == 'POST':
+                if busy:
+                    raise ValueError('Wait for the current operation before changing playthroughs.')
+                admin_playthroughs.change(payload, current)
+                current = configuration()
+            return {**admin_playthroughs.catalog(), 'revision': current['revision'],
+                    'running': admin_playthroughs.selection(current['running']),
+                    'staged': admin_playthroughs.selection(current['staged']),
+                    'worlds': admin_worlds.inventory(current['running'])['worlds'], 'editable': admin_playthroughs.editable(), 'pending': current['pending'], 'busy': busy}
+    if path == '/api/profiles' and method in ('GET', 'POST'):
+        with STATE_LOCK:
+            current = configuration()
+            busy = JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running'
+            if method == 'POST':
+                if busy:
+                    raise ValueError('Wait for the current operation before changing profiles.')
+                admin_profiles.change(payload, current)
+                current = configuration()
+            return {**admin_profiles.catalog(), 'revision': current['revision'],
+                    'running': current['running'].get('TMOD_MODS', ''),
+                    'staged': current['staged'].get('TMOD_MODS', ''),
+                    'editable': settings.web_mode(), 'pending': current['pending'], 'busy': busy}
+    if method == 'GET' and path == '/api/worlds':
+        config = configuration()
+        return {**admin_worlds.inventory(config['running']), 'healthy': health(),
+                'busy': JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running',
+                'revision': config['revision'], 'staged_name': config['staged'].get('TMOD_WORLDNAME'),
+                'pending': config['pending']}
+    if method == 'POST' and path == '/api/worlds/stage':
+        with STATE_LOCK:
+            if not settings.web_mode() or os.environ.get('TMOD_USECONFIGFILE', 'No').lower() in ('yes', 'true', '1'):
+                raise ValueError('Enable web-managed generated configuration to manage worlds here.')
+            if JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running':
+                raise ValueError('Wait for the current operation before choosing a world.')
+            current = configuration()
+            if payload.get('revision') != current['revision']:
+                raise ValueError('Settings changed. Refresh and review the latest draft.')
+            admin_worlds.stage(payload, current)
+            return configuration()
+    if path == '/api/players' and method == 'GET':
+        with STATE_LOCK:
+            result = {'available': False, 'players': [], 'updated': None,
+                      'activity': admin_players.activity(), 'can_ban': False}
+            try:
+                players_ready()
+                roster = admin_players.snapshot(CONSOLE_LOG)
+                result.update({k: v for k, v in roster.items() if not k.startswith('_')})
+                result.update(available=True, detail='Fresh native server query; refreshes every 10 seconds while this page is open.')
+                try:
+                    admin_players.ban_path()
+                    result['can_ban'] = True
+                except ValueError:
+                    pass
+            except (ValueError, OSError) as error:
+                result['detail'] = str(error)
+            return result
+    if path in ('/api/players/moderate', '/api/players/announce') and method == 'POST':
+        with STATE_LOCK:
+            players_ready()
+            if path.endswith('/moderate'):
+                return admin_players.moderate(CONSOLE_LOG, payload)
+            if payload.get('confirm') is not True:
+                raise ValueError('Confirm the announcement before sending.')
+            message = admin_players.line_text(payload.get('message'))
+            if not message.strip():
+                raise ValueError('Announcement text cannot be blank.')
+            admin_players.deliver('say ' + message)
+            detail = 'Announcement command delivered. Client receipt cannot be confirmed by the server console.'
+            admin_players.audit('announcement', message, detail)
+            return {'detail': detail}
+    if method == 'GET' and path == '/api/recovery':
+        return admin_recovery.status()
+    if method == 'POST' and path in ('/api/recovery/preview', '/api/recovery/restore', '/api/recovery/retry'):
+        kind = path.rsplit('/', 1)[-1]
+        with STATE_LOCK:
+            if settings.read_json(admin_metrics.STATE).get('state') == 'running':
+                raise ValueError('Wait for the current backup to finish.')
+            if kind != 'preview' and payload.get('confirm') is not True:
+                raise ValueError('Explicit confirmation is required.')
+            if kind != 'preview' and admin_recovery.status()['interrupted']:
+                raise ValueError('An interrupted restore requires manual recovery. Read the Recovery page guidance.')
+            checksum = payload.get('sha256')
+            if kind == 'restore' and (not isinstance(checksum, str) or not re.fullmatch('[a-f0-9]{64}', checksum)):
+                raise ValueError('Preview the archive before restoring.')
+            archive = None if kind == 'retry' else admin_recovery.archive_path(payload.get('archive'))
+            return start_job(kind, archive, checksum)
     if method == 'GET' and path == '/api/console/runs':
         return console_sources()
     if method == 'GET' and path == '/api/console':
@@ -294,10 +403,14 @@ def api(method, path, query, payload):
             raise ValueError('Explicit confirmation is required.')
         kind = path.rsplit('/', 1)[-1]
         with STATE_LOCK:
+            if kind == 'apply' and admin_recovery.status()['interrupted']:
+                raise ValueError('An interrupted restore must be recovered before applying settings.')
             if kind == 'apply' and (not settings.web_mode() or not settings.PENDING.exists()):
                 raise ValueError('No staged web-managed settings to apply.')
             if kind == 'apply' and payload.get('revision') != configuration()['revision']:
                 raise ValueError('The staged draft changed. Reload and review it before applying.')
+            if kind == 'apply':
+                admin_worlds.validate_pending()
             archive = None
             if kind == 'verify':
                 name = payload.get('archive', '')
@@ -308,6 +421,16 @@ def api(method, path, query, payload):
                     raise ValueError('Archive not found.')
             return start_job(kind, archive)
     raise LookupError('Endpoint not found.')
+
+
+def players_ready():
+    if JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running':
+        raise ValueError('Player controls are paused during backup, restore or settings changes.')
+    if not health():
+        raise ValueError('Game is not ready. Player count is unknown until it is healthy.')
+    running = settings.read_json(settings.RUNTIME / 'admin-effective.json', settings.effective())
+    if running.get('TMOD_LANGUAGE', 'en-US') != 'en-US':
+        raise ValueError('Player management requires TMOD_LANGUAGE=en-US. Use the console for this server language.')
 
 
 def application(environ, start_response):
@@ -357,6 +480,9 @@ def application(environ, start_response):
 
 def main():
     global TOKEN_HASH, SETUP_CODE
+    previous = admin_recovery.status()['operation']
+    if previous.get('state') == 'running':
+        admin_recovery.record({**previous, 'state': 'interrupted', 'detail': 'Container restarted before recovery completion was recorded. Inspect game health and retained originals before retrying.'})
     if admin_auth.token_path().exists():
         TOKEN_HASH = admin_auth.read_hash(admin_auth.token_path())
     else:
