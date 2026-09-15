@@ -6,6 +6,7 @@ import codecs
 import datetime
 import re
 import admin_auth
+import admin_access
 import json
 import os
 from pathlib import Path
@@ -440,11 +441,7 @@ def application(environ, start_response):
                ('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://*.steamusercontent.com https://*.steamstatic.com https://*.akamaihd.net; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")]
     path, method = environ.get('PATH_INFO', '/'), environ['REQUEST_METHOD']
     try:
-        origin = os.environ.get('TMOD_WEB_ORIGIN', 'http://localhost:8080').rstrip('/')
-        if environ.get('HTTP_ORIGIN') not in (None, origin):
-            raise PermissionError('Cross-origin requests are not allowed.')
-        if environ.get('HTTP_HOST') != urllib.parse.urlsplit(origin).netloc:
-            raise PermissionError('Unexpected host. Configure TMOD_WEB_ORIGIN for this address.')
+        admin_access.check_request(environ)
         if path.startswith('/api/'):
             supplied = environ.get('HTTP_AUTHORIZATION', '')
             if path != '/api/setup' and (not supplied.startswith('Bearer ') or not admin_auth.verify(TOKEN_HASH, supplied[7:])):
@@ -487,20 +484,18 @@ def main():
         TOKEN_HASH = admin_auth.read_hash(admin_auth.token_path())
     else:
         SETUP_CODE = secrets.token_urlsafe(32)
-    origin = urllib.parse.urlsplit(os.environ.get('TMOD_WEB_ORIGIN', 'http://localhost:8080'))
-    if origin.scheme not in ('http', 'https') or not origin.hostname or origin.username or origin.password or origin.path not in ('', '/') or origin.query or origin.fragment:
-        raise ValueError('TMOD_WEB_ORIGIN must be an http(s) origin without a path or credentials.')
-    if not TOKEN_HASH and origin.scheme != 'https' and origin.hostname not in ('localhost', '127.0.0.1', '::1'):
-        raise ValueError('First-run setup requires HTTPS or a localhost SSH tunnel.')
+    admin_access.validate_config()
     if TOKEN_HASH:
         mark_auth_ready()
     else:
         print('[ADMIN] Game startup paused. Open the dashboard to create your admin token.', flush=True)
         print('[ADMIN] One-time setup code: ' + SETUP_CODE, flush=True)
     from waitress import serve
+    print('[ADMIN] Open ' + (os.environ.get('TMOD_WEB_ORIGIN') or 'http://<server-IP>:<dashboard-port> (default 8080)') + ' in your browser.', flush=True)
     print('[ADMIN] Private administration interface listening on port 8080.', flush=True)
     serve(application, host='0.0.0.0', port=8080, threads=4, connection_limit=32,
-          channel_timeout=30, max_request_body_size=65536, clear_untrusted_proxy_headers=True)
+          # admin_access validates raw headers against the unchanged socket peer.
+          channel_timeout=30, max_request_body_size=65536, clear_untrusted_proxy_headers=False)
 
 
 if __name__ == '__main__':

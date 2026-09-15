@@ -8,6 +8,14 @@ immutable deployment identifier.
 
 ## Unreleased
 
+### Changed
+
+- Allow dashboard HTTP access from RFC 1918 source addresses and loopback;
+  require HTTPS for other sources on every request without a startup crash loop.
+- Enable direct LAN dashboard access with automatic IP/port origins, preserving
+  setup-code authentication and cross-origin checks. Add explicit single-proxy
+  trust for original client addresses and HTTPS detection.
+
 ## 3.0.1 - 2026-09-15
 
 ### Changed

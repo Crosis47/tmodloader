@@ -4,7 +4,7 @@
 <body>
 <header><div><span class="eyebrow">TMODLOADER</span><h1>Server administration</h1></div><span id="connection" class="badge">Not connected</span><button id="logout" hidden>Lock dashboard</button></header>
 <main>
-<section id="login" class="panel narrow"><h2>Connect to your server</h2><p>Enter the admin token you chose during setup. It stays in this tab’s memory and is cleared when you lock or reload the page.</p><form id="login-form"><label>Admin token<input id="token" type="password" autocomplete="off" required minlength="8"></label><button>Connect</button></form><p class="muted">Use an SSH tunnel or HTTPS reverse proxy for remote access.</p></section>
+<section id="login" class="panel narrow"><h2>Connect to your server</h2><p>Enter the admin token you chose during setup. It stays in this tab’s memory and is cleared when you lock or reload the page.</p><form id="login-form"><label>Admin token<input id="token" type="password" autocomplete="off" required minlength="8"></label><button>Connect</button></form><p class="muted">HTTP is available on trusted RFC 1918 networks and localhost. Other client addresses require HTTPS.</p></section>
 <p id="message" role="status" aria-live="polite"></p>
 <div id="dashboard" hidden>
 <aside id="attention-banner" class="attention-banner" aria-label="Actions needing attention" hidden><h2>Needs your attention</h2><div id="attention-items" aria-live="polite"></div></aside>

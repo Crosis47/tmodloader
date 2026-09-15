@@ -248,7 +248,7 @@ COPY --chown=root:root backup.py .
 COPY --chown=root:root --chmod=0755 container-backup.py /usr/local/bin/tmod-backup
 COPY --chown=tml:tml VERSION .
 COPY --chown=tml:tml admin_settings.py admin_metrics.py admin_workshop.py admin_server.py ./
-COPY --chown=tml:tml admin_schema.py admin_auth.py ./
+COPY --chown=tml:tml admin_schema.py admin_auth.py admin_access.py ./
 COPY --chown=tml:tml admin_recovery.py ./
 COPY --chown=tml:tml admin_players.py ./
 COPY --chown=tml:tml admin_worlds.py ./
@@ -261,7 +261,8 @@ ENV TMOD_BACKUP_KEEP="7"
 ENV TMOD_BACKUP_MIN_FREE_MB="1024"
 ENV TMOD_WEB_ENABLED="1"
 ENV TMOD_CONFIG_SOURCE="env"
-ENV TMOD_WEB_ORIGIN="http://localhost:8080"
+ENV TMOD_WEB_ORIGIN=""
+ENV TMOD_WEB_TRUSTED_PROXY=""
 ENV TMOD_WEB_TOKEN_FILE=""
 ENV TMOD_WORKSHOP_KEY_FILE=""
 
