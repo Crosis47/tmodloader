@@ -30,6 +30,31 @@ It is not affiliated with Re-Logic or the tModLoader team.
 - **AMD64 and ARM64 support:** Linux images for both architectures, with automated
   build checks and real-server startup tests before publication.
 
+## Image tags and updates
+
+| Tag | Behavior |
+| --- | --- |
+| `3.0.1` | Fixed stable release; matches the GitHub Release tag |
+| `3.0.1-preview` | Fixed preview release; marked as a GitHub prerelease |
+| `latest` / `stable` | Follow the latest tested stable build |
+| `preview` | Follow the latest tested preview build |
+
+Release notes include the bundled tModLoader version and its upstream release
+link. Numbered tags are never overwritten; upstream updates get a new container
+version. Previously published tags remain available but receive no new updates.
+
+For Drydock, use a numbered stable tag and opt into version updates with this
+Compose label (the double dollar sign escapes Compose interpolation):
+
+```yaml
+labels:
+  - 'dd.tag.include=^[0-9]+\.[0-9]+\.[0-9]+$$'
+```
+
+This restricts updates to stable container versions. The image's source label
+points to this repository, where matching release tags provide release notes.
+See [Drydock's getting started guide](https://getdrydock.com/docs/v1.7/getting-started).
+
 ## Dashboard gallery
 
 Captured from a running preview server. Select a screenshot to view it full size.
