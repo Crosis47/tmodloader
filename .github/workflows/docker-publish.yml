@@ -79,7 +79,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Resolve composite release metadata
+      - name: Resolve release metadata
         id: metadata
         env:
           CHANNEL: ${{ matrix.channel }}
@@ -120,6 +120,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE: ${{ needs.releases.outputs.image }}
           RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
+          TMODLOADER_VERSION: ${{ matrix.tml_version }}
         run: |
           set -euo pipefail
           image_exists=false
@@ -134,6 +135,11 @@ jobs:
 
           if [[ "$image_exists" == true && "$release_exists" == true ]]; then
             if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
+              notes="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+              if ! grep -Fq "**tModLoader ${TMODLOADER_VERSION}**" <<< "$notes"; then
+                echo "Upstream changed to $TMODLOADER_VERSION. Bump VERSION and update CHANGELOG.md to publish it." >&2
+                exit 1
+              fi
               echo "publish=false" >> "$GITHUB_OUTPUT"
               echo "$RELEASE_TAG is already complete; skipping the scheduled build."
               exit 0
@@ -234,13 +240,9 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
           DOCKER_TAG: ${{ steps.metadata.outputs.docker_tag }}
           IMAGE: ${{ needs.releases.outputs.image }}
-          LEGACY_TAG: ${{ steps.metadata.outputs.legacy_tag }}
-          TMODLOADER_TAG: ${{ steps.metadata.outputs.tml_tag }}
         run: |
           tag_args=(
             --tag "$IMAGE:$DOCKER_TAG"
-            --tag "$IMAGE:$TMODLOADER_TAG"
-            --tag "$IMAGE:$LEGACY_TAG"
           )
           if [[ "$CHANNEL" == stable ]]; then
             tag_args+=(--tag "$IMAGE:latest" --tag "$IMAGE:stable")
@@ -257,7 +259,6 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
           DOCKER_TAG: ${{ steps.metadata.outputs.docker_tag }}
           IMAGE: ${{ needs.releases.outputs.image }}
-          TMODLOADER_TAG: ${{ steps.metadata.outputs.tml_tag }}
           TMODLOADER_VERSION: ${{ matrix.tml_version }}
         run: |
           bash release-notes.sh \
@@ -267,7 +268,6 @@ jobs:
             "$IMAGE" \
             "$DIGEST" \
             "$DOCKER_TAG" \
-            "$TMODLOADER_TAG" \
             true \
             > "$RUNNER_TEMP/release-notes.md"
 

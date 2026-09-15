@@ -2,11 +2,20 @@
 
 This changelog records changes made by this maintained container fork. It does
 not reproduce the tModLoader release notes. `VERSION` contains the container's
-SemVer core, while each GitHub Release and exact image tag also identifies its
-bundled tModLoader version and release channel. An image digest remains the
+SemVer core. GitHub Releases and image tags use that version, with `-preview`
+for preview builds. Release notes identify the bundled tModLoader version. An image digest remains the
 immutable deployment identifier.
 
 ## Unreleased
+
+## 3.0.1 - 2026-09-15
+
+### Changed
+
+- Simplify image and GitHub Release tags to matching container versions (`3.0.1`
+  and `3.0.1-preview`), with tModLoader versions in release notes and OCI labels.
+- Publish only numbered versions and the `latest`, `stable`, and `preview` aliases.
+- Require a container version bump for each newly packaged upstream release.
 
 ## 3.0.0 - 2026-09-15
 

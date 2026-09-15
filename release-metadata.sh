@@ -28,10 +28,12 @@ case "$channel" in
         ;;
 esac
 
-release_tag="${container_version}+tml.${tml_version}.${channel}"
-docker_tag="${container_version}-tml-${tml_version//./-}-${channel}"
-tml_tag="tml-${tml_version}-${channel}"
-release_title="Container v${container_version} with tModLoader ${tml_version} (${channel})"
+release_tag="$container_version"
+if [[ "$channel" == "preview" ]]; then
+    release_tag+="-preview"
+fi
+docker_tag="$release_tag"
+release_title="Container v${release_tag}"
 
 if ((${#docker_tag} > 128)); then
     printf '[!!] Generated Docker tag exceeds 128 characters: %s\n' "$docker_tag" >&2
@@ -54,8 +56,6 @@ emit_output tml_version "$tml_version"
 emit_output channel "$channel"
 emit_output release_tag "$release_tag"
 emit_output docker_tag "$docker_tag"
-emit_output tml_tag "$tml_tag"
-emit_output legacy_tag "$tml_version"
 emit_output release_title "$release_title"
 if [[ "$channel" == "preview" ]]; then
     emit_output prerelease true

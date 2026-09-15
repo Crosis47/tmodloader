@@ -2,8 +2,8 @@
 
 set -Eeuo pipefail
 
-if (($# != 8)); then
-    printf 'Usage: %s CONTAINER_VERSION TMODLOADER_VERSION CHANNEL IMAGE DIGEST DOCKER_TAG TMOD_TAG UPDATE_CHANNEL_ALIASES\n' "$0" >&2
+if (($# != 7)); then
+    printf 'Usage: %s CONTAINER_VERSION TMODLOADER_VERSION CHANNEL IMAGE DIGEST DOCKER_TAG UPDATE_CHANNEL_ALIASES\n' "$0" >&2
     exit 2
 fi
 
@@ -13,12 +13,11 @@ channel="$3"
 image="$4"
 digest="$5"
 docker_tag="$6"
-tml_tag="$7"
-update_channel_aliases="$8"
+update_channel_aliases="$7"
 changelog_path="${CONTAINER_CHANGELOG_PATH:-CHANGELOG.md}"
 repository="${GITHUB_REPOSITORY:-Crosis47/tmodloader}"
 commit="${GITHUB_SHA:-local}"
-github_release_tag="${container_version}+tml.${tml_version}.${channel}"
+github_release_tag="$docker_tag"
 
 case "$channel" in
     stable|preview) ;;
@@ -75,9 +74,7 @@ printf 'This release packages container **v%s** with **tModLoader %s** on the **
 printf '## Container changelog\n%s\n\n' "$changes"
 printf '## Published images\n\n'
 printf -- '- GitHub Release tag: `%s`\n' "$github_release_tag"
-printf -- '- Exact container/tModLoader tag: `%s:%s`\n' "$image" "$docker_tag"
-printf -- '- tModLoader lookup tag: `%s:%s`\n' "$image" "$tml_tag"
-printf -- '- Compatibility tag: `%s:%s`\n' "$image" "$tml_version"
+printf -- '- Version tag: `%s:%s`\n' "$image" "$docker_tag"
 printf -- '- Moving channel tag(s): %s\n' "$channel_tags"
 printf -- '- Immutable tested digest: `%s@%s`\n\n' "$image" "$digest"
 printf '```bash\ndocker pull %s:%s\n```\n\n' "$image" "$docker_tag"

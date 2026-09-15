@@ -163,14 +163,10 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
           DOCKER_TAG: ${{ steps.metadata.outputs.docker_tag }}
           IMAGE: ${{ steps.metadata.outputs.image }}
-          LEGACY_TAG: ${{ steps.metadata.outputs.legacy_tag }}
-          TMODLOADER_TAG: ${{ steps.metadata.outputs.tml_tag }}
           UPDATE_CHANNEL_ALIASES: ${{ inputs.update_channel_aliases }}
         run: |
           tag_args=(
             --tag "$IMAGE:$DOCKER_TAG"
-            --tag "$IMAGE:$TMODLOADER_TAG"
-            --tag "$IMAGE:$LEGACY_TAG"
           )
           if [[ "$UPDATE_CHANNEL_ALIASES" == true ]]; then
             if [[ "$CHANNEL" == stable ]]; then
@@ -188,7 +184,6 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
           DOCKER_TAG: ${{ steps.metadata.outputs.docker_tag }}
           IMAGE: ${{ steps.metadata.outputs.image }}
-          TMODLOADER_TAG: ${{ steps.metadata.outputs.tml_tag }}
           TMODLOADER_VERSION: ${{ inputs.tmodloader_version }}
           UPDATE_CHANNEL_ALIASES: ${{ inputs.update_channel_aliases }}
         run: |
@@ -199,7 +194,6 @@ jobs:
             "$IMAGE" \
             "$DIGEST" \
             "$DOCKER_TAG" \
-            "$TMODLOADER_TAG" \
             "$UPDATE_CHANNEL_ALIASES" \
             > "$RUNNER_TEMP/release-notes.md"
 
