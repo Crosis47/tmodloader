@@ -1,0 +1,283 @@
+{
+  "releases": [
+    {
+      "id": 388937447,
+      "old": "3.0.0+tml.v2026.07.3.0.stable",
+      "new": "3.0.0",
+      "old_image": "3.0.0-tml-v2026-07-3-0-stable",
+      "digest": "sha256:dfc2539943ca1f664241e8918c2ab144ea5d41730d0a7e3ae5e58684df6ce8a4",
+      "sha": "f8d7c1fa586536893f3e667a46ae412096e2a36c",
+      "prerelease": false,
+      "body": "This release packages container **v3.0.0** with **tModLoader v2026.07.3.0** on the **stable** channel.\n\n## Container changelog\n\n### Changed\n\n- Enable the WebUI by default; set TMOD_WEB_ENABLED=0 for unattended game-only startup.\n  Simplify Compose to ports, persistent storage and an environment file, using\n  Docker default initialization capabilities and the image privilege drop.\n- Default first-run startup waits for WebUI admin setup before starting the game\n  server. Set `TMOD_WEB_ENABLED=0` to retain unattended game-only startup.\n- Refresh the README with a dashboard screenshot gallery and project attribution.\n\n## Published images\n\n- GitHub Release tag: `3.0.0`\n- Version tag: `ghcr.io/crosis47/tmodloader:3.0.0`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:dfc2539943ca1f664241e8918c2ab144ea5d41730d0a7e3ae5e58684df6ce8a4`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:3.0.0\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification on both linux/amd64 and linux/arm64 before these tags were assigned.\n\nNative executable architecture and live Workshop download/cache reuse were also verified.\n\n## Upstream and source\n\n- [tModLoader v2026.07.3.0 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.07.3.0)\n- [Container source at f8d7c1fa586536893f3e667a46ae412096e2a36c](https://github.com/Crosis47/tmodloader/tree/f8d7c1fa586536893f3e667a46ae412096e2a36c)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ]
+    },
+    {
+      "id": 388937522,
+      "old": "3.0.0+tml.v2026.08.2.1.preview",
+      "new": "3.0.0-preview",
+      "old_image": "3.0.0-tml-v2026-08-2-1-preview",
+      "digest": "sha256:c21bb979e3354b9edd1f7fa821abc685cfe03d5d828aa270a4ac447931940592",
+      "sha": "f8d7c1fa586536893f3e667a46ae412096e2a36c",
+      "prerelease": true,
+      "body": "This release packages container **v3.0.0** with **tModLoader v2026.08.2.1** on the **preview** channel.\n\n## Container changelog\n\n### Changed\n\n- Enable the WebUI by default; set TMOD_WEB_ENABLED=0 for unattended game-only startup.\n  Simplify Compose to ports, persistent storage and an environment file, using\n  Docker default initialization capabilities and the image privilege drop.\n- Default first-run startup waits for WebUI admin setup before starting the game\n  server. Set `TMOD_WEB_ENABLED=0` to retain unattended game-only startup.\n- Refresh the README with a dashboard screenshot gallery and project attribution.\n\n## Published images\n\n- GitHub Release tag: `3.0.0-preview`\n- Version tag: `ghcr.io/crosis47/tmodloader:3.0.0-preview`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:c21bb979e3354b9edd1f7fa821abc685cfe03d5d828aa270a4ac447931940592`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:3.0.0-preview\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification on both linux/amd64 and linux/arm64 before these tags were assigned.\n\nNative executable architecture and live Workshop download/cache reuse were also verified.\n\n## Upstream and source\n\n- [tModLoader v2026.08.2.1 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.08.2.1)\n- [Container source at f8d7c1fa586536893f3e667a46ae412096e2a36c](https://github.com/Crosis47/tmodloader/tree/f8d7c1fa586536893f3e667a46ae412096e2a36c)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ]
+    },
+    {
+      "id": 388031938,
+      "old": "2.2.0+tml.v2026.07.3.0.stable",
+      "new": "2.2.0",
+      "old_image": "2.2.0-tml-v2026-07-3-0-stable",
+      "digest": "sha256:90750f28ef00a1d690716d43c75f3d51b491565dccc5f1039f4ce72e1e5bebd6",
+      "sha": "be5b2aac41176672fc70e1c94faf641d1d81eec0",
+      "prerelease": false,
+      "body": "This release packages container **v2.2.0** with **tModLoader v2026.07.3.0** on the **stable** channel.\n\n## Container changelog\n\n- Combine backups and recovery, and expand the read-only Overview with world, player, settings, profile and recovery summaries.\n\n- Add Playthroughs to save and switch world, Journey permission and mod selections together.\n\n- Add named mod profiles with running/draft capture, guarded loading, rename, replacement and deletion.\n\n### Added\n\n- Attention banner for pending drafts and recovery issues, amber unsaved-setting\n  cards and blue saved-but-not-applied cards. Clarify player command activity.\n\n- Worlds page with saved-world inventory, guarded creation and switching,\n  generation options, and the shared review/apply progress flow.\n\n- Player Management page with fresh native-console player queries, name filters,\n  reviewed kick/ban actions, announcements and bounded activity history. Persist\n  native bans under `/data/tModLoader/banlist.txt` for generated configurations.\n\n- Recovery dashboard with verified archive previews, confirmed supervised\n  restore, retained original data, startup retry and game health progress.\n  Restores preserve current admin credentials and enforce existing archive,\n  build, free-space and interrupted-restore safeguards.\n\n## Published images\n\n- GitHub Release tag: `2.2.0`\n- Version tag: `ghcr.io/crosis47/tmodloader:2.2.0`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:90750f28ef00a1d690716d43c75f3d51b491565dccc5f1039f4ce72e1e5bebd6`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:2.2.0\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification on both linux/amd64 and linux/arm64 before these tags were assigned.\n\nNative executable architecture and live Workshop download/cache reuse were also verified.\n\n## Upstream and source\n\n- [tModLoader v2026.07.3.0 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.07.3.0)\n- [Container source at be5b2aac41176672fc70e1c94faf641d1d81eec0](https://github.com/Crosis47/tmodloader/tree/be5b2aac41176672fc70e1c94faf641d1d81eec0)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ]
+    },
+    {
+      "id": 388032647,
+      "old": "2.2.0+tml.v2026.08.2.1.preview",
+      "new": "2.2.0-preview",
+      "old_image": "2.2.0-tml-v2026-08-2-1-preview",
+      "digest": "sha256:96212da71c14b7899a307eec519866729f97e812c1ba8a0c8f98749031c83ff7",
+      "sha": "be5b2aac41176672fc70e1c94faf641d1d81eec0",
+      "prerelease": true,
+      "body": "This release packages container **v2.2.0** with **tModLoader v2026.08.2.1** on the **preview** channel.\n\n## Container changelog\n\n- Combine backups and recovery, and expand the read-only Overview with world, player, settings, profile and recovery summaries.\n\n- Add Playthroughs to save and switch world, Journey permission and mod selections together.\n\n- Add named mod profiles with running/draft capture, guarded loading, rename, replacement and deletion.\n\n### Added\n\n- Attention banner for pending drafts and recovery issues, amber unsaved-setting\n  cards and blue saved-but-not-applied cards. Clarify player command activity.\n\n- Worlds page with saved-world inventory, guarded creation and switching,\n  generation options, and the shared review/apply progress flow.\n\n- Player Management page with fresh native-console player queries, name filters,\n  reviewed kick/ban actions, announcements and bounded activity history. Persist\n  native bans under `/data/tModLoader/banlist.txt` for generated configurations.\n\n- Recovery dashboard with verified archive previews, confirmed supervised\n  restore, retained original data, startup retry and game health progress.\n  Restores preserve current admin credentials and enforce existing archive,\n  build, free-space and interrupted-restore safeguards.\n\n## Published images\n\n- GitHub Release tag: `2.2.0-preview`\n- Version tag: `ghcr.io/crosis47/tmodloader:2.2.0-preview`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:96212da71c14b7899a307eec519866729f97e812c1ba8a0c8f98749031c83ff7`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:2.2.0-preview\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification on both linux/amd64 and linux/arm64 before these tags were assigned.\n\nNative executable architecture and live Workshop download/cache reuse were also verified.\n\n## Upstream and source\n\n- [tModLoader v2026.08.2.1 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.08.2.1)\n- [Container source at be5b2aac41176672fc70e1c94faf641d1d81eec0](https://github.com/Crosis47/tmodloader/tree/be5b2aac41176672fc70e1c94faf641d1d81eec0)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ]
+    },
+    {
+      "id": 387496704,
+      "old": "2.1.1+tml.v2026.07.3.0.stable",
+      "new": "2.1.1",
+      "old_image": "2.1.1-tml-v2026-07-3-0-stable",
+      "digest": "sha256:ba3d403fa15080f5234b8bb5c454a98e300b4d4c5e302becdfa28d18760c6604",
+      "sha": "58b28942aeea30e46b485dce9312d6f0e112a2d8",
+      "prerelease": false,
+      "body": "This release packages container **v2.1.1** with **tModLoader v2026.07.3.0** on the **stable** channel.\n\n## Container changelog\n\n### Fixed\n\n- Enable the publisher's containerd image store so AMD64 and ARM64 candidates\n  can be tested under the same multi-platform digest before release publication.\n- Remove obsolete plaintext admin-token upgrade warnings from the documentation\n  and simplify the invalid-hash error. Admin credentials require Argon2id hashes.\n\n## Published images\n\n- GitHub Release tag: `2.1.1`\n- Version tag: `ghcr.io/crosis47/tmodloader:2.1.1`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:ba3d403fa15080f5234b8bb5c454a98e300b4d4c5e302becdfa28d18760c6604`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:2.1.1\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification on both linux/amd64 and linux/arm64 before these tags were assigned.\n\nNative executable architecture and live Workshop download/cache reuse were also verified.\n\n## Upstream and source\n\n- [tModLoader v2026.07.3.0 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.07.3.0)\n- [Container source at 58b28942aeea30e46b485dce9312d6f0e112a2d8](https://github.com/Crosis47/tmodloader/tree/58b28942aeea30e46b485dce9312d6f0e112a2d8)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ]
+    },
+    {
+      "id": 387497487,
+      "old": "2.1.1+tml.v2026.08.2.1.preview",
+      "new": "2.1.1-preview",
+      "old_image": "2.1.1-tml-v2026-08-2-1-preview",
+      "digest": "sha256:1246bc972e096d793816d0bf85c13a9268474ed05352823efae3a1941470cec6",
+      "sha": "58b28942aeea30e46b485dce9312d6f0e112a2d8",
+      "prerelease": true,
+      "body": "This release packages container **v2.1.1** with **tModLoader v2026.08.2.1** on the **preview** channel.\n\n## Container changelog\n\n### Fixed\n\n- Enable the publisher's containerd image store so AMD64 and ARM64 candidates\n  can be tested under the same multi-platform digest before release publication.\n- Remove obsolete plaintext admin-token upgrade warnings from the documentation\n  and simplify the invalid-hash error. Admin credentials require Argon2id hashes.\n\n## Published images\n\n- GitHub Release tag: `2.1.1-preview`\n- Version tag: `ghcr.io/crosis47/tmodloader:2.1.1-preview`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:1246bc972e096d793816d0bf85c13a9268474ed05352823efae3a1941470cec6`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:2.1.1-preview\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification on both linux/amd64 and linux/arm64 before these tags were assigned.\n\nNative executable architecture and live Workshop download/cache reuse were also verified.\n\n## Upstream and source\n\n- [tModLoader v2026.08.2.1 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.08.2.1)\n- [Container source at 58b28942aeea30e46b485dce9312d6f0e112a2d8](https://github.com/Crosis47/tmodloader/tree/58b28942aeea30e46b485dce9312d6f0e112a2d8)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ]
+    },
+    {
+      "id": 386814341,
+      "old": "2.0.0+tml.v2026.07.3.0.stable",
+      "new": "2.0.0",
+      "old_image": "2.0.0-tml-v2026-07-3-0-stable",
+      "digest": "sha256:04009f4931bbeaa25491989096a66530337a3afc0a683f776ef1e6ec452df403",
+      "sha": "c7e8fc24b796af68fd860ec17a6ca6de68560cca",
+      "prerelease": false,
+      "body": "This release packages container **v2.0.0** with **tModLoader v2026.07.3.0** on the **stable** channel.\n\n## Container changelog\n\n### Breaking changes\n\n- Admin secret files must contain an Argon2id hash; plaintext tokens are no\n  longer accepted. Remove the old plaintext mount and leave\n  `TMOD_WEB_TOKEN_FILE` empty to provision through the Web UI, or mount a\n  pre-created Argon2id hash. Existing game worlds and settings are retained.\n\n### Added\n\n- First-run Web UI setup protected by a one-time code from container logs.\n  Game startup waits until the admin hash is saved, then resumes automatically.\n  Remote setup requires HTTPS or a localhost SSH tunnel.\n- Include the Argon2 CLI and Python library, plus an interactive hash creation\n  and rotation helper. Admin tokens accept 8\u2013256 non-whitespace ASCII characters;\n  only the salted hash is persisted with owner-only permissions.\n- Verify setup, hash persistence across restart, and authentication using the\n  container's installed dependencies and disposable integration-test volumes.\n- Preserve normal console filtering across world creation and the subsequent\n  game launch; complete launcher output remains available in the raw log.\n\n- Add `TMOD_WORLDEVIL` and a dashboard world-evil selector. Explicit Corruption\n  or Crimson selections create missing worlds through the dedicated-server menu\n  before normal startup. Existing worlds are retained; the WebUI explains how\n  to choose an unused world name and apply changes to generate a different evil.\n\n## Published images\n\n- GitHub Release tag: `2.0.0`\n- Version tag: `ghcr.io/crosis47/tmodloader:2.0.0`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:04009f4931bbeaa25491989096a66530337a3afc0a683f776ef1e6ec452df403`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:2.0.0\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification before these tags were assigned.\n\n## Upstream and source\n\n- [tModLoader v2026.07.3.0 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.07.3.0)\n- [Container source at c7e8fc24b796af68fd860ec17a6ca6de68560cca](https://github.com/Crosis47/tmodloader/tree/c7e8fc24b796af68fd860ec17a6ca6de68560cca)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64"
+      ]
+    },
+    {
+      "id": 386814356,
+      "old": "2.0.0+tml.v2026.08.2.1.preview",
+      "new": "2.0.0-preview",
+      "old_image": "2.0.0-tml-v2026-08-2-1-preview",
+      "digest": "sha256:872dbcd957c5fa76973a6bdeb7a8a1987f3da9bcf58af5f1e95126fd578ec48e",
+      "sha": "c7e8fc24b796af68fd860ec17a6ca6de68560cca",
+      "prerelease": true,
+      "body": "This release packages container **v2.0.0** with **tModLoader v2026.08.2.1** on the **preview** channel.\n\n## Container changelog\n\n### Breaking changes\n\n- Admin secret files must contain an Argon2id hash; plaintext tokens are no\n  longer accepted. Remove the old plaintext mount and leave\n  `TMOD_WEB_TOKEN_FILE` empty to provision through the Web UI, or mount a\n  pre-created Argon2id hash. Existing game worlds and settings are retained.\n\n### Added\n\n- First-run Web UI setup protected by a one-time code from container logs.\n  Game startup waits until the admin hash is saved, then resumes automatically.\n  Remote setup requires HTTPS or a localhost SSH tunnel.\n- Include the Argon2 CLI and Python library, plus an interactive hash creation\n  and rotation helper. Admin tokens accept 8\u2013256 non-whitespace ASCII characters;\n  only the salted hash is persisted with owner-only permissions.\n- Verify setup, hash persistence across restart, and authentication using the\n  container's installed dependencies and disposable integration-test volumes.\n- Preserve normal console filtering across world creation and the subsequent\n  game launch; complete launcher output remains available in the raw log.\n\n- Add `TMOD_WORLDEVIL` and a dashboard world-evil selector. Explicit Corruption\n  or Crimson selections create missing worlds through the dedicated-server menu\n  before normal startup. Existing worlds are retained; the WebUI explains how\n  to choose an unused world name and apply changes to generate a different evil.\n\n## Published images\n\n- GitHub Release tag: `2.0.0-preview`\n- Version tag: `ghcr.io/crosis47/tmodloader:2.0.0-preview`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:872dbcd957c5fa76973a6bdeb7a8a1987f3da9bcf58af5f1e95126fd578ec48e`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:2.0.0-preview\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification before these tags were assigned.\n\n## Upstream and source\n\n- [tModLoader v2026.08.2.1 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.08.2.1)\n- [Container source at c7e8fc24b796af68fd860ec17a6ca6de68560cca](https://github.com/Crosis47/tmodloader/tree/c7e8fc24b796af68fd860ec17a6ca6de68560cca)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64"
+      ]
+    },
+    {
+      "id": 386357385,
+      "old": "1.4.0+tml.v2026.07.3.0.stable",
+      "new": "1.4.0",
+      "old_image": "1.4.0-tml-v2026-07-3-0-stable",
+      "digest": "sha256:7df500dae96704b8762140b03d5d9666fc3dea9fe85899f2bad9517cb1200d6b",
+      "sha": "f7323e09a4fedef81f699e611906bd271f8594b6",
+      "prerelease": false,
+      "body": "This release packages container **v1.4.0** with **tModLoader v2026.07.3.0** on the **stable** channel.\n\n## Container changelog\n\n### Fixed\n\n- Start with a root-only initializer that repairs ownership and directory access\n  for `/data` and `/backups`, then replaces itself with non-root `tini` and the\n  existing `tml` supervisor/server process tree.\n\n- Seed editable web settings from Compose on first boot and preserve saved web\n  values over later Compose changes. Remove known client-only IDs from saved\n  Workshop selections as well as the enabled mod list.\n\n- Keep Workshop URL/ID import available without a Steam API key; only search and\n  catalog browsing require the key.\n\n- Readiness checks inspect the listening socket without connecting to the game;\n  frequent dashboard polling no longer consumes anonymous player slots.\n\n### Added\n\n- Workshop Apply changes button sharing Configuration's draft review and\n  blocking restart-progress dialog.\n\n- Apply progress lists the names of client-only mods automatically removed from\n  its draft or enabled list, retaining the notice through completion or failure.\n\n- Filter explicitly client-only Workshop mods from the server enabled list on\n  load; label and gray their search/lookup cards and prevent adding them.\n\n- Overview lists confirmed loaded mods by display name and version from server\n  loading records, independently of Workshop API access.\n\n- Workshop controls stay locked with setup guidance until a readable, nonempty\n  Steam API key is configured; console history labels show first-to-last output\n  ranges, with unknown first times explicitly marked for legacy logs.\n\n- Timestamped console-run selector and persistent archives of older console runs\n  for browsing historical output across restarts.\n\n- Blocking apply-progress dialog that prevents dashboard interaction during\n  changes, resumes on reconnect, and can be dismissed after success or failure.\n\n- Supervisor-reported apply stages, elapsed time, and completion/failure feedback\n  directly on Configuration; paged browsing of the full retained console log.\n\n- Grouped configuration sections with setting descriptions and running-value\n  comparisons, plus an authenticated interactive game console with bounded\n  output, command history, and stop-command confirmation.\n\n- Opt-in authenticated in-container dashboard for server health, backup activity,\n  archive verification, storage usage, and low-space warnings.\n- Persistent staged configuration with explicit web-managed mode and confirmed\n  game restart. Environment-managed deployments remain the default.\n- Workshop search with an optional server-side Steam API key, URL/ID lookup,\n  and staged mod/collection selection.\n- Persistent last-success/failure backup status and configurable free-space reserve.\n\n## Published images\n\n- GitHub Release tag: `1.4.0`\n- Version tag: `ghcr.io/crosis47/tmodloader:1.4.0`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:7df500dae96704b8762140b03d5d9666fc3dea9fe85899f2bad9517cb1200d6b`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:1.4.0\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification before these tags were assigned.\n\n## Upstream and source\n\n- [tModLoader v2026.07.3.0 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.07.3.0)\n- [Container source at f7323e09a4fedef81f699e611906bd271f8594b6](https://github.com/Crosis47/tmodloader/tree/f7323e09a4fedef81f699e611906bd271f8594b6)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64"
+      ]
+    },
+    {
+      "id": 386356880,
+      "old": "1.4.0+tml.v2026.08.2.1.preview",
+      "new": "1.4.0-preview",
+      "old_image": "1.4.0-tml-v2026-08-2-1-preview",
+      "digest": "sha256:14ee6c1a1232d603333e95bf128c56902c1b1e4bcd207f8b312e9ba19b10aa76",
+      "sha": "f7323e09a4fedef81f699e611906bd271f8594b6",
+      "prerelease": true,
+      "body": "This release packages container **v1.4.0** with **tModLoader v2026.08.2.1** on the **preview** channel.\n\n## Container changelog\n\n### Fixed\n\n- Start with a root-only initializer that repairs ownership and directory access\n  for `/data` and `/backups`, then replaces itself with non-root `tini` and the\n  existing `tml` supervisor/server process tree.\n\n- Seed editable web settings from Compose on first boot and preserve saved web\n  values over later Compose changes. Remove known client-only IDs from saved\n  Workshop selections as well as the enabled mod list.\n\n- Keep Workshop URL/ID import available without a Steam API key; only search and\n  catalog browsing require the key.\n\n- Readiness checks inspect the listening socket without connecting to the game;\n  frequent dashboard polling no longer consumes anonymous player slots.\n\n### Added\n\n- Workshop Apply changes button sharing Configuration's draft review and\n  blocking restart-progress dialog.\n\n- Apply progress lists the names of client-only mods automatically removed from\n  its draft or enabled list, retaining the notice through completion or failure.\n\n- Filter explicitly client-only Workshop mods from the server enabled list on\n  load; label and gray their search/lookup cards and prevent adding them.\n\n- Overview lists confirmed loaded mods by display name and version from server\n  loading records, independently of Workshop API access.\n\n- Workshop controls stay locked with setup guidance until a readable, nonempty\n  Steam API key is configured; console history labels show first-to-last output\n  ranges, with unknown first times explicitly marked for legacy logs.\n\n- Timestamped console-run selector and persistent archives of older console runs\n  for browsing historical output across restarts.\n\n- Blocking apply-progress dialog that prevents dashboard interaction during\n  changes, resumes on reconnect, and can be dismissed after success or failure.\n\n- Supervisor-reported apply stages, elapsed time, and completion/failure feedback\n  directly on Configuration; paged browsing of the full retained console log.\n\n- Grouped configuration sections with setting descriptions and running-value\n  comparisons, plus an authenticated interactive game console with bounded\n  output, command history, and stop-command confirmation.\n\n- Opt-in authenticated in-container dashboard for server health, backup activity,\n  archive verification, storage usage, and low-space warnings.\n- Persistent staged configuration with explicit web-managed mode and confirmed\n  game restart. Environment-managed deployments remain the default.\n- Workshop search with an optional server-side Steam API key, URL/ID lookup,\n  and staged mod/collection selection.\n- Persistent last-success/failure backup status and configurable free-space reserve.\n\n## Published images\n\n- GitHub Release tag: `1.4.0-preview`\n- Version tag: `ghcr.io/crosis47/tmodloader:1.4.0-preview`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:14ee6c1a1232d603333e95bf128c56902c1b1e4bcd207f8b312e9ba19b10aa76`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:1.4.0-preview\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification before these tags were assigned.\n\n## Upstream and source\n\n- [tModLoader v2026.08.2.1 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.08.2.1)\n- [Container source at f7323e09a4fedef81f699e611906bd271f8594b6](https://github.com/Crosis47/tmodloader/tree/f7323e09a4fedef81f699e611906bd271f8594b6)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64"
+      ]
+    },
+    {
+      "id": 385315041,
+      "old": "1.3.0+tml.v2026.07.3.0.stable",
+      "new": "1.3.0",
+      "old_image": "1.3.0-tml-v2026-07-3-0-stable",
+      "digest": "sha256:65685f592a47d4368ccd6d8c11d79e3ab466161952db8038b7136758701e969f",
+      "sha": "d8b841efcc99236b6aad4e740fdad64b4a2372bd",
+      "prerelease": false,
+      "body": "This release packages container **v1.3.0** with **tModLoader v2026.07.3.0** on the **stable** channel.\n\n## Container changelog\n\n### Added\n\n- Container-native non-root backups using a /backups mount, with verified\n  archives, build fingerprint recording, retention, and interval scheduling.\n- Offline staged restore with a shared-data lock, preserved original data,\n  and fail-closed startup after interrupted restores. No Docker socket or\n  host Python installation is required.\n- Archive corruption, unsafe-entry, image compatibility, retention, and restore\n  failure regression tests.\n\n## Published images\n\n- GitHub Release tag: `1.3.0`\n- Version tag: `ghcr.io/crosis47/tmodloader:1.3.0`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:65685f592a47d4368ccd6d8c11d79e3ab466161952db8038b7136758701e969f`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:1.3.0\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification before these tags were assigned.\n\n## Upstream and source\n\n- [tModLoader v2026.07.3.0 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.07.3.0)\n- [Container source at d8b841efcc99236b6aad4e740fdad64b4a2372bd](https://github.com/Crosis47/tmodloader/tree/d8b841efcc99236b6aad4e740fdad64b4a2372bd)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64"
+      ]
+    },
+    {
+      "id": 385314568,
+      "old": "1.3.0+tml.v2026.08.2.1.preview",
+      "new": "1.3.0-preview",
+      "old_image": "1.3.0-tml-v2026-08-2-1-preview",
+      "digest": "sha256:44bd6675ec5b0103a5395d359aac6df57f1b1a4996d4e86511caaf1f85d1bfc9",
+      "sha": "d8b841efcc99236b6aad4e740fdad64b4a2372bd",
+      "prerelease": true,
+      "body": "This release packages container **v1.3.0** with **tModLoader v2026.08.2.1** on the **preview** channel.\n\n## Container changelog\n\n### Added\n\n- Container-native non-root backups using a /backups mount, with verified\n  archives, build fingerprint recording, retention, and interval scheduling.\n- Offline staged restore with a shared-data lock, preserved original data,\n  and fail-closed startup after interrupted restores. No Docker socket or\n  host Python installation is required.\n- Archive corruption, unsafe-entry, image compatibility, retention, and restore\n  failure regression tests.\n\n## Published images\n\n- GitHub Release tag: `1.3.0-preview`\n- Version tag: `ghcr.io/crosis47/tmodloader:1.3.0-preview`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:44bd6675ec5b0103a5395d359aac6df57f1b1a4996d4e86511caaf1f85d1bfc9`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:1.3.0-preview\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification before these tags were assigned.\n\n## Upstream and source\n\n- [tModLoader v2026.08.2.1 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.08.2.1)\n- [Container source at d8b841efcc99236b6aad4e740fdad64b4a2372bd](https://github.com/Crosis47/tmodloader/tree/d8b841efcc99236b6aad4e740fdad64b4a2372bd)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64"
+      ]
+    },
+    {
+      "id": 385066663,
+      "old": "1.2.1+tml.v2026.07.3.0.stable",
+      "new": "1.2.1",
+      "old_image": "1.2.1-tml-v2026-07-3-0-stable",
+      "digest": "sha256:5f11c2fd59ec2f19eeb32447f0639c9faff242bbad891c97a749023c02f62e46",
+      "sha": "6e3020b3eccd3d6e17e113ff69d5f8f7de212cc2",
+      "prerelease": false,
+      "body": "This release packages container **v1.2.1** with **tModLoader v2026.07.3.0** on the **stable** channel.\n\n## Container changelog\n\n### Fixed\n\n- Generate the `en_US.UTF-8` locale used by SteamCMD so international\n  characters remain supported without its locale fallback warning.\n- Report the mounted path owner, group, mode, and runtime group memberships\n  when a required directory is not writable.\n- Clarify and test that owner-only, group-only, ACL, and combined permission\n  layouts are accepted whenever they grant the runtime identity real write and\n  search access; Linux owner-class precedence is preserved.\n- Include the missing world path in the first-launch warning and identify that\n  initial world creation is expected.\n\n## Published images\n\n- GitHub Release tag: `1.2.1`\n- Version tag: `ghcr.io/crosis47/tmodloader:1.2.1`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:5f11c2fd59ec2f19eeb32447f0639c9faff242bbad891c97a749023c02f62e46`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:1.2.1\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification before these tags were assigned.\n\n## Upstream and source\n\n- [tModLoader v2026.07.3.0 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.07.3.0)\n- [Container source at 6e3020b3eccd3d6e17e113ff69d5f8f7de212cc2](https://github.com/Crosis47/tmodloader/tree/6e3020b3eccd3d6e17e113ff69d5f8f7de212cc2)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64"
+      ]
+    },
+    {
+      "id": 385066741,
+      "old": "1.2.1+tml.v2026.08.2.1.preview",
+      "new": "1.2.1-preview",
+      "old_image": "1.2.1-tml-v2026-08-2-1-preview",
+      "digest": "sha256:d249dc3e73f20a06c6dea897788f59b395da7263f0dddebfb12445c9eaf76663",
+      "sha": "6e3020b3eccd3d6e17e113ff69d5f8f7de212cc2",
+      "prerelease": true,
+      "body": "This release packages container **v1.2.1** with **tModLoader v2026.08.2.1** on the **preview** channel.\n\n## Container changelog\n\n### Fixed\n\n- Generate the `en_US.UTF-8` locale used by SteamCMD so international\n  characters remain supported without its locale fallback warning.\n- Report the mounted path owner, group, mode, and runtime group memberships\n  when a required directory is not writable.\n- Clarify and test that owner-only, group-only, ACL, and combined permission\n  layouts are accepted whenever they grant the runtime identity real write and\n  search access; Linux owner-class precedence is preserved.\n- Include the missing world path in the first-launch warning and identify that\n  initial world creation is expected.\n\n## Published images\n\n- GitHub Release tag: `1.2.1-preview`\n- Version tag: `ghcr.io/crosis47/tmodloader:1.2.1-preview`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:d249dc3e73f20a06c6dea897788f59b395da7263f0dddebfb12445c9eaf76663`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:1.2.1-preview\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification before these tags were assigned.\n\n## Upstream and source\n\n- [tModLoader v2026.08.2.1 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.08.2.1)\n- [Container source at 6e3020b3eccd3d6e17e113ff69d5f8f7de212cc2](https://github.com/Crosis47/tmodloader/tree/6e3020b3eccd3d6e17e113ff69d5f8f7de212cc2)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64"
+      ]
+    },
+    {
+      "id": 385035561,
+      "old": "1.2.0+tml.v2026.07.3.0.stable",
+      "new": "1.2.0",
+      "old_image": "1.2.0-tml-v2026-07-3-0-stable",
+      "digest": "sha256:2409d1a93c4802a5a29140b83b0514a69ac9d3dddf37a98e671772e0259c2829",
+      "sha": "109cc00a6c86021128e0b4ee16cee1885339dba6",
+      "prerelease": false,
+      "body": "This release packages container **v1.2.0** with **tModLoader v2026.07.3.0** on the **stable** channel.\n\n## Container changelog\n\n### Added\n\n- A dedicated non-root `tml` runtime identity with fixed UID/GID `1000:1000`\n  in published images and configurable identity build arguments for local\n  images.\n- Explicit startup diagnostics for mounted paths that are not writable by the\n  runtime identity.\n\n### Changed\n\n- Replaced tmux session supervision with a server process group tracked\n  directly by the entrypoint under `tini`.\n- Console injection and scheduled saves now use a private runtime FIFO while\n  preserving graceful shutdown and the server's real exit status.\n- The supplied Compose deployment drops all Linux capabilities, prevents\n  privilege escalation, and stores runtime control files on a bounded tmpfs.\n- The real-server smoke test now verifies the non-root identity, PID 1 init,\n  direct supervision, command injection, and hardened container settings.\n\n## Published images\n\n- GitHub Release tag: `1.2.0`\n- Version tag: `ghcr.io/crosis47/tmodloader:1.2.0`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:2409d1a93c4802a5a29140b83b0514a69ac9d3dddf37a98e671772e0259c2829`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:1.2.0\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification before these tags were assigned.\n\n## Upstream and source\n\n- [tModLoader v2026.07.3.0 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.07.3.0)\n- [Container source at 109cc00a6c86021128e0b4ee16cee1885339dba6](https://github.com/Crosis47/tmodloader/tree/109cc00a6c86021128e0b4ee16cee1885339dba6)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64"
+      ]
+    },
+    {
+      "id": 385035880,
+      "old": "1.2.0+tml.v2026.08.2.1.preview",
+      "new": "1.2.0-preview",
+      "old_image": "1.2.0-tml-v2026-08-2-1-preview",
+      "digest": "sha256:e3f7f5173bac662abc069f46eebdf41523c41c629f5209120b16cd2e091861fa",
+      "sha": "109cc00a6c86021128e0b4ee16cee1885339dba6",
+      "prerelease": true,
+      "body": "This release packages container **v1.2.0** with **tModLoader v2026.08.2.1** on the **preview** channel.\n\n## Container changelog\n\n### Added\n\n- A dedicated non-root `tml` runtime identity with fixed UID/GID `1000:1000`\n  in published images and configurable identity build arguments for local\n  images.\n- Explicit startup diagnostics for mounted paths that are not writable by the\n  runtime identity.\n\n### Changed\n\n- Replaced tmux session supervision with a server process group tracked\n  directly by the entrypoint under `tini`.\n- Console injection and scheduled saves now use a private runtime FIFO while\n  preserving graceful shutdown and the server's real exit status.\n- The supplied Compose deployment drops all Linux capabilities, prevents\n  privilege escalation, and stores runtime control files on a bounded tmpfs.\n- The real-server smoke test now verifies the non-root identity, PID 1 init,\n  direct supervision, command injection, and hardened container settings.\n\n## Published images\n\n- GitHub Release tag: `1.2.0-preview`\n- Version tag: `ghcr.io/crosis47/tmodloader:1.2.0-preview`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:e3f7f5173bac662abc069f46eebdf41523c41c629f5209120b16cd2e091861fa`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:1.2.0-preview\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification before these tags were assigned.\n\n## Upstream and source\n\n- [tModLoader v2026.08.2.1 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.08.2.1)\n- [Container source at 109cc00a6c86021128e0b4ee16cee1885339dba6](https://github.com/Crosis47/tmodloader/tree/109cc00a6c86021128e0b4ee16cee1885339dba6)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64"
+      ]
+    },
+    {
+      "id": 384840079,
+      "old": "1.1.1+tml.v2026.07.3.0.stable",
+      "new": "1.1.1",
+      "old_image": "1.1.1-tml-v2026-07-3-0-stable",
+      "digest": "sha256:dae5acc67edd0e22f30ee9a9cadf8e10140a004738047b07b6095015ff4313db",
+      "sha": "2fa496bdcfb07e0d77dacca9673d0bb4f4b0335d",
+      "prerelease": false,
+      "body": "This release packages container **v1.1.1** with **tModLoader v2026.07.3.0** on the **stable** channel.\n\n## Container changelog\n\n### Fixed\n\n- Retry transient failures while downloading the upstream tModLoader release\n  archive during image builds, preventing a single GitHub 5xx response from\n  failing an otherwise valid release publication.\n\n## Published images\n\n- GitHub Release tag: `1.1.1`\n- Version tag: `ghcr.io/crosis47/tmodloader:1.1.1`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:dae5acc67edd0e22f30ee9a9cadf8e10140a004738047b07b6095015ff4313db`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:1.1.1\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification before these tags were assigned.\n\n## Upstream and source\n\n- [tModLoader v2026.07.3.0 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.07.3.0)\n- [Container source at 2fa496bdcfb07e0d77dacca9673d0bb4f4b0335d](https://github.com/Crosis47/tmodloader/tree/2fa496bdcfb07e0d77dacca9673d0bb4f4b0335d)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64"
+      ]
+    },
+    {
+      "id": 384840384,
+      "old": "1.1.1+tml.v2026.08.2.1.preview",
+      "new": "1.1.1-preview",
+      "old_image": "1.1.1-tml-v2026-08-2-1-preview",
+      "digest": "sha256:35365e8e063304235827adeb862517a6c5f2bbc98704d6e46c3672ea91c16c37",
+      "sha": "2fa496bdcfb07e0d77dacca9673d0bb4f4b0335d",
+      "prerelease": true,
+      "body": "This release packages container **v1.1.1** with **tModLoader v2026.08.2.1** on the **preview** channel.\n\n## Container changelog\n\n### Fixed\n\n- Retry transient failures while downloading the upstream tModLoader release\n  archive during image builds, preventing a single GitHub 5xx response from\n  failing an otherwise valid release publication.\n\n## Published images\n\n- GitHub Release tag: `1.1.1-preview`\n- Version tag: `ghcr.io/crosis47/tmodloader:1.1.1-preview`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:35365e8e063304235827adeb862517a6c5f2bbc98704d6e46c3672ea91c16c37`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:1.1.1-preview\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification before these tags were assigned.\n\n## Upstream and source\n\n- [tModLoader v2026.08.2.1 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.08.2.1)\n- [Container source at 2fa496bdcfb07e0d77dacca9673d0bb4f4b0335d](https://github.com/Crosis47/tmodloader/tree/2fa496bdcfb07e0d77dacca9673d0bb4f4b0335d)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64"
+      ]
+    },
+    {
+      "id": 384833089,
+      "old": "1.1.0+tml.v2026.07.3.0.stable",
+      "new": "1.1.0",
+      "old_image": "1.1.0-tml-v2026-07-3-0-stable",
+      "digest": "sha256:2b6a2efb4bc9b326dcd09ac0a912b5b7548c0b8d0efa7f27435b34ee2ae98391",
+      "sha": "7d4176b6befbe8b1ef7f64b3f418c790f368deaa",
+      "prerelease": false,
+      "body": "This release packages container **v1.1.0** with **tModLoader v2026.07.3.0** on the **stable** channel.\n\n## Container changelog\n\n### Added\n\n- `TMOD_LOG_LEVEL=quiet|normal|debug` to control Docker console verbosity\n  without reducing tModLoader's native logs.\n- Persistent raw console logs for the current and previous server launch.\n- Automatic raw-log tail replay after a non-zero server exit, configurable\n  with `TMOD_CRASH_LOG_LINES`.\n\n### Changed\n\n- The default `normal` console collapses high-frequency world-generation\n  progress, hides upstream launcher command chatter, and suppresses loopback\n  healthcheck connection notices.\n\n## Published images\n\n- GitHub Release tag: `1.1.0`\n- Version tag: `ghcr.io/crosis47/tmodloader:1.1.0`\n- Immutable tested digest: `ghcr.io/crosis47/tmodloader@sha256:2b6a2efb4bc9b326dcd09ac0a912b5b7548c0b8d0efa7f27435b34ee2ae98391`\n\n```bash\ndocker pull ghcr.io/crosis47/tmodloader:1.1.0\n```\n\n## Validation\n\nThe candidate digest passed Bash and configuration regression tests, a real dedicated-server startup and healthcheck, command injection, graceful shutdown, password-leak detection, and persistent-log verification before these tags were assigned.\n\n## Upstream and source\n\n- [tModLoader v2026.07.3.0 release notes](https://github.com/tModLoader/tModLoader/releases/tag/v2026.07.3.0)\n- [Container source at 7d4176b6befbe8b1ef7f64b3f418c790f368deaa](https://github.com/Crosis47/tmodloader/tree/7d4176b6befbe8b1ef7f64b3f418c790f368deaa)\n",
+      "image_exists": false,
+      "platforms": [
+        "linux/amd64"
+      ]
+    }
+  ],
+  "baseline": {
+    "3.0.1": "sha256:f762e754e08484b7e9feddc2da57286bfaa3c25ebef5b9daeb82c6a29e24dbdf",
+    "3.0.1-preview": "sha256:351a694e08aa4226b00fdc913ac477a2761e6a5e3f3f9c80338262e07f94b298",
+    "latest": "sha256:f762e754e08484b7e9feddc2da57286bfaa3c25ebef5b9daeb82c6a29e24dbdf",
+    "stable": "sha256:f762e754e08484b7e9feddc2da57286bfaa3c25ebef5b9daeb82c6a29e24dbdf",
+    "preview": "sha256:351a694e08aa4226b00fdc913ac477a2761e6a5e3f3f9c80338262e07f94b298"
+  }
+}
