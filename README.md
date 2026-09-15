@@ -119,7 +119,8 @@ docker compose logs --tail=100 --follow tmodloader
 With the dashboard enabled, **the game waits for first-run admin setup**:
 
 1. Find the one-time setup code in the container logs.
-2. Open [http://localhost:8080](http://localhost:8080) on the Docker host.
+2. Open `http://SERVER-IP:8080` from your home network, or
+   [http://localhost:8080](http://localhost:8080) on the Docker host.
 3. Enter the code and choose an admin token (8–256 ASCII characters, no whitespace).
    Save it in your password manager; use it to sign in afterward.
 
@@ -128,10 +129,22 @@ continues startup automatically. First-time mod downloads and world generation
 can take several minutes. Press `Ctrl+C` to stop following logs without stopping
 the server.
 
-The dashboard port is bound to localhost. For a remote Docker host, use an SSH
-tunnel such as `ssh -L 8080:127.0.0.1:8080 your-server`, then open the same local
-URL. An HTTPS reverse proxy is another option; set `TMOD_WEB_ORIGIN` to its exact
-browser origin and keep the backend private.
+HTTP works for clients in `10.0.0.0/8`, `172.16.0.0/12`, and `192.168.0.0/16`
+(RFC 1918), plus loopback. Other sources, including non-loopback IPv6, require
+HTTPS for setup and all dashboard access. HTTP traffic is unencrypted; use it
+only on a trusted network. The server checks the client source IP, not the URL.
+
+Leave `TMOD_WEB_ORIGIN` empty when opening the server IP. For a hostname, set it
+to the exact browser origin. For HTTPS through a reverse proxy, also set
+`TMOD_WEB_TRUSTED_PROXY` to that proxy's single IP as seen by the container.
+The proxy must preserve `Host` and overwrite `X-Forwarded-For` with the actual
+single client IP and `X-Forwarded-Proto` with `http` or `https`. Multi-proxy header
+chains are rejected. Restrict backend access to the proxy when publishing it.
+
+Docker forwarding or another gateway can hide the original source IP behind a
+private address. This rule can only classify the IP the container actually sees;
+do not directly port-forward the HTTP dashboard to the internet. Use the HTTPS
+proxy with the trusted-proxy setting to preserve the original client identity.
 
 ### 4. Join the server
 
@@ -170,7 +183,7 @@ world files or pin mod versions; keep backups before changing a world's mods.
 After editing `.env`, recreate the container with `docker compose up -d`.
 In web mode, change saved settings in the dashboard. Docker ports, mounts,
 credentials, and configuration mode remain managed outside the dashboard.
-If changing the dashboard's host port, update `TMOD_WEB_ORIGIN` to match.
+If you explicitly set `TMOD_WEB_ORIGIN`, update its port when changing the dashboard port.
 
 ## Data and backups
 

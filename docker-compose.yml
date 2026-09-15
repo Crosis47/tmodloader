@@ -1,5 +1,5 @@
 # Copy .env.example to .env, then run docker compose up -d.
-# WebUI: http://localhost:8080. First-run setup code: docker compose logs tmodloader.
+# WebUI: http://SERVER-IP:8080. First-run setup code: docker compose logs tmodloader.
 # To opt out, set TMOD_WEB_ENABLED=0 in .env. No setup is required when disabled.
 services:
   tmodloader:
@@ -10,8 +10,8 @@ services:
     env_file: .env
     ports:
       - "${TMOD_HOST_PORT:-7777}:${TMOD_PORT:-7777}/tcp"
-      # Private admin access. Use an SSH tunnel or HTTPS proxy for remote access.
-      - "127.0.0.1:${TMOD_WEB_HOST_PORT:-8080}:8080/tcp"
+      # HTTP for RFC 1918 clients; use an HTTPS proxy for public clients.
+      - "${TMOD_WEB_HOST_PORT:-8080}:8080/tcp"
     volumes:
       - "./data:/data"
       - "./backups:/backups"

@@ -110,7 +110,7 @@ class AdminTests(unittest.TestCase):
 
     def request(self, path, body=None, auth=True, origin=None, host='localhost:8080'):
         encoded = json.dumps(body).encode() if body is not None else b''
-        environ = {'REQUEST_METHOD': 'POST' if body is not None else 'GET', 'PATH_INFO': path,
+        environ = {'REMOTE_ADDR': '192.168.1.20', 'wsgi.url_scheme': 'http', 'REQUEST_METHOD': 'POST' if body is not None else 'GET', 'PATH_INFO': path,
                    'HTTP_HOST': host, 'CONTENT_TYPE': 'application/json', 'CONTENT_LENGTH': str(len(encoded)),
                    'wsgi.input': io.BytesIO(encoded)}
         if auth: environ['HTTP_AUTHORIZATION'] = 'Bearer ' + self.token
@@ -175,9 +175,10 @@ class AdminTests(unittest.TestCase):
         self.assertTrue((self.root / 'admin-auth-ready').exists())
         self.assertTrue(self.request('/api/settings')[0].startswith('200'))
 
-    def test_remote_plain_http_setup_refused(self):
+    def test_remote_plain_http_origin_does_not_crash_startup(self):
+        from types import SimpleNamespace
         with patch.object(server, 'TOKEN_HASH', ''), patch.object(server, 'SETUP_CODE', ''), patch.object(server.admin_auth, 'token_path', return_value=self.root / 'absent'), patch.dict(os.environ, {'TMOD_WEB_ORIGIN': 'http://example.com:8080'}):
-            with self.assertRaisesRegex(ValueError, 'HTTPS'):
+            with patch.dict(sys.modules, {'waitress': SimpleNamespace(serve=lambda *a, **kw: None)}):
                 server.main()
 
     def test_cross_origin_and_rebinding_rejected(self):

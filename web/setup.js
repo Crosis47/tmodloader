@@ -5,9 +5,6 @@ document.getElementById('setup-form').addEventListener('submit', async event => 
   const message = document.getElementById('setup-message');
   button.disabled = true;
   try {
-    if (location.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) {
-      throw new Error('Use HTTPS or a localhost SSH tunnel for setup.');
-    }
     const response = await fetch('/api/setup', {
       method: 'POST', credentials: 'omit', cache: 'no-store',
       headers: {'Content-Type': 'application/json'},
