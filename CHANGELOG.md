@@ -8,9 +8,16 @@ immutable deployment identifier.
 
 ## Unreleased
 
+## 3.0.0 - 2026-09-15
+
+### Changed
+
 - Enable the WebUI by default; set TMOD_WEB_ENABLED=0 for unattended game-only startup.
   Simplify Compose to ports, persistent storage and an environment file, using
   Docker default initialization capabilities and the image privilege drop.
+- Default first-run startup waits for WebUI admin setup before starting the game
+  server. Set `TMOD_WEB_ENABLED=0` to retain unattended game-only startup.
+- Refresh the README with a dashboard screenshot gallery and project attribution.
 
 ## 2.2.0 - 2026-09-13
 
