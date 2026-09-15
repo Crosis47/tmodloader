@@ -1,6 +1,13 @@
-# This Copyright does NOT include that which is owned by Re-Logic, or the TML Team and only includes that which is contained in the Dockerfile and assorted scripts, not counting the DotNetInstall script..
+# MIT License
 
+Copyright (c) 2026 Crosis47
+
+Portions retained from JACOBSMILE/tmodloader1.4:
 Copyright 2023 JACOBSMILE
+
+This license covers this repository's original code and documentation. Terraria,
+tModLoader, SteamCMD, DepotDownloader, DotNetInstall, and other third-party
+components retain their respective copyright notices and licenses.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 

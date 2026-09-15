@@ -7,10 +7,8 @@ Run a modded Terraria server in Docker, with a built-in web dashboard for managi
 worlds, Workshop mods, players, and backups. Keep your server's data across
 container updates and manage it from your browser or Docker Compose.
 
-This is an independently maintained **hard fork of
-[JACOBSMILE/tmodloader1.4](https://github.com/JACOBSMILE/tmodloader1.4)**, with its
-own features, fixes, and releases. It is not affiliated with Re-Logic or the
-tModLoader team.
+This independently maintained project has its own features, fixes, and releases.
+It is not affiliated with Re-Logic or the tModLoader team.
 
 [Container images](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader) ·
 [Releases](https://github.com/Crosis47/tmodloader/releases) ·
@@ -32,30 +30,14 @@ tModLoader team.
 - **AMD64 and ARM64 support:** Linux images for both architectures, with automated
   build checks and real-server startup tests before publication.
 
-## Dashboard screenshots
+## Dashboard gallery
 
-Captured from a running preview server. Expand a view to take a closer look.
+Captured from a running preview server. Select a screenshot to view it full size.
 
-<details>
-<summary>Overview — server health, world, players, and backup status</summary>
-
-![Dashboard overview showing a healthy server, current world, and backup status](docs/images/dashboard-overview.png)
-
-</details>
-
-<details>
-<summary>Worlds — saved worlds and new-world configuration</summary>
-
-![World management showing the saved world and new-world creation options](docs/images/dashboard-worlds.png)
-
-</details>
-
-<details>
-<summary>Backups & recovery — archives, verification, and restoration</summary>
-
-![Backups and recovery showing archive verification and the restore workflow](docs/images/dashboard-backups.png)
-
-</details>
+| Overview | Worlds | Backups & recovery |
+| :---: | :---: | :---: |
+| [![Server overview](docs/images/dashboard-overview.png)](docs/images/dashboard-overview.png) | [![World management](docs/images/dashboard-worlds.png)](docs/images/dashboard-worlds.png) | [![Backups and recovery](docs/images/dashboard-backups.png)](docs/images/dashboard-backups.png) |
+| Health, players, and server status | Saved worlds and world creation | Archives, verification, and restoration |
 
 ## Getting started
 
@@ -200,8 +182,8 @@ information first.
 ## Credits
 
 Built on [tModLoader](https://github.com/tModLoader/tModLoader) for
-[Terraria](https://terraria.org/), and the original
-[JACOBSMILE/tmodloader1.4](https://github.com/JACOBSMILE/tmodloader1.4) container.
+[Terraria](https://terraria.org/). Inspired by
+[JACOBSMILE/tmodloader1.4](https://github.com/JACOBSMILE/tmodloader1.4).
 Thanks also to [ldericher](https://github.com/ldericher/tmodloader-docker),
 [rfvgyhn](https://github.com/rfvgyhn/tmodloader-docker),
 [guillheu](https://github.com/guillheu/tmodloader-docker), and

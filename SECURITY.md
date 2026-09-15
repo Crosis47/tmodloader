@@ -2,8 +2,7 @@
 
 ## Project scope
 
-This repository is an independently maintained hard fork of
-`JACOBSMILE/tmodloader1.4`. Security reports for this repository should concern
+This project is independently maintained. Security reports for this repository should concern
 the Dockerfile, container entrypoint and helper scripts, GitHub Actions
 workflows, published GHCR images, or the way those pieces integrate tModLoader.
 

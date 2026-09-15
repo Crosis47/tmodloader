@@ -4,9 +4,8 @@ Thank you for helping maintain this tModLoader container. Contributions should
 focus on container behavior, deployment, Workshop management, automation,
 documentation, or fixes that make the dedicated server more reliable.
 
-This project is a hard fork of `JACOBSMILE/tmodloader1.4`; new work should be
-submitted here rather than assuming it will be accepted by or synchronized
-with the original repository.
+This project is independently maintained. Submit issues and pull requests here;
+its features, fixes, and releases are managed in this repository.
 
 ## Before starting
 
