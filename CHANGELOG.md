@@ -8,6 +8,8 @@ immutable deployment identifier.
 
 ## Unreleased
 
+## 3.1.0 - 2026-09-15
+
 ### Changed
 
 - Allow dashboard HTTP access from RFC 1918 source addresses and loopback;
