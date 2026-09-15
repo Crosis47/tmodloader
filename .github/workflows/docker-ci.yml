@@ -79,7 +79,9 @@ jobs:
         run: bash tests/release-metadata-test.sh
 
       - name: Validate Compose configuration
-        run: docker compose config --quiet
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
 
       - name: Set up build emulation
         uses: docker/setup-qemu-action@v3
