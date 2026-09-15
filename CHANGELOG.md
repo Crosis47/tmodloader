@@ -8,6 +8,10 @@ immutable deployment identifier.
 
 ## Unreleased
 
+- Enable the WebUI by default; set TMOD_WEB_ENABLED=0 for unattended game-only startup.
+  Simplify Compose to ports, persistent storage and an environment file, using
+  Docker default initialization capabilities and the image privilege drop.
+
 ## 2.2.0 - 2026-09-13
 
 - Combine backups and recovery, and expand the read-only Overview with world, player, settings, profile and recovery summaries.

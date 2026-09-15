@@ -24,7 +24,7 @@ try:
                   '--cap-add', 'FOWNER', '--cap-add', 'SETGID', '--cap-add', 'SETUID',
                   '--security-opt', 'no-new-privileges:true',
                   '--volume', '/data', '--volume', '/backups',
-                  '-p', '127.0.0.1::8080', '-e', 'TMOD_WEB_ENABLED=1',
+                  '-p', '127.0.0.1::8080',
                   '-e', 'TMOD_CONFIG_SOURCE=web', '-e', 'TMOD_WORLDSIZE=1',
                   '-e', 'TMOD_AUTOSAVE_INTERVAL=0', '-e', 'TMOD_PASS=test-password', image)
     info = json.loads(backup.docker('inspect', name))[0]

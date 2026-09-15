@@ -44,7 +44,7 @@ For local Python tests, install `argon2-cffi`. Also run admin tests inside the
 built image to verify compatibility with Ubuntu's packaged Argon2 library.
 
 For the administration page, run `python3 -m unittest discover -s tests -p
-'test_admin.py' -v`, `node --check web/app.js`, and `node --check web/setup.js`. Test an opt-in container with
+'test_admin.py' -v`, `node --check web/app.js`, and `node --check web/setup.js`. Test the default WebUI-enabled container with
 disposable volumes and a test token: first-run setup, saved-hash restart, authentication rejection, stage without
 apply, confirmed apply/restart, backup/verify, and environment-mode read-only
 behavior. Live Workshop search requires a separately supplied Steam API key;

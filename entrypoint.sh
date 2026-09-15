@@ -149,7 +149,7 @@ admin_exports="$(python3 /terraria-server/admin_settings.py boot)" || fail "Inva
 # Only allowlisted keys and shlex-quoted values are emitted by admin_settings.
 eval "$admin_exports"
 unset admin_exports
-[[ "${TMOD_WEB_ENABLED:-0}" =~ ^[01]$ ]] || fail "TMOD_WEB_ENABLED must be 0 or 1."
+[[ "${TMOD_WEB_ENABLED:-1}" =~ ^[01]$ ]] || fail "TMOD_WEB_ENABLED must be 0 or 1."
 reject_line_breaks TMOD_SHUTDOWN_MESSAGE "$TMOD_SHUTDOWN_MESSAGE"
 [[ "${TMOD_AUTOSAVE_INTERVAL:-}" =~ ^[0-9]+$ ]] || fail "TMOD_AUTOSAVE_INTERVAL must be a non-negative integer."
 [[ "${TMOD_SHUTDOWN_TIMEOUT:-90}" =~ ^[1-9][0-9]*$ ]] || fail "TMOD_SHUTDOWN_TIMEOUT must be a positive integer."
@@ -196,7 +196,7 @@ printf '[SYSTEM] Shutdown message: configured; autosave interval: %s minute(s)\n
 trap shutdown TERM INT
 trap cleanup EXIT
 
-if [[ "${TMOD_WEB_ENABLED:-0}" == 1 ]]; then
+if [[ "${TMOD_WEB_ENABLED:-1}" == 1 ]]; then
     rm -f "$runtime_dir/admin-auth-ready"
     python3 /terraria-server/admin_server.py &
     admin_pid=$!

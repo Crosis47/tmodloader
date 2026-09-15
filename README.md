@@ -86,18 +86,8 @@ On Windows PowerShell, use `Copy-Item .env.example .env` instead.
 Open `.env`. For browser-based configuration, set:
 
 ```dotenv
-TMOD_WEB_ENABLED=1
 TMOD_CONFIG_SOURCE=web
 ```
-
-In `docker-compose.yml`, uncomment the dashboard mapping under `ports`:
-
-```yaml
-      - "127.0.0.1:${TMOD_WEB_HOST_PORT:-8080}:8080/tcp"
-```
-
-Leave `TMOD_WEB_TOKEN_FILE` empty to create your admin credential during first-run
-setup; no secret mount is needed for this path.
 
 This enables settings edits, world selection, and loading profiles and playthroughs
 in the dashboard. Environment values seed the initial settings; afterward, saved
@@ -156,7 +146,7 @@ These are the main values to review for a new server:
 | Setting | Purpose / default |
 | --- | --- |
 | `TMOD_CONFIG_SOURCE` | `env` for `.env` settings; `web` for dashboard-managed settings. |
-| `TMOD_WEB_ENABLED` | `1` enables the dashboard; `0` (default) disables it and skips admin setup. |
+| `TMOD_WEB_ENABLED` | `1` enables the dashboard; `0` disables it and skips admin setup. |
 | `TMOD_PASS` | Game password, separate from the admin token. Empty means no game password. |
 | `TMOD_HOST_PORT` | Port players connect to; defaults to `7777`. |
 | `TMOD_WORLDNAME` | Selects a saved world or creates it if missing; defaults to `Docker`. |
