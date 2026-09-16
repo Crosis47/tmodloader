@@ -141,6 +141,9 @@ def record_removed(names):
 def boot_values():
     # Compose seeds absent fields; saved values (including empty strings) win.
     values = clean_mod_selection(validate({**effective(), **read_json(ACTIVE)}))
+    import admin_journey
+    admin_journey.initialize()
+    values.update(admin_journey.effective(values.get('TMOD_WORLDNAME')))
     atomic_json(ACTIVE, values)
     return values
 
@@ -191,6 +194,9 @@ def main(command):
         environment['TMOD_CONFIG_PATH'] = str(config.with_name('.admin-serverconfig.txt'))
         subprocess.run(['/terraria-server/prepare-config.sh'], env=environment, check=True)
         os.replace(environment['TMOD_CONFIG_PATH'], config)
+        if command == 'apply':
+            import admin_journey
+            admin_journey.remember_applied(values)
         atomic_json(ACTIVE, values)
         (RUNTIME / 'admin.env').write_text(exports(values))
     else:

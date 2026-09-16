@@ -23,6 +23,7 @@ import admin_schema
 import admin_recovery
 import admin_players
 import admin_worlds
+import admin_journey
 import admin_profiles
 import admin_playthroughs
 
@@ -187,9 +188,15 @@ def revision(values):
 
 def configuration():
     running = settings.read_json(settings.RUNTIME / 'admin-effective.json', settings.effective())
-    staged = settings.clean_mod_selection(settings.read_json(settings.PENDING, running))
+    staged = settings.clean_mod_selection({**running, **settings.read_json(settings.PENDING, running)})
+    changes = [{'key': key, 'label': admin_schema.FIELDS.get(key, {}).get('label', key),
+                'running': running.get(key), 'staged': value}
+               for key, value in sorted(staged.items()) if value != running.get(key)]
     return {'mode': 'web' if settings.web_mode() else 'env', 'running': running,
-            'staged': staged, 'revision': revision(staged), 'pending': settings.PENDING.exists(),
+            'staged': staged, 'revision': revision(staged),
+            'pending': settings.PENDING.exists() and bool(changes),
+            'changes': changes if settings.PENDING.exists() else [],
+            'draft_exists': settings.PENDING.exists(),
             'ranges': settings.RANGES, 'choices': settings.CHOICES,
             'groups': [{'id': identity, 'title': title, 'description': description} for identity, title, description in admin_schema.GROUPS],
             'fields': admin_schema.FIELDS,
@@ -210,15 +217,17 @@ def health():
 def job_runner(kind, archive=None, checksum=None):
     global JOB
     try:
-        if kind in ('backup', 'verify', 'preview'):
-            command = ['tmod-backup', '_preview' if kind == 'preview' else kind]
+        if kind in ('backup', 'verify', 'preview', 'inspect', 'prepare'):
+            command = ['tmod-backup', '_' + kind if kind in ('preview', 'inspect', 'prepare') else kind]
             if archive:
                 command += ['--archive', str(archive)]
+            if kind == 'prepare':
+                command += ['--confirm', '--sha256', checksum]
             result = subprocess.run(command, capture_output=True, text=True)
             if result.returncode:
                 raise ValueError(result.stderr[-2000:] or 'Operation failed; inspect container logs and backup status.')
-            if kind == 'preview':
-                JOB = {**JOB, 'preview': json.loads(result.stdout)}
+            if kind in ('preview', 'inspect', 'prepare'):
+                JOB = {**JOB, kind: json.loads(result.stdout)}
         else:
             request_id = uuid.uuid4().hex
             if kind == 'apply':
@@ -248,7 +257,16 @@ def job_runner(kind, archive=None, checksum=None):
                     raise ValueError('Supervisor stopped before completing the operation.')
                 os.kill(int(pid_file.read_text()), 0)
                 time.sleep(1)
-        JOB = {**JOB, 'state': 'success', 'detail': 'Game server is healthy.' if kind in ('apply', 'restore', 'retry') else 'Archive verified; review the preview before restoring.' if kind == 'preview' else 'Operation completed.', 'finished': admin_metrics.timestamp()}
+        detail = 'Operation completed.'
+        if kind in ('apply', 'restore', 'retry'):
+            detail = 'Game server is healthy.'
+        elif kind == 'preview':
+            detail = 'Archive verified; review the preview before restoring.'
+        elif kind == 'inspect':
+            detail = 'Archive verified. Expand its row to review contents and compatibility.'
+        elif kind == 'prepare':
+            detail = 'Prepared copy: ' + JOB['prepare']['archive'] + '. Original preserved; select the copy to preview a restore.'
+        JOB = {**JOB, 'state': 'success', 'detail': detail, 'finished': admin_metrics.timestamp()}
     except Exception as error:
         JOB = {**JOB, 'state': 'failed', 'detail': str(error), 'finished': admin_metrics.timestamp()}
     finally:
@@ -263,7 +281,7 @@ def start_job(kind, archive=None, checksum=None):
     global JOB
     if not OPERATION.acquire(blocking=False):
         raise ValueError('Another administration operation is running.')
-    JOB = {'state': 'running', 'kind': kind, 'stage': 'queued', 'detail': 'Waiting for the supervisor.', 'started': admin_metrics.timestamp()}
+    JOB = {'state': 'running', 'kind': kind, 'archive': archive.name if archive else None, 'stage': 'queued', 'detail': 'Checking archive.' if kind in ('inspect', 'preview', 'prepare', 'verify') else 'Waiting for the supervisor.', 'started': admin_metrics.timestamp()}
     if kind in ('restore', 'retry'):
         try:
             admin_recovery.record(JOB)
@@ -301,9 +319,42 @@ def api(method, path, query, payload):
                     'running': current['running'].get('TMOD_MODS', ''),
                     'staged': current['staged'].get('TMOD_MODS', ''),
                     'editable': settings.web_mode(), 'pending': current['pending'], 'busy': busy}
+    if path == '/api/worlds/journey' and method in ('GET', 'POST'):
+        with STATE_LOCK:
+            name = query.get('name', [None])[0] if method == 'GET' else payload.get('name')
+            if name is not None:
+                admin_worlds.check('switch', name)
+                metadata = admin_worlds.read_metadata(admin_worlds.world_path(name))
+                if not metadata.get('available') or metadata.get('difficulty') != 'Journey':
+                    raise ValueError('Journey permissions are available only for confirmed Journey worlds.')
+            current = configuration()
+            if method == 'POST':
+                if not settings.web_mode() or os.environ.get('TMOD_USECONFIGFILE', 'No').lower() in ('yes', 'true', '1'):
+                    raise ValueError('Enable web-managed generated configuration to edit Journey permissions.')
+                if JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running':
+                    raise ValueError('Wait for the current operation before changing Journey permissions.')
+                if payload.get('settings_revision') != current['revision']:
+                    raise ValueError('Settings changed. Close and reopen this dialog before saving.')
+                admin_journey.save(payload)
+                selected = current['staged'].get('TMOD_WORLDNAME')
+                selected_metadata = admin_worlds.read_metadata(admin_worlds.world_path(selected)) if selected else {}
+                intent = settings.read_json(settings.PENDING.with_name('pending-world.json'))
+                selected_is_journey = selected_metadata.get('difficulty') == 'Journey' or (
+                    intent.get('action') == 'create' and intent.get('name') == selected and
+                    current['staged'].get('TMOD_DIFFICULTY') == '3')
+                if selected_is_journey and (name is None or name == selected):
+                    values = {**current['staged'], **admin_journey.effective(selected)}
+                    if values != current['staged']:
+                        settings.atomic_json(settings.PENDING, values)
+                current = configuration()
+            return {**admin_journey.state(name), 'settings_revision': current['revision'],
+                    'running': admin_journey.permissions(current['running']),
+                    'running_world': current['running'].get('TMOD_WORLDNAME'),
+                    'editable': settings.web_mode() and os.environ.get('TMOD_USECONFIGFILE', 'No').lower() not in ('yes', 'true', '1')}
     if method == 'GET' and path == '/api/worlds':
         config = configuration()
-        return {**admin_worlds.inventory(config['running']), 'healthy': health(),
+        healthy = health()
+        return {**admin_worlds.inventory(config['running'], healthy=healthy), 'healthy': healthy,
                 'busy': JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running',
                 'revision': config['revision'], 'staged_name': config['staged'].get('TMOD_WORLDNAME'),
                 'pending': config['pending']}
@@ -351,17 +402,17 @@ def api(method, path, query, payload):
             return {'detail': detail}
     if method == 'GET' and path == '/api/recovery':
         return admin_recovery.status()
-    if method == 'POST' and path in ('/api/recovery/preview', '/api/recovery/restore', '/api/recovery/retry'):
+    if method == 'POST' and path in ('/api/recovery/preview', '/api/recovery/restore', '/api/recovery/retry', '/api/recovery/inspect', '/api/recovery/prepare'):
         kind = path.rsplit('/', 1)[-1]
         with STATE_LOCK:
             if settings.read_json(admin_metrics.STATE).get('state') == 'running':
                 raise ValueError('Wait for the current backup to finish.')
-            if kind != 'preview' and payload.get('confirm') is not True:
+            if kind not in ('preview', 'inspect') and payload.get('confirm') is not True:
                 raise ValueError('Explicit confirmation is required.')
-            if kind != 'preview' and admin_recovery.status()['interrupted']:
+            if kind not in ('preview', 'inspect') and admin_recovery.status()['interrupted']:
                 raise ValueError('An interrupted restore requires manual recovery. Read the Recovery page guidance.')
             checksum = payload.get('sha256')
-            if kind == 'restore' and (not isinstance(checksum, str) or not re.fullmatch('[a-f0-9]{64}', checksum)):
+            if kind in ('restore', 'prepare') and (not isinstance(checksum, str) or not re.fullmatch('[a-f0-9]{64}', checksum)):
                 raise ValueError('Preview the archive before restoring.')
             archive = None if kind == 'retry' else admin_recovery.archive_path(payload.get('archive'))
             return start_job(kind, archive, checksum)

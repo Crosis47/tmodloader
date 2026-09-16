@@ -82,6 +82,20 @@ class AdminTests(unittest.TestCase):
             self.assertTrue(self.request('/api/recovery/preview', {'archive': 'tmod-backup-a'})[0].startswith('400'))
             start.assert_not_called()
 
+    def test_backup_preparation_requires_inspected_checksum_and_confirmation(self):
+        self.assertTrue(self.request('/api/recovery/prepare', {'confirm': True})[0].startswith('400'))
+        self.assertTrue(self.request('/api/recovery/prepare', {'sha256': 'a' * 64})[0].startswith('400'))
+        self.assertTrue(self.request('/api/recovery/inspect', {'archive': '../bad'})[0].startswith('400'))
+        with patch.object(metrics, 'DEST', self.root), patch.object(server, 'start_job', return_value={'state': 'running'}) as start:
+            bundle = self.root / 'tmod-backup-test'
+            bundle.mkdir()
+            (bundle / 'manifest.json').write_text('{}')
+            (bundle / 'data.tar.gz').write_bytes(b'test')
+            self.assertTrue(self.request('/api/recovery/inspect', {'archive': bundle.name})[0].startswith('200'))
+            start.assert_called_with('inspect', bundle, None)
+            self.assertTrue(self.request('/api/recovery/prepare', {'archive': bundle.name, 'sha256': 'a' * 64, 'confirm': True})[0].startswith('200'))
+            start.assert_called_with('prepare', bundle, 'a' * 64)
+
     def test_recovery_preview_dispatch_and_link_rejection(self):
         with patch.object(metrics, 'DEST', self.root), patch.object(server, 'start_job', return_value={'state': 'running'}) as start:
             bundle = self.root / 'tmod-backup-test'
@@ -121,6 +135,7 @@ class AdminTests(unittest.TestCase):
 
     def test_authentication_required(self):
         self.assertTrue(self.request('/api/settings', auth=False)[0].startswith('403'))
+        self.assertTrue(self.request('/api/worlds/journey', auth=False)[0].startswith('403'))
 
     def test_wrong_token_rejected(self):
         self.token = 'wrong-token-with-at-least-32-characters'

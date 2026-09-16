@@ -125,6 +125,16 @@ def create_backup(data, destination, info):
                     'source': info.get('Source', str(data)),
                     'image_reference': info['Config']['Image'],
                     'sha256': digest(archive)}
+        import admin_backup_details
+        metadata['snapshot'] = admin_backup_details.summarize_archive(archive)
+        if info.get('Runtime'):
+            metadata['runtime'] = info['Runtime']
+        if info.get('Running'):
+            selection = info['Running'].get('TMOD_MODS', '')
+            metadata['snapshot'].update(active_world=info['Running'].get('TMOD_WORLDNAME'),
+                                        active_world_source='Running settings at backup',
+                                        workshop=selection.split(',')[:100] if selection else [],
+                                        workshop_count=len(selection.split(',')) if selection else 0)
         (staging / 'manifest.json').write_text(json.dumps(metadata, indent=2) + '\n')
         validate(staging)
         for path in (archive, staging / 'manifest.json'):
@@ -139,11 +149,13 @@ def create_backup(data, destination, info):
 
 def retain(destination, count, current):
     candidates = []
-    source = validate(current)['source']
+    current_metadata = validate(current)
+    source = current_metadata['source']
     for path in destination.glob('tmod-backup-*'):
         if path.is_dir() and not path.is_symlink():
             try:
-                if validate(path).get('source') != source:
+                metadata = validate(path)
+                if metadata.get('source') != source or metadata.get('image_id') != current_metadata['image_id']:
                     continue
             except (ValueError, OSError, tarfile.TarError, KeyError):
                 continue

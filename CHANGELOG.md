@@ -12,6 +12,46 @@ immutable deployment identifier.
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-09-16
+
+### Added
+
+- Expandable backup details with archived worlds, running-world provenance, mods,
+  timestamps, sizes, and runtime compatibility. Inspect older archives to recover
+  available details from their contents.
+- Prepare a verified backup copy for a different container build when the
+  tModLoader release matches, preserving the original archive. Retention keeps
+  archives made by other builds.
+
+- Server Journey defaults and optional per-world overrides on the Worlds page,
+  shown only for confirmed Journey worlds; overrides persist across world switches
+  and container restarts.
+- A saved-change review dialog listing each setting's running and saved values,
+  including world and Journey settings outside Configuration.
+- Expand saved-world entries to see size, difficulty, evil, seed, creation date,
+  Hardmode status, special seeds, spawn/dungeon coordinates, and file details.
+  Show current session uptime and persistent cumulative uptime per world, starting
+  when the world finishes loading.
+
+### Changed
+
+- Move backup preparation and restore actions into expanded archive details;
+  review and confirm restores in a popup.
+- Move world creation into a New World dialog and Journey permissions into world
+  actions, removing both sections from the general Configuration form.
+- Hide the switch action for the current world and label other world actions Switch.
+
+### Fixed
+
+- Normalize the backup helper launch header during image builds so Windows
+  checkouts can run inspection; show inspection progress and errors beside archives.
+- Show the saved-changes reminder only when the draft differs from running settings,
+  rather than whenever a draft file exists.
+- Preserve focus, text selections, and unfinished profile/playthrough names during
+  background refreshes; keep world creation fields enabled while polling.
+- Automatically scale dashboard storage and file sizes to readable binary units,
+  promoting values at 1,000 (for example, GiB to TiB).
+
 ## [3.1.1] - 2026-09-16
 
 ### Changed
