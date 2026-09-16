@@ -1,12 +1,31 @@
 # Container Changelog
 
+All notable container changes are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and container versions
+follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 This changelog records changes made by this maintained container fork. It does
 not reproduce the tModLoader release notes. `VERSION` contains the container's
 SemVer core. GitHub Releases and image tags use that version, with `-preview`
 for preview builds. Release notes identify the bundled tModLoader version. An image digest remains the
 immutable deployment identifier.
 
-## Unreleased
+## [Unreleased]
+
+## [3.1.1] - 2026-09-16
+
+### Changed
+
+- Present release notes as dated, categorized changes following Keep a Changelog,
+  with image and validation details in a separate expandable section.
+
+### Fixed
+
+- Fix creation of worlds with spaces in their names, preserving the configured
+  filename and mod sidecar without replacing existing worlds.
+- Show live admin-token validation and matching indicators during first-run setup.
+  Keep submission disabled until all fields are ready, and show progress,
+  incorrect-code errors, and connection recovery guidance.
 
 ## 3.1.0 - 2026-09-15
 
@@ -275,3 +294,6 @@ immutable deployment identifier.
   stable and preview releases.
 - Made generated configuration, shutdown, autosave, and command injection more
   reliable.
+
+[Unreleased]: https://github.com/Crosis47/tmodloader/compare/3.1.1...HEAD
+[3.1.1]: https://github.com/Crosis47/tmodloader/compare/3.1.0...3.1.1

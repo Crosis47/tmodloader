@@ -17,3 +17,9 @@
 .setting-card{padding:1rem;border:1px solid var(--line);border-radius:.5rem}.setting-card.setting-unsaved{border-color:var(--warn);background:#33291d;box-shadow:inset 4px 0 var(--warn)}.unsaved-badge{color:var(--warn);font-size:.85rem;font-weight:700}
 
 .setting-card.setting-staged:not(.setting-unsaved){border-color:#8dbfff;background:#1b2c40;box-shadow:inset 4px 0 #8dbfff}.staged-badge{color:#a8cfff;font-size:.85rem;font-weight:700}
+#setup-form .field-feedback{font-size:.85rem;margin:.35rem 0 1rem;color:var(--muted)}
+#setup-form .field-feedback[data-state=valid]{color:var(--accent)}
+#setup-form .field-feedback[data-state=invalid]{color:var(--warn)}
+#setup-form input[aria-invalid=true]{border-color:var(--warn)}
+#setup-submit:disabled{background:#52616b;color:#d2d9dd;opacity:.65;cursor:not-allowed}
+#setup-message:not(:empty){padding:.8rem;border-left:3px solid var(--warn);background:#33291d}
