@@ -46,6 +46,13 @@ const {chromium} = require('playwright');
     await page.getByRole('button', {name: 'Return to dashboard', exact: true}).click();
     assert.equal(applies, 1);
     await page.getByRole('textbox', {name: 'Name for Vanilla'}).fill('Renamed');
+    await page.getByRole('textbox', {name: 'Name for Vanilla'}).evaluate(input => input.setSelectionRange(1, 4));
+    await page.evaluate(() => refreshProfiles(true));
+    assert.deepEqual(await page.getByRole('textbox', {name: 'Name for Vanilla'}).evaluate(input => [input === document.activeElement, input.value, input.selectionStart, input.selectionEnd]), [true, 'Renamed', 1, 4]);
+    await page.getByRole('textbox', {name: 'Name for Vanilla'}).evaluate(input => input.blur());
+    await page.evaluate(() => refreshProfiles(true));
+    assert.equal(await page.getByRole('textbox', {name: 'Name for Vanilla'}).inputValue(), 'Renamed');
+
     await page.getByRole('button', {name: 'Rename', exact: true}).click();
     await page.getByRole('heading', {name: 'Renamed', exact: true}).waitFor();
     await page.getByRole('button', {name: 'Delete', exact: true}).click(); await page.locator('#confirm-cancel').click();

@@ -244,14 +244,14 @@ COPY --chown=root:root --chmod=0755 inject.sh /usr/local/bin/inject
 COPY --chown=root:root --chmod=0755 healthcheck.sh /usr/local/bin/healthcheck
 COPY --chown=tml:tml autosave.sh .
 COPY --chown=tml:tml prepare-config.sh .
-COPY --chown=root:root backup.py .
+COPY --chown=root:root backup.py admin_backup_details.py ./
 COPY --chown=root:root --chmod=0755 container-backup.py /usr/local/bin/tmod-backup
 COPY --chown=tml:tml VERSION .
 COPY --chown=tml:tml admin_settings.py admin_metrics.py admin_workshop.py admin_server.py ./
 COPY --chown=tml:tml admin_schema.py admin_auth.py admin_access.py ./
 COPY --chown=tml:tml admin_recovery.py ./
 COPY --chown=tml:tml admin_players.py ./
-COPY --chown=tml:tml admin_worlds.py ./
+COPY --chown=tml:tml admin_worlds.py admin_world_metadata.py admin_world_time.py admin_journey.py ./
 COPY --chown=tml:tml admin_profiles.py admin_playthroughs.py ./
 COPY --chown=tml:tml web ./web
 COPY --chown=root:root --chmod=0755 container-init.sh /usr/local/bin/tmod-init
@@ -265,6 +265,11 @@ ENV TMOD_WEB_ORIGIN=""
 ENV TMOD_WEB_TRUSTED_PROXY=""
 ENV TMOD_WEB_TOKEN_FILE=""
 ENV TMOD_WORKSHOP_KEY_FILE=""
+
+USER root
+RUN sed -i 's/\r$//' /usr/local/bin/tmod-backup
+USER tml
+RUN /usr/local/bin/tmod-backup --help > /dev/null
 
 RUN find ./LaunchUtils -type f -name '*.sh' -exec chmod 755 {} + \
     && chmod 755 ./entrypoint.sh \
@@ -286,7 +291,9 @@ RUN bash -c 'set -Eeo pipefail; \
     && rm -rf ./tModLoader-Logs \
     && ln -s /data/tModLoader/Logs ./tModLoader-Logs
 
-RUN sha256sum VERSION tModLoader.dll entrypoint.sh run-server.sh create_world.py backup.py \
+RUN python3 -c 'import json,hashlib,sys; from pathlib import Path; print(json.dumps({"container_version":Path("VERSION").read_text().strip(),"tmodloader_version":sys.argv[1],"tmodloader_sha256":hashlib.sha256(Path("tModLoader.dll").read_bytes()).hexdigest()}))' "$TMOD_VERSION" > backup-runtime.json
+
+RUN sha256sum VERSION tModLoader.dll entrypoint.sh run-server.sh create_world.py backup.py admin_backup_details.py backup-runtime.json \
         /usr/local/bin/tmod-backup /usr/local/bin/tmod-init \
         | sha256sum | cut -d ' ' -f 1 > backup-build-id
 

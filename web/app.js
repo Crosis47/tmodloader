@@ -13,7 +13,17 @@ const $ = id => document.getElementById(id);
 
 const tell = text => { $('message').textContent = text; };
 
-const bytes = n => n == null ? 'Unavailable' : new Intl.NumberFormat(undefined, {maximumFractionDigits: 1}).format(n / 1073741824) + ' GiB';
+const bytes = n => {
+  if (n == null) return 'Unavailable';
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+  let unit = 0;
+  // Promote at 1,000 for readability, retaining binary (1,024-byte) units.
+  while (Math.abs(n) >= 1000 && unit < units.length - 1) {
+    n /= 1024;
+    unit++;
+  }
+  return new Intl.NumberFormat(undefined, {maximumFractionDigits: 1}).format(n) + ' ' + units[unit];
+};
 
 async function api(path, body) {
 
@@ -303,25 +313,90 @@ async function refresh() {
 
   $('warnings').replaceChildren(...backups.warnings.map(warning => node('p', warning, 'notice')));
 
-  const rows = backups.archives.map(archive => {
-
-    const row = node('tr'); row.append(node('td', archive.name), node('td', bytes(archive.bytes)));
-
-    const cell = node('td'); const button = node('button', 'Verify'); button.disabled = data.job.state === 'running';
-
-    button.onclick = action(async () => { await api('/api/verify', {archive: archive.name, confirm: true}); tell('Archive verification started. See operation status above.'); await refresh(); });
-
-    cell.append(button); row.append(cell); return row;
-
-  });
-
-  $('archives').replaceChildren(...rows);
-
-  if (!rows.length) { const row = node('tr'); const cell = node('td', 'No backup archives found.'); cell.colSpan = 3; row.append(cell); $('archives').append(row); }
+  renderArchives(data);
 
 }
 
-let recoveryPreview = null, recoverySubmitting = false, recoveryBusy = false;
+const expandedArchives = new Set(), inspectedArchives = new Map();
+let archiveSignature = '';
+function renderArchives(data) {
+  if (data.job.state === 'success' && data.job.inspect) {
+    const result = data.job.inspect;
+    inspectedArchives.set(result.archive, result);
+  }
+  if (data.job.kind === 'inspect' && data.job.state === 'failed') inspectedArchives.delete(data.job.archive);
+  const signature = JSON.stringify([data.backups.archives, data.job, [...inspectedArchives]]);
+  if (signature === archiveSignature) return;
+  archiveSignature = signature;
+  const focusId = $('archives').contains(document.activeElement) ? document.activeElement.id : null;
+  const rows = data.backups.archives.flatMap((archive, index) => {
+    const cached = inspectedArchives.get(archive.name);
+    const details = cached && cached.sha256 === archive.sha256 && cached.image_id === archive.image_id ? cached : archive;
+    const snapshot = details.snapshot || {}, runtime = details.runtime || {}, compatibility = details.compatibility || {};
+    const row = node('tr'), cell = node('td'), detailRow = node('tr'), detailCell = node('td'), disclosure = node('div'), summary = node('button', (expandedArchives.has(archive.name) ? '▾ ' : '▸ ') + archive.name);
+    detailCell.colSpan = 3; disclosure.className = 'world-details';
+    detailRow.hidden = !expandedArchives.has(archive.name);
+    detailRow.id = 'archive-details-' + index;
+    summary.setAttribute('aria-controls', detailRow.id);
+    summary.setAttribute('aria-expanded', String(!detailRow.hidden));
+    summary.id = 'archive-summary-' + index;
+    summary.onclick = () => { detailRow.hidden = !detailRow.hidden; summary.textContent = (detailRow.hidden ? '▸ ' : '▾ ') + archive.name; summary.setAttribute('aria-expanded', String(!detailRow.hidden)); if (!detailRow.hidden) expandedArchives.add(archive.name); else expandedArchives.delete(archive.name); };
+    const grid = node('dl'); grid.className = 'world-details-grid'; disclosure.append(grid);
+    const lines = [
+      ['Backup date', recoveryDate(archive.created)],
+      [snapshot.active_world_source === 'Saved dashboard settings' ? 'Saved world selection (running world unconfirmed)' : 'Last running world', snapshot.active_world || 'Not recorded'],
+      ['World identification source', snapshot.active_world_source || 'Not recorded; inspect this archive'],
+      ['Saved worlds', (snapshot.worlds || []).join(', ') || 'Not recorded'],
+      ['World count', snapshot.world_count ?? 'Not recorded'],
+      ['Enabled mod count', snapshot.enabled_mod_count ?? 'Not recorded'],
+      ['Enabled mods', (snapshot.enabled_mods || []).join(', ') || 'None recorded'],
+      ['Workshop items', (snapshot.workshop || []).join(', ') || 'None recorded'],
+      ['Container version', runtime.container_version || 'Not recorded'],
+      ['tModLoader version', runtime.tmodloader_version || snapshot.tmodloader_version || 'Not recorded'],
+      ['Unpacked size', snapshot.unpacked_bytes == null ? 'Not recorded' : bytes(snapshot.unpacked_bytes)],
+      ['Files', snapshot.file_count ?? 'Not recorded'],
+      ['Included data', [['Dashboard settings', snapshot.has_settings], ['Logs', snapshot.has_logs], ['Mod configuration', snapshot.has_mod_config]].filter(([, present]) => present).map(([label]) => label).join(', ') || 'Inspect to check contents'],
+      ['Checksum (SHA-256)', details.sha256 || 'Not recorded'],
+      ['Compatibility', compatibility.detail || 'Inspect to check compatibility']
+    ];
+    if (details.prepared_from) lines.push(['Prepared from', details.prepared_from.archive], ['Copy prepared on', recoveryDate(details.prepared_from.prepared_at)]);
+    for (const [label, value] of lines) { const item = node('div'); item.append(node('dt', label), node('dd', String(value))); grid.append(item); }
+    disclosure.append(node('p', details.verified ? 'Checksum and archive contents verified.' : 'Manifest summary; use Inspect & verify to check the archived files.', 'muted'));
+    disclosure.append(node('p', 'Restoring replaces worlds, mods, mod configuration, logs and saved dashboard settings. Current admin credentials and Compose settings are preserved.', 'muted'));
+    cell.append(summary); detailCell.append(disclosure); detailRow.append(detailCell); row.append(cell, node('td', bytes(archive.bytes)));
+    const actions = node('td'), inspect = node('button', 'Inspect & verify'); inspect.id = 'archive-inspect-' + index;
+    inspect.disabled = data.job.state === 'running' || data.backups.operation.state === 'running';
+    const inspectionStatus = node('p', '', 'muted'); inspectionStatus.setAttribute('role', 'status');
+    if (data.job.archive === archive.name && ['inspect', 'prepare'].includes(data.job.kind)) {
+      inspectionStatus.textContent = data.job.state === 'running' ? 'Checking archive checksum and contents…' : data.job.detail || (data.job.state === 'failed' ? 'Inspection failed.' : 'Inspection complete.');
+    } else if (details.verified) inspectionStatus.textContent = 'Checksum and contents verified.';
+    inspect.onclick = action(async () => {
+      expandedArchives.add(archive.name); inspect.disabled = true; inspectionStatus.textContent = 'Starting inspection…';
+      try { await api('/api/recovery/inspect', {archive: archive.name}); await refresh(); }
+      catch (error) { inspectionStatus.textContent = 'Inspection failed: ' + error.message; inspect.disabled = false; throw error; }
+    });
+    actions.append(inspect, inspectionStatus);
+    if (details.verified && compatibility.can_prepare) {
+      const prepare = node('button', 'Prepare for Running Container Version'); prepare.id = 'archive-prepare-' + index; prepare.disabled = inspect.disabled;
+      prepare.onclick = action(async () => {
+        if (await confirmAction('Prepare backup for this container?', 'Create a verified copy of ' + archive.name + ' for the current container. The original stays intact. This requires additional backup storage.', 'The tModLoader release matches. World files and mods are not converted or changed. Restore remains a separate action.')) {
+          await api('/api/recovery/prepare', {archive: archive.name, sha256: details.sha256, confirm: true}); await refresh();
+        }
+      }); disclosure.append(prepare);
+    }
+    if (details.verified && compatibility.matches_current) {
+      const restore = node('button', 'Restore this backup'); restore.id = 'archive-restore-' + index;
+      restore.disabled = inspect.disabled;
+      restore.onclick = action(() => openRestoreReview(archive.name)); disclosure.append(restore);
+    }
+    row.append(actions); return [row, detailRow];
+  });
+  if (!rows.length) { const row = node('tr'), cell = node('td', 'No backup archives found.'); cell.colSpan = 3; row.append(cell); rows.push(row); }
+  $('archives').replaceChildren(...rows);
+  if (focusId) document.getElementById(focusId)?.focus({preventScroll: true});
+}
+
+let recoveryArchive = null, recoveryPreview = null, recoverySubmitting = false, recoveryBusy = false;
 
 function recoveryDate(value) {
 
@@ -336,39 +411,27 @@ async function refreshRecovery(data) {
   const recovery = await api('/api/recovery');
   attentionRecovery = recovery; renderAttention();
 
-  const selected = $('recovery-archive').value;
-
-  const choices = data.backups.archives;
-
-  $('recovery-archive').replaceChildren(...choices.map(archive => { const option = node('option', archive.name); option.value = archive.name; return option; }));
-
-  if (choices.some(archive => archive.name === selected)) $('recovery-archive').value = selected;
-
   const job = data.job;
 
   const busy = recoverySubmitting || job.state === 'running' || data.backups.operation.state === 'running';
 
-  if (job.kind === 'preview' && job.state === 'success' && job.preview?.archive === $('recovery-archive').value) recoveryPreview = job.preview;
+  if (job.kind === 'preview' && job.state === 'success' && job.preview?.archive === recoveryArchive) recoveryPreview = job.preview;
 
-  if (recoveryPreview?.archive !== $('recovery-archive').value) recoveryPreview = null;
+  if (recoveryPreview?.archive !== recoveryArchive) recoveryPreview = null;
 
   const preview = recoveryPreview;
 
-  $('recovery-preview-detail').replaceChildren(...(preview ? [node('p', 'Created: ' + recoveryDate(preview.created)), node('p', 'Worlds: ' + (preview.worlds.join(', ') || 'No world files recorded')), node('p', preview.replaces), node('p', 'Staging space: ' + bytes(preview.required_bytes) + ' · available: ' + bytes(preview.free_bytes)), node('p', 'Original data will be retained for manual rollback. The archive is checked again before the game stops.', 'muted')] : [node('p', 'Choose an archive and verify it to preview the restore.')]));
-
-  $('recovery-preview').disabled = busy || !choices.length;
-
-  $('recovery-archive').disabled = busy;
+  $('recovery-preview-detail').replaceChildren(...(preview ? [node('p', 'Created: ' + recoveryDate(preview.created)), node('p', 'Last running world: ' + (preview.snapshot?.active_world || 'Not recorded')), node('p', 'Worlds: ' + (preview.worlds.join(', ') || 'No world files recorded')), node('p', preview.replaces), node('p', 'Staging space: ' + bytes(preview.required_bytes) + ' · available: ' + bytes(preview.free_bytes)), node('p', 'Original data will be retained for manual rollback. The archive is checked again before the game stops.', 'muted')] : [node('p', job.kind === 'preview' && job.state === 'failed' ? job.detail : 'Checking archive checksum, compatibility and available space…')]));
 
   $('recovery-restore').disabled = busy || !preview || recovery.interrupted;
 
   $('recovery-retry').disabled = busy || data.healthy || recovery.interrupted;
 
-  const current = ['preview', 'restore', 'retry'].includes(job.kind) ? job : recovery.operation;
+  const current = ['preview', 'restore', 'retry', 'inspect', 'prepare'].includes(job.kind) ? job : recovery.operation;
 
   $('recovery-status').textContent = recovery.interrupted ? 'Interrupted file replacement: manual recovery required. Do not restart the game.' : current.state ? [current.kind, current.state, current.detail].filter(Boolean).join(' · ') : 'No recovery operation recorded.';
 
-  const stages = current.kind === 'preview' ? [['queued', 'Verify archive']] : [['queued', 'Queued'], ['verifying', 'Verify before downtime'], ['stopping', 'Save & stop'], ['restoring', 'Stage & replace files'], ['settings', 'Load configuration'], ['starting', 'Start game'], ['health', 'Check health']].filter(([id]) => current.kind !== 'retry' || !['verifying', 'restoring'].includes(id));
+  const stages = ['preview', 'inspect', 'prepare'].includes(current.kind) ? [['queued', current.kind === 'prepare' ? 'Prepare verified copy' : 'Verify archive']] : [['queued', 'Queued'], ['verifying', 'Verify before downtime'], ['stopping', 'Save & stop'], ['restoring', 'Stage & replace files'], ['settings', 'Load configuration'], ['starting', 'Start game'], ['health', 'Check health']].filter(([id]) => current.kind !== 'retry' || !['verifying', 'restoring'].includes(id));
 
   const index = stages.findIndex(([id]) => id === current.stage);
 
@@ -382,7 +445,17 @@ async function refreshRecovery(data) {
 
 }
 
-$('recovery-archive').onchange = () => { recoveryPreview = null; $('recovery-restore').disabled = true; $('recovery-preview-detail').textContent = 'Verify the selected archive to preview it.'; };
+async function openRestoreReview(name) {
+  recoveryArchive = name; recoveryPreview = null;
+  $('restore-archive').textContent = name;
+  $('recovery-preview-detail').textContent = 'Checking archive checksum, compatibility and available space…';
+  $('recovery-restore').disabled = true;
+  $('restore-dialog').showModal();
+  try { await submitRecovery('preview', {archive: name}); }
+  catch (error) { $('recovery-preview-detail').textContent = error.message; }
+}
+$('restore-cancel').onclick = () => $('restore-dialog').close();
+$('restore-dialog').addEventListener('close', () => { recoveryArchive = null; recoveryPreview = null; });
 
 async function submitRecovery(kind, body) {
 
@@ -392,7 +465,7 @@ async function submitRecovery(kind, body) {
 
   recoverySubmitting = true;
 
-  for (const id of ['recovery-preview', 'recovery-restore', 'recovery-retry']) $(id).disabled = true;
+  for (const id of ['recovery-restore', 'recovery-retry']) $(id).disabled = true;
 
   try { await api('/api/recovery/' + kind, body); }
 
@@ -402,16 +475,11 @@ async function submitRecovery(kind, body) {
 
 }
 
-$('recovery-preview').onclick = action(() => submitRecovery('preview', {archive: $('recovery-archive').value}));
-
 $('recovery-restore').onclick = action(async () => {
-
   const preview = recoveryPreview;
-
-  if (!preview) return;
-
-  if (await confirmAction('Restore ' + preview.archive + '?', 'Players will disconnect. ' + preview.replaces, 'Worlds: ' + (preview.worlds.join(', ') || '(none)') + '\nOriginal data will be retained for manual rollback.')) await submitRecovery('restore', {archive: preview.archive, sha256: preview.sha256, confirm: true});
-
+  if (!preview || preview.archive !== recoveryArchive) return;
+  await submitRecovery('restore', {archive: preview.archive, sha256: preview.sha256, confirm: true});
+  $('restore-dialog').close();
 });
 
 $('recovery-retry').onclick = action(async () => { if (await confirmAction('Retry game startup?', 'Start the current data again and check game health. This does not replace files.')) await submitRecovery('retry', {confirm: true}); });
@@ -443,7 +511,8 @@ async function loadSettings() {
 
   $('compose-settings').textContent = Object.entries(config.compose_only).map(([key, value]) => key + ': ' + value).join('\n');
 
-  const sections = config.groups.map(group => {
+  const configurationGroups = config.groups.filter(group => !['world', 'journey'].includes(group.id));
+  const sections = configurationGroups.map(group => {
 
     const section = node('fieldset', undefined, 'config-section'); section.id = 'config-' + group.id;
 
@@ -493,7 +562,7 @@ async function loadSettings() {
   $('fields').replaceChildren(...sections);
   renderAttention();
 
-  $('config-jumps').replaceChildren(...config.groups.map(group => { const link = node('a', group.title); link.href = '#config-' + group.id; return link; }));
+  $('config-jumps').replaceChildren(...configurationGroups.map(group => { const link = node('a', group.title); link.href = '#config-' + group.id; return link; }));
 
   $('search-help').textContent = config.workshop_search ? 'Browse tModLoader mods with real Steam preview images. Steam metadata does not guarantee multiplayer or version compatibility.' : 'Provide a Steam API key to unlock the full graphical mod browser and search on this page, including real Steam preview images. Mount the key as a secret file, set TMOD_WORKSHOP_KEY_FILE to its container path, and recreate the container. A configured key must have access to Steam’s Workshop API.';
 
@@ -600,12 +669,64 @@ async function refreshConsole() {
 }
 
 let worldState = null, worldsBusy = false, worldSubmitting = false;
+const expandedWorlds = new Set();
+
+function worldUptime(world) {
+  if (!world.selected) return 'Not active';
+  if (!worldState?.healthy) return 'Server not running / starting';
+  if (world.session_uptime_seconds == null) return 'Unavailable';
+  return uptimeDuration(world.session_uptime_seconds);
+}
+
+function uptimeDuration(value) {
+  const seconds = Math.max(0, Math.floor(value));
+  const days = Math.floor(seconds / 86400), hours = Math.floor(seconds % 86400 / 3600), minutes = Math.floor(seconds % 3600 / 60);
+  return (days ? days + 'd ' : '') + (days || hours ? hours + 'h ' : '') + minutes + 'm ' + seconds % 60 + 's';
+}
+
+function updateWorldUptimes() {
+  for (const element of $('worlds-list').querySelectorAll('[data-world-uptime]')) {
+    const world = worldState?.worlds?.find(world => world.name === element.dataset.worldUptime);
+    element.textContent = world ? (element.dataset.uptimeKind === 'total' ? world.total_uptime_seconds == null ? 'Not tracked yet' : uptimeDuration(world.total_uptime_seconds) : worldUptime(world)) : 'Unavailable';
+  }
+}
+
+function worldDetails(world) {
+  const panel = node('div', undefined, 'world-details'), details = world.metadata;
+  const list = node('dl', undefined, 'world-details-grid');
+  const add = (label, value) => { const item = node('div'); item.append(node('dt', label), node('dd', value)); list.append(item); };
+  if (details?.available) {
+    add('World name', details.title);
+    add('Size', details.size + ' · ' + details.width.toLocaleString() + ' × ' + details.height.toLocaleString() + ' tiles');
+    add('Difficulty', details.difficulty);
+    add('Evil', details.evil);
+    add('Seed', details.seed || 'Not recorded');
+    add('Progression', details.hardmode ? 'Hardmode' : 'Pre-Hardmode');
+    add('Special seeds', details.special_seeds?.join(', ') || 'None');
+    add('Created', details.created ? new Date(details.created).toLocaleString() : 'Not recorded');
+    add('Spawn (tiles)', details.spawn.x + ', ' + details.spawn.y);
+    add('Dungeon (tiles)', details.dungeon.x + ', ' + details.dungeon.y);
+    add('World ID', String(details.world_id));
+  } else {
+    panel.append(node('p', details?.detail || 'World details are unavailable for this save.', 'muted'));
+  }
+  add('World file', (world.filename || world.name + '.wld') + ' · ' + bytes(world.bytes));
+  add('Mod data', world.has_mod_data ? world.name + '.twld · ' + bytes(world.mod_bytes) : 'No mod sidecar');
+  add('Last saved', new Date(world.modified).toLocaleString());
+  const uptime = node('div'), value = node('dd', worldUptime(world)); value.dataset.worldUptime = world.name;
+  uptime.append(node('dt', 'Current session uptime'), value, node('small', 'Time since this world finished loading. Resets on restart or world switch.', 'muted')); list.append(uptime);
+  const total = node('div'), totalValue = node('dd', world.total_uptime_seconds == null ? 'Not tracked yet' : uptimeDuration(world.total_uptime_seconds));
+  totalValue.dataset.worldUptime = world.name; totalValue.dataset.uptimeKind = 'total';
+  total.append(node('dt', 'Total uptime'), totalValue, node('small', world.uptime_tracked_since ? 'Time loaded across sessions, tracked since ' + new Date(world.uptime_tracked_since).toLocaleString() + '.' : 'Tracking starts the next time this world loads. Earlier sessions are not included.', 'muted')); list.append(total);
+  panel.append(list, node('p', 'Details reflect the last saved world. Mods may add difficulty or progression beyond these base-game values.', 'muted'));
+  return panel;
+}
 
 function renderWorlds() {
 
   const state = worldState;
 
-  const editable = state?.editable && !state.busy && !worldsBusy && !worldSubmitting;
+  const editable = state?.editable && !state.busy && !worldSubmitting;
 
   $('world-current-label').textContent = state?.healthy ? 'Active world' : 'Configured world';
 
@@ -619,7 +740,9 @@ function renderWorlds() {
 
   $('worlds-refresh').disabled = worldsBusy || worldSubmitting;
 
-  $('world-create-form').querySelectorAll('input, select, button').forEach(input => { input.disabled = !editable; });
+  $('world-new').disabled = !editable;
+  $('journey-defaults').hidden = !(state?.worlds || []).some(world => world.metadata?.available && world.metadata.difficulty === 'Journey');
+  $('world-create-form').querySelectorAll('input, select, button:not(#world-create-cancel)').forEach(input => { input.disabled = !editable; });
 
   $('world-apply').disabled = !editable || !state?.pending;
 
@@ -627,21 +750,41 @@ function renderWorlds() {
 
   const filter = $('worlds-filter').value.toLocaleLowerCase();
 
-  const rows = (state?.worlds || []).filter(world => world.name.toLocaleLowerCase().includes(filter)).map(world => {
+  const rows = (state?.worlds || []).filter(world => world.name.toLocaleLowerCase().includes(filter)).flatMap((world, index) => {
 
-    const row = node('tr'), name = node('td'); name.append(node('strong', world.name), node('p', world.has_mod_data ? '.wld + .twld' : '.wld only · no mod sidecar', 'muted'));
+    const row = node('tr'), name = node('td');
+    const detailRow = node('tr'), detailCell = node('td');
+    detailCell.colSpan = 4; detailCell.append(worldDetails(world)); detailRow.append(detailCell);
+    detailRow.id = 'world-details-' + index; detailRow.hidden = !expandedWorlds.has(world.name);
+    const expand = node('button', (detailRow.hidden ? '▸ ' : '▾ ') + world.name, 'world-expand');
+    expand.setAttribute('aria-label', 'Details for ' + world.name);
+    expand.setAttribute('aria-expanded', String(!detailRow.hidden));
+    expand.setAttribute('aria-controls', detailRow.id);
+    expand.onclick = () => {
+      detailRow.hidden = !detailRow.hidden;
+      if (detailRow.hidden) expandedWorlds.delete(world.name); else expandedWorlds.add(world.name);
+      expand.textContent = (detailRow.hidden ? '▸ ' : '▾ ') + world.name;
+      expand.setAttribute('aria-expanded', String(!detailRow.hidden));
+    };
+    name.append(expand, node('p', world.has_mod_data ? '.wld + .twld' : '.wld only · no mod sidecar', 'muted'));
 
-    row.append(name, node('td', new Intl.NumberFormat(undefined, {maximumFractionDigits: 1}).format((world.bytes + world.mod_bytes) / 1048576) + ' MiB'), node('td', new Date(world.modified).toLocaleString()));
+    row.append(name, node('td', bytes(world.bytes + world.mod_bytes)), node('td', new Date(world.modified).toLocaleString()));
 
     const cell = node('td');
 
     if (world.selected) cell.append(node('span', state.healthy ? 'Active' : 'Configured', 'badge'));
 
-    const select = node('button', world.selected && !state.pending ? 'Selected' : 'Review & switch'); select.disabled = !editable || !world.can_select || (world.selected && !state.pending);
-
-    select.setAttribute('aria-label', 'Switch to ' + world.name);
-
-    select.onclick = action(() => stageWorld({action: 'switch', name: world.name})); cell.append(select); row.append(cell); return row;
+    if (!world.selected) {
+      const select = node('button', 'Switch'); select.disabled = !editable || !world.can_select;
+      select.setAttribute('aria-label', 'Switch to ' + world.name);
+      select.onclick = action(() => stageWorld({action: 'switch', name: world.name})); cell.append(select);
+    }
+    if (world.metadata?.available && world.metadata.difficulty === 'Journey') {
+    const journey = node('button', 'Set Journey permissions', 'world-journey');
+    journey.setAttribute('aria-label', 'Set Journey permissions for ' + world.name);
+    journey.onclick = action(() => openJourney(world.name)); cell.append(journey);
+    }
+    row.append(cell); return [row, detailRow];
 
   });
 
@@ -651,17 +794,28 @@ function renderWorlds() {
 
 }
 
-async function refreshWorlds() {
+function refreshWouldInterrupt(id) {
+  const root = $(id), selection = window.getSelection();
+  return root.contains(document.activeElement) ||
+    (selection && !selection.isCollapsed && (root.contains(selection.anchorNode) || root.contains(selection.focusNode))) ||
+    [...root.querySelectorAll('[data-saved-name]')].some(input => input.value !== input.dataset.savedName);
+}
+
+async function refreshWorlds(background = false) {
+
+  background = background === true;
+
 
   if (!token || $('worlds').hidden || worldsBusy || worldSubmitting) return;
 
-  worldsBusy = true; renderWorlds();
+  worldsBusy = true;
+  if (!background) renderWorlds();
 
   try { worldState = await api('/api/worlds'); }
 
   catch (error) { worldState = {editable: false, worlds: [], warnings: [], detail: 'World inventory unavailable: ' + error.message}; }
 
-  finally { worldsBusy = false; renderWorlds(); }
+  finally { worldsBusy = false; if (!background || !refreshWouldInterrupt('worlds')) renderWorlds(); else updateWorldUptimes(); }
 
 }
 
@@ -674,6 +828,7 @@ async function stageWorld(values) {
   try {
 
     await api('/api/worlds/stage', {...values, revision: worldState.revision});
+    if (values.action === 'create') $('world-create-dialog').close();
 
     await loadSettings();
 
@@ -687,17 +842,94 @@ async function stageWorld(values) {
 
 }
 
+let journeyState = null, journeySaving = false;
+
+function renderJourneyInputs() {
+  const useOverride = journeyState.name === null || $('journey-override').checked;
+  for (const input of $('journey-fields').querySelectorAll('select')) {
+    input.disabled = !journeyState.editable || !useOverride || journeySaving;
+    if (!useOverride) input.value = journeyState.defaults[input.name];
+  }
+  $('journey-save').disabled = !journeyState.editable || journeySaving;
+  $('journey-apply').disabled = !journeyState.editable || journeySaving;
+  $('journey-override').disabled = !journeyState.editable || journeySaving;
+  $('journey-close').disabled = journeySaving;
+}
+
+async function openJourney(name = null) {
+  journeyState = await api('/api/worlds/journey' + (name === null ? '' : '?name=' + encodeURIComponent(name)));
+  $('journey-title').textContent = name === null ? 'Server Journey defaults' : 'Journey permissions · ' + name;
+  const world = worldState?.worlds?.find(world => world.name === name);
+  const nonJourney = world?.metadata?.available && world.metadata.difficulty !== 'Journey';
+  $('journey-description').textContent = (nonJourney ? 'This is a ' + world.metadata.difficulty + ' world. Journey permissions have no effect on it and do not change its difficulty. ' : '') +
+    (name === null ? 'Defaults apply to Journey worlds without an override. ' : 'Inherit the server defaults, or customize permissions for this world. ') +
+    'Saved permissions take effect the next time the world starts. Review & apply restarts the game after confirmation.';
+  $('journey-override-label').hidden = name === null;
+  $('journey-override').checked = journeyState.override;
+  $('journey-fields').replaceChildren(...Object.entries(journeyState.permissions).map(([key, value]) => {
+    const label = node('label', config?.fields?.[key]?.label || key.replace('TMOD_JOURNEY_', '').replaceAll('_', ' '));
+    const input = node('select'); input.name = key;
+    ['Locked', 'Host only', 'Everyone'].forEach((title, index) => { const option = node('option', title); option.value = String(index); input.append(option); });
+    input.value = value; label.append(input);
+    const running = journeyState.running[key];
+    if (running !== undefined && (name === null || name === journeyState.running_world)) label.append(node('small', 'Running: ' + ['Locked', 'Host only', 'Everyone'][Number(running)], 'muted'));
+    return label;
+  }));
+  $('journey-status').textContent = journeyState.editable ? (name === null ? 'Editing server defaults.' : journeyState.override ? 'Using a world override.' : 'Using server defaults.') : 'Environment-managed permissions are read-only.';
+  renderJourneyInputs(); $('journey-dialog').showModal();
+}
+
+async function saveJourney(apply) {
+  if (journeySaving) return;
+  journeySaving = true;
+  const permissions = Object.fromEntries([...$('journey-fields').querySelectorAll('select')].map(input => [input.name, input.value]));
+  renderJourneyInputs(); $('journey-status').textContent = 'Saving permissions…';
+  try {
+    journeyState = await api('/api/worlds/journey', {name: journeyState.name, override: $('journey-override').checked, permissions, revision: journeyState.revision, settings_revision: journeyState.settings_revision});
+    $('journey-status').textContent = 'Saved. The running game has not changed. Permissions take effect when the world next starts.';
+    if (apply) {
+      if (journeyState.name !== null) await api('/api/worlds/stage', {action: 'switch', name: journeyState.name, revision: journeyState.settings_revision});
+      $('journey-dialog').close();
+      await loadSettings(); await refreshWorlds(); await $('apply').onclick();
+    } else {
+      attentionSettings = await api('/api/settings'); renderAttention();
+      await refreshWorlds();
+    }
+  } catch (error) { $('journey-status').textContent = error.message; if (!$('journey-dialog').open) tell(error.message); }
+  finally { journeySaving = false; renderJourneyInputs(); }
+}
+
+$('journey-defaults').onclick = action(() => openJourney());
+$('journey-override').onchange = () => { renderJourneyInputs(); $('journey-status').textContent = 'Unsaved changes.'; };
+$('journey-fields').onchange = () => { $('journey-status').textContent = 'Unsaved changes.'; };
+$('journey-close').onclick = () => $('journey-dialog').close();
+$('journey-dialog').addEventListener('cancel', event => { if (journeySaving) event.preventDefault(); });
+$('journey-form').onsubmit = event => { event.preventDefault(); saveJourney(false); };
+$('journey-apply').onclick = () => saveJourney(true);
+
 $('worlds-filter').oninput = renderWorlds;
 
 $('worlds-refresh').onclick = action(refreshWorlds);
 
 $('world-apply').onclick = action(async () => { await loadSettings(); await $('apply').onclick(); await refreshWorlds(); });
 
-$('world-create-form').onsubmit = action(() => stageWorld({action: 'create', name: $('world-create-name').value, creation: {TMOD_WORLDSIZE: $('world-create-size').value, TMOD_DIFFICULTY: $('world-create-difficulty').value, TMOD_WORLDEVIL: $('world-create-evil').value, TMOD_WORLDSEED: $('world-create-seed').value}}));
+$('world-new').onclick = () => {
+  for (const [id, key] of [['world-create-size', 'TMOD_WORLDSIZE'], ['world-create-difficulty', 'TMOD_DIFFICULTY'], ['world-create-evil', 'TMOD_WORLDEVIL']]) {
+    if (!$(id).dataset.initialized) { $(id).value = config?.staged?.[key] || $(id).value; $(id).dataset.initialized = 'true'; }
+  }
+  $('world-create-error').textContent = '';
+  $('world-create-dialog').showModal(); $('world-create-name').focus();
+};
+$('world-create-cancel').onclick = () => $('world-create-dialog').close();
+$('world-create-form').onsubmit = async event => {
+  event.preventDefault(); $('world-create-error').textContent = '';
+  try { await stageWorld({action: 'create', name: $('world-create-name').value, creation: {TMOD_WORLDSIZE: $('world-create-size').value, TMOD_DIFFICULTY: $('world-create-difficulty').value, TMOD_WORLDEVIL: $('world-create-evil').value, TMOD_WORLDSEED: $('world-create-seed').value}}); }
+  catch (error) { if ($('world-create-dialog').open) $('world-create-error').textContent = error.message; else tell(error.message); }
+};
 
 document.querySelectorAll('[data-view="worlds"]').forEach(button => button.addEventListener('click', () => setTimeout(refreshWorlds, 0)));
 
-setInterval(() => { if (!document.hidden) refreshWorlds(); }, 10000);
+setInterval(() => { if (!document.hidden) refreshWorlds(true); }, 10000);
 
 let playerState = null, playersBusy = false, playerActionBusy = false;
 
@@ -765,17 +997,21 @@ function renderPlayers() {
 
 }
 
-async function refreshPlayers() {
+async function refreshPlayers(background = false) {
+
+  background = background === true;
+  if (background && refreshWouldInterrupt('players')) return;
 
   if (!token || $('players').hidden || playersBusy || playerActionBusy) return;
 
-  playersBusy = true; renderPlayers();
+  playersBusy = true;
+  if (!background) renderPlayers();
 
   try { playerState = await api('/api/players'); }
 
   catch (error) { playerState = {available: false, players: [], detail: 'Player query failed: ' + error.message, activity: playerState?.activity || []}; }
 
-  finally { playersBusy = false; renderPlayers(); }
+  finally { playersBusy = false; if (!background || !refreshWouldInterrupt('players')) renderPlayers(); }
 
 }
 
@@ -809,7 +1045,7 @@ $('players-announce-form').onsubmit = action(async () => {
 
 document.querySelectorAll('[data-view="players"]').forEach(button => button.addEventListener('click', () => setTimeout(refreshPlayers, 0)));
 
-setInterval(() => { if (!document.hidden) refreshPlayers(); }, 10000);
+setInterval(() => { if (!document.hidden) refreshPlayers(true); }, 10000);
 
 $('login-form').onsubmit = action(async () => { token = $('token').value; await loadSettings(); await refresh(); $('token').value = ''; $('login').hidden = true; $('dashboard').hidden = false; $('logout').hidden = false; tell(''); clearInterval(timer); timer = setInterval(() => refresh().catch(error => tell(error.message)), 15000); clearInterval(consoleTimer); consoleTimer = setInterval(() => refreshConsole().catch(error => { $('console-status').textContent = error.message; }), 2000); });
 
@@ -841,9 +1077,31 @@ $('backup').onclick = action(async () => { if (await confirmAction('Back up now?
 
 $('settings-form').onsubmit = action(async () => { const values = Object.fromEntries(new FormData($('settings-form'))); await api('/api/settings', {revision: config.revision, settings: values}); await loadSettings(); tell('Changes saved as a draft. The running server has not changed.'); });
 
-$('workshop-apply').onclick = $('apply').onclick = action(async () => {
+function savedDifferences(snapshot) {
+  return snapshot.changes || Object.entries(snapshot.staged).filter(([key, value]) => value !== snapshot.running[key]).map(([key, value]) => ({key, label: snapshot.fields?.[key]?.label || key, running: snapshot.running[key], staged: value}));
+}
 
-  const differences = Object.entries(config.staged).filter(([key, value]) => value !== config.running[key]).map(([key, value]) => key + ': ' + (config.running[key] || '(empty)') + ' → ' + value).join('\n');
+function settingValue(value) { return value == null ? '(not set)' : value === '' ? '(empty)' : String(value); }
+let reviewedSettings = null;
+async function reviewSavedChanges() {
+  reviewedSettings = await api('/api/settings');
+  attentionSettings = reviewedSettings; renderAttention();
+  const differences = savedDifferences(reviewedSettings);
+  $('saved-changes-summary').textContent = differences.length ? differences.length + (differences.length === 1 ? ' saved setting differs' : ' saved settings differ') + ' from the running server. These differences are what trigger the reminder.' : reviewedSettings.draft_exists ? 'A saved draft file exists, but it matches the running settings. No changes need to be applied.' : 'No saved changes need to be applied.';
+  $('saved-changes-list').replaceChildren(...differences.map(change => {
+    const row = node('tr'), label = node('td'); label.append(node('strong', change.label), node('small', change.key));
+    row.append(label, node('td', settingValue(change.running)), node('td', settingValue(change.staged))); return row;
+  }));
+  $('saved-changes-apply').disabled = !differences.length || reviewedSettings.mode !== 'web' || attentionStatus?.job?.state === 'running' || attentionStatus?.backups?.operation?.state === 'running';
+  $('saved-changes-dialog').showModal();
+}
+$('saved-changes-close').onclick = () => $('saved-changes-dialog').close();
+$('saved-changes-apply').onclick = action(async () => { $('saved-changes-dialog').close(); await applySavedSettings(reviewedSettings); });
+$('workshop-apply').onclick = $('apply').onclick = action(async () => applySavedSettings(await api('/api/settings')));
+
+async function applySavedSettings(snapshot) {
+
+  const differences = savedDifferences(snapshot).map(change => change.label + ' (' + change.key + '): ' + settingValue(change.running) + ' → ' + settingValue(change.staged)).join('\n');
 
   if (!(await confirmAction('Apply settings and restart?', 'This applies the saved draft, not unsaved form edits. Players will disconnect. Mod changes may take time to download. A failed mod update leaves the game stopped for recovery.', differences || 'Reapply the saved settings.'))) return;
 
@@ -851,7 +1109,7 @@ $('workshop-apply').onclick = $('apply').onclick = action(async () => {
 
   showApplyProgress({kind: 'apply', state: 'running', stage: 'queued', started: new Date().toISOString(), detail: 'Submitting the reviewed settings. Controls are locked until the operation finishes.'});
 
-  try { showApplyProgress(await api('/api/apply', {confirm: true, revision: config.revision})); }
+  try { showApplyProgress(await api('/api/apply', {confirm: true, revision: snapshot.revision})); }
 
   catch (error) { progressError(error); }
 
@@ -859,7 +1117,7 @@ $('workshop-apply').onclick = $('apply').onclick = action(async () => {
 
   try { await refresh(); } catch (error) { progressError(error); }
 
-});
+}
 
 $('search-form').onsubmit = action(async () => { page = 1; await search(); });
 
@@ -913,7 +1171,7 @@ function renderProfiles() {
 
     const card = node('article', undefined, 'panel'), name = node('input');
 
-    name.value = profile.name; name.maxLength = 64; name.setAttribute('aria-label', 'Name for ' + profile.name);
+    name.value = profile.name; name.dataset.savedName = profile.name; name.maxLength = 64; name.setAttribute('aria-label', 'Name for ' + profile.name);
 
     card.append(node('h3', profile.name), node('p', (profile.mods ? profile.mods.split(',').length : 0) + ' Workshop entries'), node('p', profile.mods || 'Unmodded · no Workshop entries', 'profile-entries'));
 
@@ -951,17 +1209,21 @@ function renderProfiles() {
 
 }
 
-async function refreshProfiles() {
+async function refreshProfiles(background = false) {
+
+  background = background === true;
+  if (background && refreshWouldInterrupt('profiles')) return;
 
   if (!token || $('profiles').hidden || profileBusy) return;
 
-  profileBusy = true; renderProfiles();
+  profileBusy = true;
+  if (!background) renderProfiles();
 
   try { profileState = await api('/api/profiles'); }
 
   catch (error) { tell('Profiles unavailable: ' + error.message); profileState = null; }
 
-  finally { profileBusy = false; renderProfiles(); }
+  finally { profileBusy = false; if (!background || !refreshWouldInterrupt('profiles')) renderProfiles(); }
 
 }
 
@@ -989,7 +1251,7 @@ $('profiles-apply').onclick = action(async () => { await loadSettings(); await $
 
 document.querySelectorAll('[data-view="profiles"]').forEach(button => button.addEventListener('click', () => setTimeout(refreshProfiles, 0)));
 
-setInterval(() => { if (!document.hidden && ! $('profiles-list').contains(document.activeElement)) refreshProfiles(); }, 10000);
+setInterval(() => { if (!document.hidden) refreshProfiles(true); }, 10000);
 
 let playthroughState = null, playthroughBusy = false;
 
@@ -1017,11 +1279,12 @@ function renderPlaythroughs() {
 
     const card = node('article', undefined, 'panel'), name = node('input');
 
-    name.value = playthrough.name; name.maxLength = 64; name.setAttribute('aria-label', 'Name for ' + playthrough.name);
+    name.value = playthrough.name; name.dataset.savedName = playthrough.name; name.maxLength = 64; name.setAttribute('aria-label', 'Name for ' + playthrough.name);
 
     card.append(node('h3', playthrough.name), node('p', 'World: ' + playthrough.settings.TMOD_WORLDNAME), node('p', 'Mods: ' + (playthrough.settings.TMOD_MODS || '(unmodded)'), 'playthrough-entries'));
-    const details = node('details'), summary = node('summary', 'Saved world and Journey settings'); details.append(summary);
-    for (const [key, value] of Object.entries(playthrough.settings).filter(([key]) => key !== 'TMOD_MODS' && key !== 'TMOD_WORLDNAME')) details.append(node('p', (config?.fields?.[key]?.label || key.replace('TMOD_', '').replaceAll('_', ' ')) + ': ' + (key.startsWith('TMOD_JOURNEY_') ? ['Locked', 'Host only', 'Everyone'][Number(value)] : value)));
+    const journeyWorld = state.worlds?.some(world => world.name === playthrough.settings.TMOD_WORLDNAME && world.metadata?.difficulty === 'Journey');
+    const details = node('details'), summary = node('summary', journeyWorld ? 'Saved world and Journey settings' : 'Saved world settings'); details.append(summary);
+    for (const [key, value] of Object.entries(playthrough.settings).filter(([key]) => key !== 'TMOD_MODS' && key !== 'TMOD_WORLDNAME' && (journeyWorld || !key.startsWith('TMOD_JOURNEY_')))) details.append(node('p', (config?.fields?.[key]?.label || key.replace('TMOD_', '').replaceAll('_', ' ')) + ': ' + (key.startsWith('TMOD_JOURNEY_') ? ['Locked', 'Host only', 'Everyone'][Number(value)] : value)));
     card.append(details);
 
     if (JSON.stringify(playthrough.settings) === JSON.stringify(state.running)) card.append(node('p', 'Matches running selection', 'badge'));
@@ -1058,17 +1321,21 @@ function renderPlaythroughs() {
 
 }
 
-async function refreshPlaythroughs() {
+async function refreshPlaythroughs(background = false) {
+
+  background = background === true;
+  if (background && refreshWouldInterrupt('playthroughs')) return;
 
   if (!token || $('playthroughs').hidden || playthroughBusy) return;
 
-  playthroughBusy = true; renderPlaythroughs();
+  playthroughBusy = true;
+  if (!background) renderPlaythroughs();
 
   try { playthroughState = await api('/api/playthroughs'); }
 
   catch (error) { tell('Playthroughs unavailable: ' + error.message); playthroughState = null; }
 
-  finally { playthroughBusy = false; renderPlaythroughs(); }
+  finally { playthroughBusy = false; if (!background || !refreshWouldInterrupt('playthroughs')) renderPlaythroughs(); }
 
 }
 
@@ -1096,7 +1363,7 @@ $('playthroughs-apply').onclick = action(async () => { await loadSettings(); awa
 
 document.querySelectorAll('[data-view="playthroughs"]').forEach(button => button.addEventListener('click', () => setTimeout(refreshPlaythroughs, 0)));
 
-setInterval(() => { if (!document.hidden && ! $('playthroughs-list').contains(document.activeElement)) refreshPlaythroughs(); }, 10000);
+setInterval(() => { if (!document.hidden) refreshPlaythroughs(true); }, 10000);
 
 let overviewBusy = false;
 async function refreshOverview() {
@@ -1116,6 +1383,7 @@ async function refreshOverview() {
     if (!$('overview-player-activity').children.length) $('overview-player-activity').append(node('li', players ? 'No dashboard actions recorded.' : 'Activity unavailable.'));
     $('overview-settings').classList.toggle('pending-highlight', !!settings?.pending);
     $('overview-settings').textContent = settings?.mode ? (settings.mode === 'web' ? 'Web-managed settings' : 'Compose-managed settings') + (settings.pending ? ' · Saved changes are waiting to be applied.' : ' · No saved draft changes.') : 'Settings unavailable.';
+    $('overview-journey-section').hidden = !world?.worlds?.some(item => item.selected && item.metadata?.available && item.metadata.difficulty === 'Journey');
     $('overview-journey').replaceChildren(...Object.entries(settings?.running || {}).filter(([key]) => key.startsWith('TMOD_JOURNEY_')).flatMap(([key, value]) => [node('dt', settings.fields?.[key]?.label || key.replace('TMOD_JOURNEY_', '').replaceAll('_', ' ')), node('dd', ['Locked', 'Host only', 'Everyone'][Number(value)] || value)]));
     if (!$('overview-journey').children.length) $('overview-journey').append(node('dd', 'Journey permissions unavailable.'));
     const matches = (values, current) => Object.entries(values).every(([key, value]) => current?.[key] === value);
@@ -1131,17 +1399,17 @@ document.querySelectorAll('[data-view="overview"]').forEach(button => button.add
 function renderAttention() {
   const rows = [], status = attentionStatus, recovery = attentionRecovery;
   const busy = status?.job?.state === 'running' || status?.backups?.operation?.state === 'running';
-  const add = (title, detail, view, label) => {
+  const add = (title, detail, view, label, onClick) => {
     const row = node('div', undefined, 'attention-item'), copy = node('div');
     copy.append(node('strong', title), node('p', detail));
     const button = node('button', label); button.type = 'button';
-    button.onclick = () => document.querySelector('nav [data-view="' + view + '"]').click();
+    button.onclick = onClick || (() => document.querySelector('nav [data-view="' + view + '"]').click());
     row.append(copy, button); rows.push(row);
   };
   const unsavedCount = $('fields').querySelectorAll('.setting-unsaved').length;
   if (unsavedCount) add('Unsaved settings', unsavedCount + ' setting' + (unsavedCount === 1 ? ' has' : 's have') + ' been edited. Save the draft to keep these changes.', 'settings', 'Review unsaved settings');
   if (recovery?.interrupted) add('Recovery requires attention', 'An interrupted restore needs manual recovery. Read the recovery guidance before restarting.', 'recovery', 'View recovery');
-  if (attentionSettings?.pending) add('Saved changes are waiting', busy ? 'A server operation is in progress. Review the saved draft after it finishes.' : 'Review and apply your saved draft when you are ready to restart the game.', 'settings', 'Review saved changes');
+  if (attentionSettings?.pending) add('Saved changes are waiting', busy ? 'A server operation is in progress. Review the saved draft after it finishes.' : 'Review and apply your saved draft when you are ready to restart the game.', 'settings', 'Review saved changes', action(reviewSavedChanges));
   if (!recovery?.interrupted && status?.job?.state === 'failed') add('The last operation failed', status.job.detail || 'Review the result and recovery options.', 'recovery', 'View operation');
   for (const warning of status?.backups?.warnings || []) add('Backup warning', warning, 'recovery', 'View backups');
   if (!attentionSettings && status) add('Settings status unavailable', 'Saved changes could not be checked. Refresh status before deciding whether to apply changes.', 'settings', 'View configuration');

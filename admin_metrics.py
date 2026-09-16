@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import sys
+import admin_backup_details
 
 from admin_settings import atomic_json, read_json, RUNTIME
 
@@ -43,6 +44,10 @@ def inventory():
                 archive = path / 'data.tar.gz'
                 items.append({'name': path.name, 'created': metadata.get('created'),
                               'bytes': archive.stat().st_size, 'format': metadata.get('format'),
+                              'snapshot': metadata.get('snapshot'), 'runtime': metadata.get('runtime'),
+                              'image_id': metadata.get('image_id'), 'sha256': metadata.get('sha256'),
+                              'prepared_from': metadata.get('prepared_from'),
+                              'compatibility': admin_backup_details.compatibility(metadata),
                               'verification': 'Not rechecked; use Verify to check the archive checksum.'})
             except (OSError, ValueError):
                 warnings.append(f'Incomplete or unreadable bundle: {path.name}')

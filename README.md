@@ -176,6 +176,35 @@ These are the main values to review for a new server:
 | `TMOD_MODS` | Comma-separated Workshop mod IDs and `collection:ID` entries; empty by default. |
 | `TMOD_BACKUP_INTERVAL` | Minutes between backups; `0` disables scheduling, `1440` means daily. |
 
+World creation and Journey permissions live on **Worlds**. **New World** opens the
+creation form. For saved Journey worlds, **Server Journey defaults** sets shared
+permissions, and **Set Journey permissions** on a world lets you inherit those
+values or save an override. Controls are hidden for non-Journey worlds and unreadable
+world types. Existing global permissions seed the initial server defaults.
+
+Saving permissions does not change the running game; they take effect when that
+world next starts. **Review & apply** stages the selected world and opens the usual
+restart confirmation. Per-world overrides survive switching worlds and container
+restarts. Applying a playthrough's different Journey snapshot records it as that
+world's override. Server defaults remain unchanged.
+
+**Review saved changes** opens a running-versus-saved comparison, including fields
+edited outside Configuration. A draft identical to the running settings does not
+trigger the saved-changes reminder. Unsaved form edits are not part of this review.
+
+Select a name in **Saved worlds** to expand details from its last save: dimensions,
+difficulty, evil, seed, creation date, Hardmode status, special seeds, spawn and
+dungeon coordinates, and file sizes. Expanded entries remain open across refreshes.
+The current world has a status badge; other worlds have a **Switch** button.
+**Current session uptime** starts when the world finishes loading and resets on a
+game restart or world switch. **Total uptime** accumulates loaded time across sessions
+and persists with the world data. Tracking begins with this feature; earlier sessions
+are not included. Totals are checkpointed every five seconds and on normal shutdown;
+an abrupt kill can lose up to five seconds. Inactive worlds display **Not active**
+for their current session and retain their total. This is not player playtime. Metadata currently supports
+world formats 194–279; unreadable or unsupported headers show an explanation while
+file details and existing world-selection controls remain available.
+
 World generation settings only affect **new worlds**. Choose an unused world
 name to generate a different world. Profiles and playthroughs do not archive
 world files or pin mod versions; keep backups before changing a world's mods.
@@ -203,6 +232,21 @@ Scheduled backups are off by default. Keep a separate copy of your `.env` and
 any external secret or custom configuration files; container backups do not
 include them. Retain the original image version for recovery, since restores
 check the container build that created the archive.
+
+Expand an archive row to see its backup date, last running world (when recorded),
+world files, enabled mods, Workshop selections, sizes, and included settings/logs.
+**Inspect & verify** checks the actual archive and fills in details for older backups.
+A saved world selection in an old backup is labeled as such; it is not proof that
+that world was running.
+
+When an inspected backup uses the same tModLoader release but a different container
+build, **Prepare for Running Container Version** creates a verified copy for the current build.
+The original and world data remain unchanged. After inspection, compatible archives
+show **Restore this backup** in their expanded details. This opens a review popup
+that verifies the archive and available space before you confirm the restore.
+Different or unknown game releases cannot be converted automatically: retain the
+matching original image. Normal retention preserves backups from other container
+builds, so these preserved copies may require additional storage.
 
 ## Help and project information
 

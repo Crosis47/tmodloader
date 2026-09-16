@@ -4,9 +4,11 @@ import os
 import shutil
 
 import admin_settings as settings
+import admin_journey
+import admin_world_time
+from admin_world_metadata import read_metadata
 
 CREATION_KEYS = {'TMOD_WORLDSIZE', 'TMOD_DIFFICULTY', 'TMOD_WORLDSEED', 'TMOD_WORLDEVIL'}
-
 
 def directory():
     path = settings.DATA / 'tModLoader/Worlds'
@@ -36,7 +38,7 @@ def check(kind, name):
         raise ValueError('Choose Create or Switch.')
 
 
-def inventory(running):
+def inventory(running, healthy=False):
     root = directory()
     custom = os.environ.get('TMOD_USECONFIGFILE', 'No').lower() in ('yes', 'true', '1')
     current = None if custom else running.get('TMOD_WORLDNAME')
@@ -50,11 +52,14 @@ def inventory(running):
             info = path.stat()
             sidecar = path.with_suffix('.twld')
             sidecar_present = sidecar.is_file()
-            rows.append({'name': path.stem, 'filename': path.name, 'bytes': info.st_size,
+            timing = admin_world_time.read(path.stem)
+            if not healthy or path.stem != current:
+                timing['session_uptime_seconds'] = None
+            rows.append({**timing, 'name': path.stem, 'filename': path.name, 'bytes': info.st_size,
                          'mod_bytes': sidecar.stat().st_size if sidecar_present else 0,
                          'modified': datetime.datetime.fromtimestamp(info.st_mtime, datetime.timezone.utc).isoformat(),
                          'has_mod_data': sidecar_present, 'selected': path.stem == current,
-                         'can_select': info.st_size > 0})
+                         'can_select': info.st_size > 0, 'metadata': read_metadata(path)})
         except (OSError, ValueError) as error:
             warnings.append(f'{path.name}: {error}')
     if len(paths) > 1000:
@@ -71,6 +76,7 @@ def stage(payload, current):
     kind, name = payload.get('action'), payload.get('name')
     check(kind, name)
     values = {'TMOD_WORLDNAME': name}
+    values.update(admin_journey.effective(name))
     if kind == 'create':
         creation = payload.get('creation', {})
         if not isinstance(creation, dict) or set(creation) != CREATION_KEYS:

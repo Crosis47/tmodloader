@@ -23,3 +23,11 @@
 #setup-form input[aria-invalid=true]{border-color:var(--warn)}
 #setup-submit:disabled{background:#52616b;color:#d2d9dd;opacity:.65;cursor:not-allowed}
 #setup-message:not(:empty){padding:.8rem;border-left:3px solid var(--warn);background:#33291d}
+
+#worlds .world-expand{background:transparent;color:var(--accent);border:0;padding:.2rem 0;margin:0;text-align:left;overflow-wrap:anywhere}.world-details{padding:.6rem 1rem 1rem;background:var(--bg);border-radius:.4rem}.world-details-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin:.5rem 0 1rem}.world-details-grid dt{color:var(--muted);font-size:.85rem}.world-details-grid dd{margin:.2rem 0 0;overflow-wrap:anywhere}@media(max-width:900px){.world-details-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.world-details-grid{grid-template-columns:1fr}}
+
+@media(max-width:600px){#worlds table th:nth-child(2),#worlds table th:nth-child(3),#worlds table td:nth-child(2),#worlds table td:nth-child(3){display:none}#worlds .world-expand{min-width:7rem}#worlds table td:last-child .badge{white-space:nowrap}}
+
+#journey-dialog,#world-create-dialog,#saved-changes-dialog{max-width:900px}#journey-fields{margin-top:1.2rem}#journey-status,#world-create-error{color:var(--warn)}#saved-changes-dialog td{overflow-wrap:anywhere;vertical-align:top}#saved-changes-dialog small{display:block;color:var(--muted)}#saved-changes-dialog table{table-layout:fixed;width:100%}#saved-changes-dialog th:first-child{width:40%}.world-journey{display:block;font-size:.85rem}#journey-dialog .inline-label input{width:auto}
+
+#archives td{vertical-align:top}#archives td button{margin:.2rem .4rem .2rem 0}#archives td:first-child>button{background:transparent;color:var(--accent);text-align:left;padding:.2rem;border:0}#archives .world-details{min-width:0}

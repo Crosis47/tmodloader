@@ -30,6 +30,7 @@ if __name__ == '__main__':
 
 sys.path.insert(0, '/terraria-server')
 import backup
+import admin_backup_details
 
 DATA = Path('/data')
 DEST = Path('/backups')
@@ -76,6 +77,13 @@ def cold_backup():
         source.write_text(uuid.uuid4().hex)
     info = {'Image': identity(), 'Config': {'Image': 'container-build-fingerprint'},
             'Source': source.read_text().strip()}
+    info['Runtime'] = admin_backup_details.current_runtime()
+    try:
+        info['Running'] = json.loads((RUNTIME / 'admin-effective.json').read_text())
+    except (OSError, ValueError):
+        pass
+    if os.environ.get('TMOD_USECONFIGFILE', 'No').lower() in ('yes', 'true', '1'):
+        info['Running'] = {'TMOD_WORLDNAME': None}
     result = backup.create_backup(DATA, DEST, info)
     return result
 
@@ -129,6 +137,7 @@ def preview(bundle):
         raise ValueError('Insufficient space to stage restored data alongside original data.')
     return {'archive': bundle.name, 'sha256': metadata['sha256'], 'created': metadata.get('created'),
             'worlds': [Path(m.name).name for m in members if m.name.startswith('data/tModLoader/Worlds/') and m.name.endswith('.wld')],
+            'snapshot': admin_backup_details.inspect_archive(bundle)['snapshot'],
             'required_bytes': required, 'free_bytes': free,
             'replaces': 'Worlds, mods, mod configuration, logs and saved dashboard settings. Current admin credentials and Compose settings are preserved.'}
 
@@ -207,12 +216,12 @@ def restore(bundle, supervised=False, expected=None):
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['backup', 'verify', 'restore', '_cold', '_retain', '_preflight', '_preview', '_restore'])
+    parser.add_argument('command', choices=['backup', 'verify', 'restore', '_cold', '_retain', '_preflight', '_preview', '_restore', '_inspect', '_prepare'])
     parser.add_argument('--archive', type=Path)
     parser.add_argument('--sha256')
     parser.add_argument('--confirm', action='store_true')
     args = parser.parse_args()
-    if args.command in ('verify', 'restore', '_retain', '_preview', '_restore') and args.archive is None:
+    if args.command in ('verify', 'restore', '_retain', '_preview', '_restore', '_inspect', '_prepare') and args.archive is None:
         parser.error('--archive is required')
     if args.command == 'backup':
         request_backup()
@@ -225,6 +234,17 @@ def main():
         backup.retain(DEST, int(os.environ.get('TMOD_BACKUP_KEEP', '7')), args.archive)
     elif args.command == 'verify':
         print(json.dumps(backup.validate(args.archive), indent=2))
+    elif args.command in ('_inspect', '_prepare'):
+        import admin_recovery
+        bundle = admin_recovery.archive_path(args.archive.name)
+        if args.command == '_inspect':
+            result = admin_backup_details.inspect_archive(bundle)
+        else:
+            if not args.confirm or not args.sha256:
+                raise ValueError('Explicit confirmation and inspected checksum are required.')
+            preflight()
+            result = admin_backup_details.prepare(bundle, DEST, args.sha256, int(os.environ.get('TMOD_BACKUP_MIN_FREE_MB', '1024')) * 1024 * 1024)
+        print(json.dumps(result))
     elif args.command == '_preview':
         result = preview(args.archive)
         if args.sha256 and result['sha256'] != args.sha256:

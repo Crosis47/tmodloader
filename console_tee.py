@@ -6,8 +6,9 @@ from pathlib import Path
 import sys
 
 
-def copy_output(source, target, destination):
+def copy_output(source, target, destination, tracker=None):
     first = True
+    tail = b''
     with target.open('wb', buffering=0) as log:
         while chunk := source.read1(65536):
             if first:
@@ -15,6 +16,15 @@ def copy_output(source, target, destination):
                     datetime.datetime.now(datetime.timezone.utc).isoformat())
                 first = False
             log.write(chunk)
+            if tracker is not None:
+                combined = tail + chunk
+                if b'\nServer started\n' in b'\n' + combined.replace(b'\r\n', b'\n'):
+                    try:
+                        tracker.start()
+                    except (OSError, ValueError) as error:
+                        print(f'[ADMIN] World uptime tracking unavailable: {error}', file=sys.stderr, flush=True)
+                        tracker = None
+                tail = combined[-128:]
             # Explicit nanoseconds avoid coarse filesystem write times appearing
             # earlier than the first-output marker for very short runs.
             written = time.time_ns()
@@ -24,4 +34,12 @@ def copy_output(source, target, destination):
 
 
 if __name__ == '__main__':
-    copy_output(sys.stdin.buffer, Path(sys.argv[1]), sys.stdout.buffer)
+    from admin_world_time import SessionTracker
+    name = os.environ.get('TMOD_WORLDNAME')
+    custom = os.environ.get('TMOD_USECONFIGFILE', 'No').lower() in ('yes', 'true', '1')
+    tracker = SessionTracker(name) if name and not custom else None
+    try:
+        copy_output(sys.stdin.buffer, Path(sys.argv[1]), sys.stdout.buffer, tracker)
+    finally:
+        if tracker:
+            tracker.finish()
