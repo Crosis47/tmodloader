@@ -67,13 +67,18 @@ def create(config_path, command):
     if not name.strip() or len(name.encode('utf-16-le')) > 52 or len(seed.encode('utf-16-le')) > 78:
         raise ValueError('Interactive generation requires a nonblank name up to 26 characters and seed up to 39 characters.')
     print(f'[WORLDGEN] Creating {name} with {evil}; waiting for generation and save to finish.', flush=True)
-    with tempfile.TemporaryDirectory(prefix='tmod-worldgen-') as directory:
+    # The menu sanitizes filenames, including replacing spaces with underscores.
+    # Isolate its output to avoid collisions with existing sanitized names.
+    world.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.tmod-worldgen-', dir=world.parent) as directory:
         temporary = Path(directory) / 'serverconfig.txt'
+        generated_dir = Path(directory) / 'worlds'
+        generated_dir.mkdir()
         # Preserve mod selection/path settings, but prevent automatic world loading.
         omitted = {'world', 'worldname', 'autocreate', 'seed', 'language', 'worldpath'}
         temporary.write_text('\n'.join(line for line in lines
                                       if not line.startswith('#') and line.partition('=')[0] not in omitted)
-                             + f'\nworldpath={world.parent}/\nlanguage=en-US\n')
+                             + f'\nworldpath={generated_dir}/\nlanguage=en-US\n')
         temporary.chmod(0o600)
         args = list(command)
         args[args.index('-config') + 1] = str(temporary)
@@ -95,7 +100,8 @@ def create(config_path, command):
                 (r'Enter seed(?:\s*\([^\r\n]*\))?\s*:', seed),
                 (r'Choose world\s*:', None),
             ], encoding='utf-16-le' if os.name == 'nt' else 'utf-8')
-            if not world.is_file() or world.stat().st_size == 0:
+            generated = list(generated_dir.glob('*.wld'))
+            if len(generated) != 1 or generated[0].stat().st_size == 0:
                 raise RuntimeError(f'Creator returned to the menu without saving expected world: {world}')
         finally:
             # The final menu is reached only after the generation/save task finishes.
@@ -108,7 +114,28 @@ def create(config_path, command):
             child.stdin.close()
             child.stdout.close()
             signal.signal(signal.SIGTERM, previous)
+        publish_world(generated[0], world)
     print('[WORLDGEN] World saved; starting the configured game server.', flush=True)
+
+
+def publish_world(generated, destination):
+    """Publish sidecars first, then the world, without replacing existing files."""
+    published = []
+    try:
+        for suffix in ('.twld', '.wld.bak', '.twld.bak', '.wld'):
+            source = generated.with_suffix(suffix)
+            target = destination.with_suffix(suffix)
+            if target.exists() or target.is_symlink():
+                raise FileExistsError(f'Refusing to replace existing world file: {target}')
+            if source.exists():
+                # Same-filesystem hard links publish complete files atomically
+                # and fail if another writer created the target in the meantime.
+                os.link(source, target)
+                published.append(target)
+    except Exception:
+        for target in reversed(published):
+            target.unlink()
+        raise
 
 
 if __name__ == '__main__':

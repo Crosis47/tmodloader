@@ -10,6 +10,38 @@ import create_world
 
 
 class WorldCreationTests(unittest.TestCase):
+    def test_publish_spaced_name_and_sidecars_without_overwriting(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            staged = root / 'staged'
+            staged.mkdir()
+            source = staged / 'The_Gaslands_Of_Flatula.wld'
+            source.write_bytes(b'world')
+            source.with_suffix('.twld').write_bytes(b'mod-data')
+            existing = root / source.name
+            existing.write_bytes(b'older-underscore-world')
+            destination = root / 'The Gaslands Of Flatula.wld'
+            create_world.publish_world(source, destination)
+            self.assertEqual(destination.read_bytes(), b'world')
+            self.assertEqual(destination.with_suffix('.twld').read_bytes(), b'mod-data')
+            self.assertEqual(existing.read_bytes(), b'older-underscore-world')
+            with self.assertRaises(FileExistsError):
+                create_world.publish_world(source, destination)
+            self.assertEqual(destination.read_bytes(), b'world')
+
+    def test_publish_collision_rolls_back_only_new_sidecars(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / 'generated.wld'
+            source.write_bytes(b'new')
+            source.with_suffix('.twld').write_bytes(b'new-mod-data')
+            destination = root / 'existing.wld'
+            destination.write_bytes(b'original')
+            with self.assertRaises(FileExistsError):
+                create_world.publish_world(source, destination)
+            self.assertEqual(destination.read_bytes(), b'original')
+            self.assertFalse(destination.with_suffix('.twld').exists())
+
     def test_launcher_propagates_server_failure(self):
         with tempfile.TemporaryDirectory() as folder:
             config = Path(folder) / 'config'
@@ -34,7 +66,8 @@ for prompt, expected in [('Choose World:', 'n'), ('Choose size:', '2'),
     print(prompt, end='', flush=True)
     assert input() == expected
 if sys.argv[2] != 'missing':
-    pathlib.Path(sys.argv[2]).write_bytes(b'saved-world')
+    worldpath = next(line.split('=', 1)[1] for line in config.splitlines() if line.startswith('worldpath='))
+    pathlib.Path(worldpath, 'Test.wld').write_bytes(b'saved-world')
 print('Choose World:', end='', flush=True)
 input()
 ''')

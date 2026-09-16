@@ -39,7 +39,7 @@ breaking change.
 
 ## Required validation
 
-For local Python tests, install `argon2-cffi`. Also run admin tests inside the
+For local Python tests, install `argon2-cffi` and `waitress`. Also run admin tests inside the
 built image to verify compatibility with Ubuntu's packaged Argon2 library.
 
 For the administration page, run `python3 -m unittest discover -s tests -p
@@ -48,6 +48,12 @@ disposable volumes and a test token: first-run setup, saved-hash restart, authen
 apply, confirmed apply/restart, backup/verify, and environment-mode read-only
 behavior. Live Workshop search requires a separately supplied Steam API key;
 mocked API tests do not establish live key access.
+
+For setup field validation, run `node tests/setup-ui-test.cjs` with Playwright
+installed. Set `SETUP_TEST_URL` and `SETUP_TEST_CODE` for a disposable first-run
+server; this test creates its admin credential. Optionally set
+`SETUP_TEST_BROWSER=msedge` to use installed Edge instead of Playwright Chromium,
+and `SETUP_TEST_SCREENSHOT` to save the validated form preview.
 
 The administration integration test also verifies recovery previews, checksum
 rejection before downtime, live restore, retained originals, startup failure
@@ -152,8 +158,13 @@ requests.
 
 Every new packaged tModLoader release requires a container version bump, even
 when the container code is unchanged. Use a patch bump for upstream-only updates.
-Before publishing, increment `VERSION`, add a matching `## X.Y.Z - YYYY-MM-DD`
-section to `CHANGELOG.md`, and return `## Unreleased` to an empty state.
+Before publishing, increment `VERSION`, add a matching `## [X.Y.Z] - YYYY-MM-DD`
+section to `CHANGELOG.md`, and return `## [Unreleased]` to an empty state.
+Follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): newest releases
+first, ISO dates, and human-readable entries under applicable `Added`, `Changed`,
+`Deprecated`, `Removed`, `Fixed`, or `Security` headings. Omit empty categories
+and update version comparison links. Generated GitHub release notes lead with
+these changes and keep image/source/validation details in an expandable section.
 Stable releases and images use `X.Y.Z`; previews use `X.Y.Z-preview`.
 The bundled tModLoader version is recorded in release notes and OCI labels.
 Numbered tags are immutable. The scheduled publisher checks upstream releases;
