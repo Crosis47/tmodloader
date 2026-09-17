@@ -32,6 +32,9 @@ It is not affiliated with Re-Logic or the tModLoader team.
 
 ## Image tags and updates
 
+The release workflow also supports publishing verified images to Docker Hub.
+See [Docker Hub publishing setup and retries](docs/dockerhub-publishing.md).
+
 | Tag | Behavior |
 | --- | --- |
 | `3.0.1` | Fixed stable release; matches the GitHub Release tag |

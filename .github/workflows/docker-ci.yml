@@ -16,6 +16,7 @@ on:
       - "tests/**"
       - docker-compose.yml
       - ".github/workflows/*.yml"
+      - ".github/scripts/**"
   pull_request:
     paths:
       - VERSION
@@ -29,6 +30,7 @@ on:
       - "tests/**"
       - docker-compose.yml
       - ".github/workflows/*.yml"
+      - ".github/scripts/**"
   workflow_dispatch:
 
 permissions:
@@ -77,6 +79,9 @@ jobs:
 
       - name: Test release metadata and notes
         run: bash tests/release-metadata-test.sh
+
+      - name: Test Docker Hub publication safety
+        run: python3 -m unittest discover -s tests -p 'test_dockerhub.py' -v
 
       - name: Validate Compose configuration
         run: |
