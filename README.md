@@ -15,9 +15,9 @@
 [![Issues open](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/issues_open-f0568da46a219a08.svg)](https://github.com/Crosis47/tmodloader/issues?q=is%3Aissue+is%3Aopen)
 [![Issues closed](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/issues_closed-b2e439a556d248d3.svg)](https://github.com/Crosis47/tmodloader/issues?q=is%3Aissue+is%3Aclosed)
 [![PRs open](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_open-bea1ff39483dae9f.svg)](https://github.com/Crosis47/tmodloader/pulls)
-[![PRs merged](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_merged-361ee169e245f791.svg)](https://github.com/Crosis47/tmodloader/pulls?q=is%3Apr+is%3Amerged)
+[![PRs merged](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_merged-a54a0303920aa9d4.svg)](https://github.com/Crosis47/tmodloader/pulls?q=is%3Apr+is%3Amerged)
 
-Updated **2026-09-17 13:20 UTC** · Refreshed hourly · [Metric definitions](docs/repository-stats.md)
+Updated **2026-09-17 13:31 UTC** · Refreshed hourly · [Metric definitions](docs/repository-stats.md)
 <!-- repository-stats:end -->
 
 Run a modded Terraria server in Docker, with a built-in web dashboard for managing
