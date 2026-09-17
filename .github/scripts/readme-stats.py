@@ -69,6 +69,7 @@ def package_counts(html, today):
     if not all(day in parser.days for day in days):
         raise ValueError("GHCR chart is missing dates in its seven-day window")
     return {"ghcr_pulls": parser.total,
+            "ghcr_day": parser.days[end],
             "ghcr_week": sum(parser.days[day] for day in days),
             "ghcr_week_start": str(days[-1]), "ghcr_week_end": str(end)}
 
@@ -131,6 +132,7 @@ def write_snapshot(root, snapshot):
         ("docker_pulls", "Docker pulls", hub, "087CA7"),
         ("docker_stars", "Docker stars", hub, "087CA7"),
         ("ghcr_pulls", "GHCR pulls", github + "/pkgs/container/" + image.split('/')[1], "6554C0"),
+        ("ghcr_day", "GHCR downloads today", github + "/pkgs/container/" + image.split('/')[1], "6554C0"),
         ("ghcr_week", "GHCR downloads / 7d", github + "/pkgs/container/" + image.split('/')[1], "6554C0"),
         ("github_stars", "GitHub stars", github + "/stargazers", "786312"),
         ("github_forks", "GitHub forks", github + "/forks", "536471"),
