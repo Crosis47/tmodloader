@@ -12,6 +12,11 @@ immutable deployment identifier.
 
 ## [Unreleased]
 
+### Added
+
+- Optional Docker Hub publishing of verified multi-platform releases, with
+  digest verification, protected version tags, and retries without rebuilding.
+
 ## [3.2.0] - 2026-09-16
 
 ### Added

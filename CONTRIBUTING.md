@@ -172,6 +172,10 @@ if upstream changes after publication, bump `VERSION` to package it.
 
 ## Pull requests and publishing
 
+For Docker Hub credentials, initial publication, and upload retries, see
+[Docker Hub publishing](docs/dockerhub-publishing.md). Validate mirror changes with
+`python3 -m unittest discover -s tests -p 'test_dockerhub.py' -v`.
+
 Use an imperative commit subject and explain the user-visible result, risks,
 compatibility impact, and validation in the pull request. Do not manually move
 public image tags as part of a contribution. After changes reach `master`, the
