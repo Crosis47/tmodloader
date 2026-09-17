@@ -332,3 +332,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
         run: python3 .github/scripts/mirror-dockerhub.py
+
+  overview:
+    name: Sync Docker Hub README and release changes
+    needs: dockerhub
+    if: ${{ !cancelled() && needs.dockerhub.result == 'success' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/dockerhub-overview.yml
+    secrets:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

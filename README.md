@@ -11,6 +11,7 @@ This independently maintained project has its own features, fixes, and releases.
 It is not affiliated with Re-Logic or the tModLoader team.
 
 [Container images](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader) ·
+[Docker Hub](https://hub.docker.com/r/crosis47/tmodloader) ·
 [Releases](https://github.com/Crosis47/tmodloader/releases) ·
 [Changelog](CHANGELOG.md)
 

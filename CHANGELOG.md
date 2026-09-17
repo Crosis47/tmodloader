@@ -14,6 +14,9 @@ immutable deployment identifier.
 
 ### Added
 
+- Automatically sync the README and published release changes to Docker Hub's
+  Overview, including working screenshot links and documentation-only updates.
+
 - Optional Docker Hub publishing of verified multi-platform releases, with
   digest verification, protected version tags, and retries without rebuilding.
 
