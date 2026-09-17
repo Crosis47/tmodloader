@@ -64,12 +64,22 @@ See [Drydock's getting started guide](https://getdrydock.com/docs/v1.7/getting-s
 
 ## Dashboard gallery
 
-Captured from a running preview server. Select a screenshot to view it full size.
+Captured from the current 3.2.0 dashboard interface with demonstration server data.
+Workshop cards show real public Steam titles and artwork in an illustrative results
+list. Select a screenshot to view it full size.
 
-| Overview | Worlds | Backups & recovery |
-| :---: | :---: | :---: |
-| [![Server overview](docs/images/dashboard-overview.png)](docs/images/dashboard-overview.png) | [![World management](docs/images/dashboard-worlds.png)](docs/images/dashboard-worlds.png) | [![Backups and recovery](docs/images/dashboard-backups.png)](docs/images/dashboard-backups.png) |
-| Health, players, and server status | Saved worlds and world creation | Archives, verification, and restoration |
+| Overview | Worlds |
+| :---: | :---: |
+| [![Server overview with health, connected players, and backup status](docs/images/dashboard-overview.png)](docs/images/dashboard-overview.png) | [![World management with expanded metadata, session uptime, and Journey controls](docs/images/dashboard-worlds.png)](docs/images/dashboard-worlds.png) |
+| Health, players, settings, and backup status | World details, uptime, creation, and Journey permissions |
+
+| Backups & recovery | Steam Workshop search |
+| :---: | :---: |
+| [![Expanded backup details showing archived worlds, mods, and runtime compatibility](docs/images/dashboard-backups.png)](docs/images/dashboard-backups.png) | [![Steam Workshop search with Calamity Mod, Magic Storage, and Recipe Browser mod cards](docs/images/dashboard-workshop.png)](docs/images/dashboard-workshop.png) |
+| Archive contents, verification, and compatibility | Search controls, Steam preview artwork, and mod selection |
+
+Live Workshop browsing requires a Steam API key. Importing a Workshop URL or ID
+works without one.
 
 ## Getting started
 
