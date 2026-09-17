@@ -81,7 +81,7 @@ jobs:
         run: bash tests/release-metadata-test.sh
 
       - name: Test Docker Hub publication safety
-        run: python3 -m unittest discover -s tests -p 'test_dockerhub.py' -v
+        run: python3 -m unittest discover -s tests -p 'test_dockerhub*.py' -v
 
       - name: Validate Compose configuration
         run: |

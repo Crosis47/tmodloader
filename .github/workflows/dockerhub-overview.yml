@@ -1,0 +1,50 @@
+name: Sync Docker Hub overview
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - README.md
+      - CHANGELOG.md
+      - .github/scripts/dockerhub-overview.py
+      - .github/workflows/dockerhub-overview.yml
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      DOCKERHUB_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dockerhub-overview
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: vars.DOCKERHUB_IMAGE != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'release' && 'master' || github.sha }}
+      - name: Generate README and published release changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/dockerhub-overview.py "$RUNNER_TEMP/dockerhub-overview.md"
+      - name: Update Docker Hub Overview
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ vars.DOCKERHUB_IMAGE }}
+          readme-filepath: ${{ runner.temp }}/dockerhub-overview.md
+          short-description: tModLoader server with a web dashboard, Workshop mods, world management, and backups. AMD64/ARM64.
+      - name: Verify published Overview
+        env:
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+        run: python3 .github/scripts/dockerhub-overview.py "$RUNNER_TEMP/dockerhub-overview.md" --verify "$DOCKERHUB_IMAGE"

@@ -48,3 +48,26 @@ docker pull crosis47/tmodloader:latest
 
 Both registries use the same version tags and multi-platform digest. Existing
 Compose deployments can continue using GHCR.
+
+## README and release notes
+
+The **Sync Docker Hub overview** Action publishes the full README plus the latest
+published stable release's changelog section to Docker Hub's Overview. It links
+to the full changelog and all stable/preview release notes. Relative screenshot
+and document links become absolute URLs so they work on Docker Hub. Unreleased
+changelog entries are not presented as shipped changes.
+
+The image publisher calls this workflow after successful copying, including
+mirror-only retries. It also runs on README/changelog edits on `master`, on
+published/edited GitHub Releases, and manually. Documentation edits do not need
+a container rebuild. The uploaded content is read back and verified; content
+over Docker Hub's 25,000-byte limit fails visibly instead of being truncated.
+
+This uses the existing `DOCKERHUB_TOKEN`. The Docker Hub description action
+documents a personal access token with **Read, Write, Delete** permission for
+repository metadata updates. If the existing image-push token is rejected,
+replace that GitHub secret with an appropriately permitted token. No images
+are deleted by this workflow.
+
+Docker Hub's built-in README auto-import applies to its own automated builds;
+this repository uses GitHub Actions, so the Overview is synced explicitly.
