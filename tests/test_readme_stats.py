@@ -29,6 +29,7 @@ class StatsTests(unittest.TestCase):
         for reverse in (True, False):
             result = stats.package_counts(chart(reverse=reverse), date(2026, 9, 17))
             self.assertEqual(result["ghcr_pulls"], 1581)
+            self.assertEqual(result["ghcr_day"], 1)
             self.assertEqual(result["ghcr_week"], 28)
             self.assertEqual(result["ghcr_week_start"], "2026-09-11")
 
@@ -69,12 +70,12 @@ class StatsTests(unittest.TestCase):
             snapshot = self.snapshot()
             stats.write_snapshot(root, snapshot)
             first = set((root / 'docs/stats/badges').glob('*.svg'))
-            self.assertEqual(len(first), 10)
+            self.assertEqual(len(first), 11)
             snapshot['metrics']['docker_pulls'] = 300
             stats.write_snapshot(root, snapshot)
             second = set((root / 'docs/stats/badges').glob('*.svg'))
-            self.assertEqual(len(first & second), 10)
-            self.assertEqual(len(second), 11)
+            self.assertTrue(first.issubset(second))
+            self.assertEqual(len(second - first), 1)
             readme = (root / 'README.md').read_text()
             self.assertTrue(readme.startswith('Before\n'))
             self.assertTrue(readme.endswith('\nAfter\n'))

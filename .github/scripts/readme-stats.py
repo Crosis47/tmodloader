@@ -146,14 +146,14 @@ def write_snapshot(root, snapshot):
     if original.count(START) != 1 or original.count(END) != 1 or original.index(END) < original.index(START):
         raise ValueError("README must contain exactly one ordered statistics marker pair")
     files, lines = {}, [START]
-    for index, (key, label, link, color) in enumerate(specs):
+    for key, label, link, color in specs:
         svg = badge(label, metrics[key], color)
         digest = hashlib.sha256(svg.encode()).hexdigest()[:16]
         name = f"{key}-{digest}.svg"
         files[name] = svg
         url = f"https://raw.githubusercontent.com/{repository}/master/docs/stats/badges/{name}"
         lines.append(f"[![{label}]({url})]({link})")
-        if index in (3, 5):
+        if key in ("ghcr_week", "github_forks"):
             lines.append("")
     lines.extend(["", f"Updated **{snapshot['updated_at']}** · Refreshed hourly · "
                   "[Metric definitions](docs/repository-stats.md)", END])
