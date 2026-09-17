@@ -57,7 +57,7 @@ class MirrorTests(unittest.TestCase):
         calls = self.exercise()
         command = next(c for c in calls if c[0] == "docker")
         self.assertIn(f"{TARGET}:latest", command)
-        self.assertIn(f"{TARGET}:stable", command)
+        self.assertNotIn(f"{TARGET}:stable", command)
         self.assertEqual(command[-1], f"{SOURCE}@{DIGEST}")
         self.assertTrue(any(c[:3] == ("gh", "release", "edit") for c in calls))
 

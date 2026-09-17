@@ -58,7 +58,7 @@ See [Docker Hub publishing setup and retries](docs/dockerhub-publishing.md).
 | --- | --- |
 | `3.0.1` | Fixed stable release; matches the GitHub Release tag |
 | `3.0.1-preview` | Fixed preview release; marked as a GitHub prerelease |
-| `latest` / `stable` | Follow the latest tested stable build |
+| `latest` | Follow the latest tested stable build |
 | `preview` | Follow the latest tested preview build |
 
 Release notes include the bundled tModLoader version and its upstream release

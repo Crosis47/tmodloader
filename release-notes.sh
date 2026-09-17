@@ -69,7 +69,7 @@ fi
 if [[ "$update_channel_aliases" != "true" ]]; then
     channel_tags="not moved by this manual build"
 elif [[ "$channel" == "stable" ]]; then
-    channel_tags="\`latest\` and \`stable\`"
+    channel_tags="\`latest\`"
 else
     channel_tags="\`preview\`"
 fi

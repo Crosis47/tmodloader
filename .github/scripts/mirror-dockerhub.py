@@ -49,7 +49,7 @@ def mirror(repository, source, target, tag, channel):
         raise ValueError(f"Refusing to replace numbered Docker Hub tag {tag}")
     tags = [tag]
     # A retry of an older release must not roll moving aliases backward.
-    for alias in (["latest", "stable"] if channel == "stable" else ["preview"]):
+    for alias in (["latest"] if channel == "stable" else ["preview"]):
         current = manifest(f"{source}:{alias}", missing_ok=True)
         if current and current[0] == digest:
             tags.append(alias)

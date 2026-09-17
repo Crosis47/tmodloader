@@ -15,7 +15,7 @@ here as well.
 
 Security fixes are applied to images built from the current `master` branch.
 The release workflows refuse to reuse numbered release
-tags. The `latest`, `stable`, and `preview` aliases can move as the container changes. Pin an
+tags. The `latest` and `preview` aliases can move as the container changes. Pin an
 image digest when an immutable deployment is needed. Older image digests do not
 receive in-place updates.
 

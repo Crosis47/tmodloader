@@ -16,7 +16,7 @@ on:
           - stable
           - preview
       update_channel_aliases:
-        description: Move latest/stable or preview to this verified build
+        description: Move latest or preview to this verified build
         required: true
         default: false
         type: boolean
@@ -170,7 +170,7 @@ jobs:
           )
           if [[ "$UPDATE_CHANNEL_ALIASES" == true ]]; then
             if [[ "$CHANNEL" == stable ]]; then
-              tag_args+=(--tag "$IMAGE:latest" --tag "$IMAGE:stable")
+              tag_args+=(--tag "$IMAGE:latest")
             else
               tag_args+=(--tag "$IMAGE:preview")
             fi

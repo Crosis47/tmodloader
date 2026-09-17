@@ -253,7 +253,7 @@ jobs:
             --tag "$IMAGE:$DOCKER_TAG"
           )
           if [[ "$CHANNEL" == stable ]]; then
-            tag_args+=(--tag "$IMAGE:latest" --tag "$IMAGE:stable")
+            tag_args+=(--tag "$IMAGE:latest")
           else
             tag_args+=(--tag "$IMAGE:preview")
           fi

@@ -60,7 +60,7 @@ grep -Fxq '</details>' "$notes_output"
 grep -Fq "ghcr.io/crosis47/tmodloader:${current_version}" "$notes_output"
 grep -Fq 'ghcr.io/crosis47/tmodloader@sha256:abcdef' "$notes_output"
 grep -Fq 'tModLoader v2026.07.3.0 release notes' "$notes_output"
-grep -Fq 'Moving channel tag(s): `latest` and `stable`' "$notes_output"
+grep -Fq 'Moving channel tag(s): `latest`' "$notes_output"
 
 GITHUB_REPOSITORY=Crosis47/tmodloader \
 GITHUB_SHA=0123456789abcdef \

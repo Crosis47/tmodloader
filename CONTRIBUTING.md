@@ -181,7 +181,7 @@ compatibility impact, and validation in the pull request. Do not manually move
 public image tags as part of a contribution. After changes reach `master`, the
 publisher builds and tests an untagged candidate digest before updating GHCR
 tags. It then creates a GitHub Release from the matching versioned changelog
-section. The automation refuses to reuse numbered tags; only `latest`, `stable`, and `preview` aliases move.
+section. The automation refuses to reuse numbered tags; only `latest` and `preview` aliases move.
 
 Dashboard browser regression tests also include `tests/admin-profiles-test.cjs`,
 `tests/admin-playthroughs-test.cjs`, `tests/admin-overview-test.cjs`,
