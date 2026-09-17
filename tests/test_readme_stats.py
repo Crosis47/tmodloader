@@ -57,7 +57,7 @@ class StatsTests(unittest.TestCase):
     def snapshot(self):
         return {'repository': 'owner/repo', 'docker_image': 'owner/image',
                 'updated_at': '2026-09-17 12:00 UTC', 'metrics': dict.fromkeys([
-                    'docker_pulls', 'docker_stars', 'ghcr_pulls', 'ghcr_week',
+                    'docker_pulls', 'docker_stars', 'ghcr_pulls', 'ghcr_day', 'ghcr_week',
                     'github_stars', 'github_forks', 'issues_open', 'issues_closed',
                     'prs_open', 'prs_merged'], 0)}
 
