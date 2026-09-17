@@ -12,6 +12,11 @@ on:
     types: [published, edited]
   workflow_dispatch:
   workflow_call:
+    inputs:
+      ref:
+        description: Commit containing the README to sync
+        type: string
+        default: ''
     secrets:
       DOCKERHUB_TOKEN:
         required: true
@@ -31,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'release' && 'master' || github.sha }}
+          ref: ${{ inputs.ref || (github.event_name == 'release' && 'master' || github.sha) }}
       - name: Generate README and published release changes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
