@@ -3,6 +3,9 @@
 [![Publish](https://img.shields.io/github/actions/workflow/status/Crosis47/tmodloader/docker-publish.yml?branch=master&logo=github&label=image%20publisher&style=for-the-badge)](https://github.com/Crosis47/tmodloader/actions/workflows/docker-publish.yml)
 [![CI](https://img.shields.io/github/actions/workflow/status/Crosis47/tmodloader/docker-ci.yml?logo=github&label=docker%20CI&style=for-the-badge)](https://github.com/Crosis47/tmodloader/actions/workflows/docker-ci.yml)
 
+[![DockerPulls](https://img.shields.io/docker/pulls/crosis47/tmodloader?logo=docker&style=for-the-badge)](https://registry.hub.docker.com/r/crosis47/tmodloader)
+[![DockerStars](https://img.shields.io/docker/stars/crosis47/tmodloader?logo=docker&style=for-the-badge)](](https://registry.hub.docker.com/r/crosis47/tmodloader))
+
 Run a modded Terraria server in Docker, with a built-in web dashboard for managing
 worlds, Workshop mods, players, and backups. Keep your server's data across
 container updates and manage it from your browser or Docker Compose.
