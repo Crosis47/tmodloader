@@ -18,7 +18,7 @@
 [![PRs open](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_open-bea1ff39483dae9f.svg)](https://github.com/Crosis47/tmodloader/pulls)
 [![PRs merged](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_merged-a54a0303920aa9d4.svg)](https://github.com/Crosis47/tmodloader/pulls?q=is%3Apr+is%3Amerged)
 
-Updated **2026-09-20 01:17 UTC** · Refreshed hourly · [Metric definitions](docs/repository-stats.md)
+Updated **2026-09-20 06:24 UTC** · Refreshed hourly · [Metric definitions](docs/repository-stats.md)
 <!-- repository-stats:end -->
 
 Run a modded Terraria server in Docker, with a built-in web dashboard for managing
