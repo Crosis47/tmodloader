@@ -45,8 +45,7 @@ def change(payload, current):
         worlds.check('switch', name)
         settings.atomic_json(settings.PENDING.with_name('pending-world.json'), {'action': 'switch', 'name': name})
         settings.atomic_json(settings.PENDING, {**current['staged'], **values})
-        notice = settings.PENDING.with_name('pending-removed.json')
-        settings.atomic_json(notice, {'names': sorted(set(settings.read_json(notice).get('names', []) + removed))})
+        settings.record_pending_removals(removed)
         return
     if kind == 'delete' or (kind == 'save' and selected):
         if payload.get('confirm') is not True:

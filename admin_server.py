@@ -23,6 +23,7 @@ import admin_schema
 import admin_recovery
 import admin_players
 import admin_worlds
+import admin_modconfigs
 import admin_journey
 import admin_profiles
 import admin_playthroughs
@@ -161,6 +162,14 @@ def console_output(query=None):
         return {'output': 'No console output yet. The server may still be starting.', 'available': False, 'line_limit': 200}
 
 
+def operation_busy():
+    """Include CLI backups as well as jobs started by the administration API.
+
+    Callers that mutate state must hold STATE_LOCK through their operation.
+    """
+    return JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running'
+
+
 def send_console(payload):
     command = payload.get('command')
     if not isinstance(command, str) or not command.strip() or len(command) > 4000 or any(ord(c) < 32 or ord(c) == 127 for c in command):
@@ -169,7 +178,7 @@ def send_console(payload):
     if command.split()[0].lower() in ('exit', 'exit-nosave') and payload.get('confirm_stop') is not True:
         raise ValueError('Stopping the server requires explicit confirmation.')
     with STATE_LOCK:
-        if JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running':
+        if operation_busy():
             raise ValueError('Wait for the current backup or administration operation before sending commands.')
         if not health():
             raise ValueError('The game server is not ready to receive commands.')
@@ -292,130 +301,235 @@ def start_job(kind, archive=None, checksum=None):
     return JOB
 
 
-def api(method, path, query, payload):
-    if path == '/api/playthroughs' and method in ('GET', 'POST'):
-        with STATE_LOCK:
+def playthroughs_request(method, payload):
+    with STATE_LOCK:
+        current = configuration()
+        busy = operation_busy()
+        if method == 'POST':
+            if busy:
+                raise ValueError('Wait for the current operation before changing playthroughs.')
+            admin_playthroughs.change(payload, current)
             current = configuration()
-            busy = JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running'
-            if method == 'POST':
-                if busy:
-                    raise ValueError('Wait for the current operation before changing playthroughs.')
-                admin_playthroughs.change(payload, current)
-                current = configuration()
-            return {**admin_playthroughs.catalog(), 'revision': current['revision'],
-                    'running': admin_playthroughs.selection(current['running']),
-                    'staged': admin_playthroughs.selection(current['staged']),
-                    'worlds': admin_worlds.inventory(current['running'])['worlds'], 'editable': admin_playthroughs.editable(), 'pending': current['pending'], 'busy': busy}
-    if path == '/api/profiles' and method in ('GET', 'POST'):
-        with STATE_LOCK:
+        return {**admin_playthroughs.catalog(), 'revision': current['revision'],
+                'running': admin_playthroughs.selection(current['running']),
+                'staged': admin_playthroughs.selection(current['staged']),
+                'worlds': admin_worlds.inventory(current['running'])['worlds'], 'editable': admin_playthroughs.editable(), 'pending': current['pending'], 'busy': busy}
+
+
+def profiles_request(method, payload):
+    with STATE_LOCK:
+        current = configuration()
+        busy = operation_busy()
+        if method == 'POST':
+            if busy:
+                raise ValueError('Wait for the current operation before changing profiles.')
+            admin_profiles.change(payload, current)
             current = configuration()
-            busy = JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running'
-            if method == 'POST':
-                if busy:
-                    raise ValueError('Wait for the current operation before changing profiles.')
-                admin_profiles.change(payload, current)
-                current = configuration()
-            return {**admin_profiles.catalog(), 'revision': current['revision'],
-                    'running': current['running'].get('TMOD_MODS', ''),
-                    'staged': current['staged'].get('TMOD_MODS', ''),
-                    'editable': settings.web_mode(), 'pending': current['pending'], 'busy': busy}
-    if path == '/api/worlds/journey' and method in ('GET', 'POST'):
-        with STATE_LOCK:
-            name = query.get('name', [None])[0] if method == 'GET' else payload.get('name')
-            if name is not None:
-                admin_worlds.check('switch', name)
-                metadata = admin_worlds.read_metadata(admin_worlds.world_path(name))
-                if not metadata.get('available') or metadata.get('difficulty') != 'Journey':
-                    raise ValueError('Journey permissions are available only for confirmed Journey worlds.')
-            current = configuration()
-            if method == 'POST':
-                if not settings.web_mode() or os.environ.get('TMOD_USECONFIGFILE', 'No').lower() in ('yes', 'true', '1'):
-                    raise ValueError('Enable web-managed generated configuration to edit Journey permissions.')
-                if JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running':
-                    raise ValueError('Wait for the current operation before changing Journey permissions.')
-                if payload.get('settings_revision') != current['revision']:
-                    raise ValueError('Settings changed. Close and reopen this dialog before saving.')
-                admin_journey.save(payload)
-                selected = current['staged'].get('TMOD_WORLDNAME')
-                selected_metadata = admin_worlds.read_metadata(admin_worlds.world_path(selected)) if selected else {}
-                intent = settings.read_json(settings.PENDING.with_name('pending-world.json'))
-                selected_is_journey = selected_metadata.get('difficulty') == 'Journey' or (
-                    intent.get('action') == 'create' and intent.get('name') == selected and
-                    current['staged'].get('TMOD_DIFFICULTY') == '3')
-                if selected_is_journey and (name is None or name == selected):
-                    values = {**current['staged'], **admin_journey.effective(selected)}
-                    if values != current['staged']:
-                        settings.atomic_json(settings.PENDING, values)
-                current = configuration()
-            return {**admin_journey.state(name), 'settings_revision': current['revision'],
-                    'running': admin_journey.permissions(current['running']),
-                    'running_world': current['running'].get('TMOD_WORLDNAME'),
-                    'editable': settings.web_mode() and os.environ.get('TMOD_USECONFIGFILE', 'No').lower() not in ('yes', 'true', '1')}
-    if method == 'GET' and path == '/api/worlds':
-        config = configuration()
-        healthy = health()
-        return {**admin_worlds.inventory(config['running'], healthy=healthy), 'healthy': healthy,
-                'busy': JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running',
-                'revision': config['revision'], 'staged_name': config['staged'].get('TMOD_WORLDNAME'),
-                'pending': config['pending']}
-    if method == 'POST' and path == '/api/worlds/stage':
-        with STATE_LOCK:
+        return {**admin_profiles.catalog(), 'revision': current['revision'],
+                'running': current['running'].get('TMOD_MODS', ''),
+                'staged': current['staged'].get('TMOD_MODS', ''),
+                'editable': settings.web_mode(), 'pending': current['pending'], 'busy': busy}
+
+
+def journey_request(method, query, payload):
+    with STATE_LOCK:
+        name = query.get('name', [None])[0] if method == 'GET' else payload.get('name')
+        if name is not None:
+            admin_worlds.check('switch', name)
+            metadata = admin_worlds.read_metadata(admin_worlds.world_path(name))
+            if not metadata.get('available') or metadata.get('difficulty') != 'Journey':
+                raise ValueError('Journey permissions are available only for confirmed Journey worlds.')
+        current = configuration()
+        if method == 'POST':
             if not settings.web_mode() or os.environ.get('TMOD_USECONFIGFILE', 'No').lower() in ('yes', 'true', '1'):
-                raise ValueError('Enable web-managed generated configuration to manage worlds here.')
-            if JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running':
-                raise ValueError('Wait for the current operation before choosing a world.')
+                raise ValueError('Enable web-managed generated configuration to edit Journey permissions.')
+            if operation_busy():
+                raise ValueError('Wait for the current operation before changing Journey permissions.')
+            if payload.get('settings_revision') != current['revision']:
+                raise ValueError('Settings changed. Close and reopen this dialog before saving.')
+            admin_journey.save(payload)
+            selected = current['staged'].get('TMOD_WORLDNAME')
+            selected_metadata = admin_worlds.read_metadata(admin_worlds.world_path(selected)) if selected else {}
+            intent = settings.read_json(settings.PENDING.with_name('pending-world.json'))
+            selected_is_journey = selected_metadata.get('difficulty') == 'Journey' or (
+                intent.get('action') == 'create' and intent.get('name') == selected and
+                current['staged'].get('TMOD_DIFFICULTY') == '3')
+            if selected_is_journey and (name is None or name == selected):
+                values = {**current['staged'], **admin_journey.effective(selected)}
+                if values != current['staged']:
+                    settings.atomic_json(settings.PENDING, values)
+            current = configuration()
+        return {**admin_journey.state(name), 'settings_revision': current['revision'],
+                'running': admin_journey.permissions(current['running']),
+                'running_world': current['running'].get('TMOD_WORLDNAME'),
+                'editable': settings.web_mode() and os.environ.get('TMOD_USECONFIGFILE', 'No').lower() not in ('yes', 'true', '1')}
+
+
+def worlds_status():
+    config = configuration()
+    healthy = health()
+    return {**admin_worlds.inventory(config['running'], healthy=healthy), 'healthy': healthy,
+            'busy': operation_busy(),
+            'revision': config['revision'], 'staged_name': config['staged'].get('TMOD_WORLDNAME'),
+            'pending': config['pending']}
+
+
+def stage_world(payload):
+    with STATE_LOCK:
+        if not settings.web_mode() or os.environ.get('TMOD_USECONFIGFILE', 'No').lower() in ('yes', 'true', '1'):
+            raise ValueError('Enable web-managed generated configuration to manage worlds here.')
+        if operation_busy():
+            raise ValueError('Wait for the current operation before choosing a world.')
+        current = configuration()
+        if payload.get('revision') != current['revision']:
+            raise ValueError('Settings changed. Refresh and review the latest draft.')
+        admin_worlds.stage(payload, current)
+        return configuration()
+
+
+def players_status():
+    with STATE_LOCK:
+        result = {'available': False, 'players': [], 'updated': None,
+                  'activity': admin_players.activity(), 'can_ban': False}
+        try:
+            players_ready()
+            roster = admin_players.snapshot(CONSOLE_LOG)
+            result.update({k: v for k, v in roster.items() if not k.startswith('_')})
+            result.update(available=True, detail='Fresh native server query; refreshes every 10 seconds while this page is open.')
+            try:
+                admin_players.ban_path()
+                result['can_ban'] = True
+            except ValueError:
+                pass
+        except (ValueError, OSError) as error:
+            result['detail'] = str(error)
+        return result
+
+
+def player_command(path, payload):
+    with STATE_LOCK:
+        players_ready()
+        if path.endswith('/moderate'):
+            return admin_players.moderate(CONSOLE_LOG, payload)
+        if payload.get('confirm') is not True:
+            raise ValueError('Confirm the announcement before sending.')
+        message = admin_players.line_text(payload.get('message'))
+        if not message.strip():
+            raise ValueError('Announcement text cannot be blank.')
+        admin_players.deliver('say ' + message)
+        detail = 'Announcement command delivered. Client receipt cannot be confirmed by the server console.'
+        admin_players.audit('announcement', message, detail)
+        return {'detail': detail}
+
+
+def recovery_request(path, payload):
+    kind = path.rsplit('/', 1)[-1]
+    with STATE_LOCK:
+        if settings.read_json(admin_metrics.STATE).get('state') == 'running':
+            raise ValueError('Wait for the current backup to finish.')
+        if kind not in ('preview', 'inspect') and payload.get('confirm') is not True:
+            raise ValueError('Explicit confirmation is required.')
+        if kind not in ('preview', 'inspect') and admin_recovery.status()['interrupted']:
+            raise ValueError('An interrupted restore requires manual recovery. Read the Recovery page guidance.')
+        checksum = payload.get('sha256')
+        if kind in ('restore', 'prepare') and (not isinstance(checksum, str) or not re.fullmatch('[a-f0-9]{64}', checksum)):
+            raise ValueError('Preview the archive before restoring.')
+        archive = None if kind == 'retry' else admin_recovery.archive_path(payload.get('archive'))
+        return start_job(kind, archive, checksum)
+
+
+def server_status():
+    healthy = health()
+    return {'healthy': healthy, 'mods': running_mods(healthy), 'backups': admin_metrics.inventory(), 'job': JOB,
+            'version': Path('/terraria-server/VERSION').read_text().strip()
+            if Path('/terraria-server/VERSION').exists() else 'development'}
+
+
+def save_settings(payload):
+    if not settings.web_mode():
+        raise ValueError('Enable TMOD_CONFIG_SOURCE=web in Compose to edit settings.')
+    with STATE_LOCK:
+        if operation_busy():
+            raise ValueError('Wait for the current operation before changing settings.')
+        current = configuration()
+        if payload.get('revision') != current['revision']:
+            raise ValueError('Settings changed in another session. Reload before saving.')
+        removed = []
+        values = settings.clean_mod_selection(settings.validate(payload.get('settings')), removed)
+        settings.atomic_json(settings.PENDING, {**current['staged'], **values})
+        settings.record_pending_removals(removed)
+    return configuration()
+
+
+def operation_request(path, payload):
+    if payload.get('confirm') is not True:
+        raise ValueError('Explicit confirmation is required.')
+    kind = path.rsplit('/', 1)[-1]
+    with STATE_LOCK:
+        if kind == 'apply' and admin_recovery.status()['interrupted']:
+            raise ValueError('An interrupted restore must be recovered before applying settings.')
+        if kind == 'apply' and (not settings.web_mode() or not settings.PENDING.exists()):
+            raise ValueError('No staged web-managed settings to apply.')
+        if kind == 'apply' and payload.get('revision') != configuration()['revision']:
+            raise ValueError('The staged draft changed. Reload and review it before applying.')
+        if kind == 'apply':
+            admin_worlds.validate_pending()
+        archive = None
+        if kind == 'verify':
+            name = payload.get('archive', '')
+            if not isinstance(name, str) or not name.startswith('tmod-backup-') or Path(name).name != name or '/' in name or '\\' in name:
+                raise ValueError('Invalid archive name.')
+            archive = admin_metrics.DEST / name
+            if archive.is_symlink() or not archive.is_dir():
+                raise ValueError('Archive not found.')
+        return start_job(kind, archive)
+
+
+def api(method, path, query, payload):
+    """Dispatch authenticated requests; feature handlers own validation and locking."""
+    if path == '/api/mod-configs/validate' and method == 'POST':
+        admin_modconfigs.path_for(payload.get('name'))
+        return admin_modconfigs.validate_content(payload['name'], payload.get('content'))
+    if path == '/api/mod-configs' and method in ('GET', 'POST'):
+        with STATE_LOCK:
+            if method == 'GET':
+                return admin_modconfigs.read(query['name'][0]) if query.get('name') else admin_modconfigs.inventory()
+            if operation_busy():
+                raise ValueError('Wait for the current server operation before saving mod configuration.')
+            return admin_modconfigs.save(payload)
+    if method == 'POST' and path in ('/api/settings/discard', '/api/worlds/delete'):
+        with STATE_LOCK:
+            if operation_busy():
+                raise ValueError('Wait for the current server operation.')
             current = configuration()
             if payload.get('revision') != current['revision']:
-                raise ValueError('Settings changed. Refresh and review the latest draft.')
-            admin_worlds.stage(payload, current)
-            return configuration()
-    if path == '/api/players' and method == 'GET':
-        with STATE_LOCK:
-            result = {'available': False, 'players': [], 'updated': None,
-                      'activity': admin_players.activity(), 'can_ban': False}
-            try:
-                players_ready()
-                roster = admin_players.snapshot(CONSOLE_LOG)
-                result.update({k: v for k, v in roster.items() if not k.startswith('_')})
-                result.update(available=True, detail='Fresh native server query; refreshes every 10 seconds while this page is open.')
-                try:
-                    admin_players.ban_path()
-                    result['can_ban'] = True
-                except ValueError:
-                    pass
-            except (ValueError, OSError) as error:
-                result['detail'] = str(error)
-            return result
-    if path in ('/api/players/moderate', '/api/players/announce') and method == 'POST':
-        with STATE_LOCK:
-            players_ready()
-            if path.endswith('/moderate'):
-                return admin_players.moderate(CONSOLE_LOG, payload)
+                raise ValueError('Settings changed. Refresh and review again.')
+            if path == '/api/settings/discard':
+                for name in ('pending.json', 'pending-world.json', 'pending-removed.json'):
+                    settings.PENDING.with_name(name).unlink(missing_ok=True)
+                return configuration()
             if payload.get('confirm') is not True:
-                raise ValueError('Confirm the announcement before sending.')
-            message = admin_players.line_text(payload.get('message'))
-            if not message.strip():
-                raise ValueError('Announcement text cannot be blank.')
-            admin_players.deliver('say ' + message)
-            detail = 'Announcement command delivered. Client receipt cannot be confirmed by the server console.'
-            admin_players.audit('announcement', message, detail)
-            return {'detail': detail}
+                raise ValueError('Confirm world deletion.')
+            admin_worlds.delete(payload.get('name'), current)
+            return {'deleted': payload.get('name')}
+    if path == '/api/playthroughs' and method in ('GET', 'POST'):
+        return playthroughs_request(method, payload)
+    if path == '/api/profiles' and method in ('GET', 'POST'):
+        return profiles_request(method, payload)
+    if path == '/api/worlds/journey' and method in ('GET', 'POST'):
+        return journey_request(method, query, payload)
+    if method == 'GET' and path == '/api/worlds':
+        return worlds_status()
+    if method == 'POST' and path == '/api/worlds/stage':
+        return stage_world(payload)
+    if path == '/api/players' and method == 'GET':
+        return players_status()
+    if path in ('/api/players/moderate', '/api/players/announce') and method == 'POST':
+        return player_command(path, payload)
     if method == 'GET' and path == '/api/recovery':
         return admin_recovery.status()
     if method == 'POST' and path in ('/api/recovery/preview', '/api/recovery/restore', '/api/recovery/retry', '/api/recovery/inspect', '/api/recovery/prepare'):
-        kind = path.rsplit('/', 1)[-1]
-        with STATE_LOCK:
-            if settings.read_json(admin_metrics.STATE).get('state') == 'running':
-                raise ValueError('Wait for the current backup to finish.')
-            if kind not in ('preview', 'inspect') and payload.get('confirm') is not True:
-                raise ValueError('Explicit confirmation is required.')
-            if kind not in ('preview', 'inspect') and admin_recovery.status()['interrupted']:
-                raise ValueError('An interrupted restore requires manual recovery. Read the Recovery page guidance.')
-            checksum = payload.get('sha256')
-            if kind in ('restore', 'prepare') and (not isinstance(checksum, str) or not re.fullmatch('[a-f0-9]{64}', checksum)):
-                raise ValueError('Preview the archive before restoring.')
-            archive = None if kind == 'retry' else admin_recovery.archive_path(payload.get('archive'))
-            return start_job(kind, archive, checksum)
+        return recovery_request(path, payload)
     if method == 'GET' and path == '/api/console/runs':
         return console_sources()
     if method == 'GET' and path == '/api/console':
@@ -423,10 +537,7 @@ def api(method, path, query, payload):
     if method == 'POST' and path == '/api/console':
         return send_console(payload)
     if method == 'GET' and path == '/api/status':
-        healthy = health()
-        return {'healthy': healthy, 'mods': running_mods(healthy), 'backups': admin_metrics.inventory(), 'job': JOB,
-                'version': Path('/terraria-server/VERSION').read_text().strip()
-                if Path('/terraria-server/VERSION').exists() else 'development'}
+        return server_status()
     if method == 'GET' and path == '/api/settings':
         return configuration()
     if method == 'GET' and path == '/api/workshop':
@@ -434,49 +545,19 @@ def api(method, path, query, payload):
                               int(query.get('page', ['1'])[0]), query.get('tag', [''])[0])
     if method == 'POST' and path == '/api/workshop/lookup':
         return workshop.lookup(str(payload.get('value', '')))
+    if method == 'POST' and path == '/api/workshop/dependencies':
+        return workshop.dependencies(str(payload.get('id', '')))
+    if method == 'POST' and path == '/api/workshop/key':
+        return workshop.save_key(payload.get('key'))
     if method == 'POST' and path == '/api/settings':
-        if not settings.web_mode():
-            raise ValueError('Enable TMOD_CONFIG_SOURCE=web in Compose to edit settings.')
-        with STATE_LOCK:
-            if JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running':
-                raise ValueError('Wait for the current operation before changing settings.')
-            current = configuration()
-            if payload.get('revision') != current['revision']:
-                raise ValueError('Settings changed in another session. Reload before saving.')
-            removed = []
-            values = settings.clean_mod_selection(settings.validate(payload.get('settings')), removed)
-            settings.atomic_json(settings.PENDING, {**current['staged'], **values})
-            notice_path = settings.PENDING.with_name('pending-removed.json')
-            previous = settings.read_json(notice_path).get('names', [])
-            settings.atomic_json(notice_path, {'names': sorted(set(previous + removed))})
-        return configuration()
+        return save_settings(payload)
     if method == 'POST' and path in ('/api/backup', '/api/apply', '/api/verify'):
-        if payload.get('confirm') is not True:
-            raise ValueError('Explicit confirmation is required.')
-        kind = path.rsplit('/', 1)[-1]
-        with STATE_LOCK:
-            if kind == 'apply' and admin_recovery.status()['interrupted']:
-                raise ValueError('An interrupted restore must be recovered before applying settings.')
-            if kind == 'apply' and (not settings.web_mode() or not settings.PENDING.exists()):
-                raise ValueError('No staged web-managed settings to apply.')
-            if kind == 'apply' and payload.get('revision') != configuration()['revision']:
-                raise ValueError('The staged draft changed. Reload and review it before applying.')
-            if kind == 'apply':
-                admin_worlds.validate_pending()
-            archive = None
-            if kind == 'verify':
-                name = payload.get('archive', '')
-                if not isinstance(name, str) or not name.startswith('tmod-backup-') or Path(name).name != name or '/' in name or '\\' in name:
-                    raise ValueError('Invalid archive name.')
-                archive = admin_metrics.DEST / name
-                if archive.is_symlink() or not archive.is_dir():
-                    raise ValueError('Archive not found.')
-            return start_job(kind, archive)
+        return operation_request(path, payload)
     raise LookupError('Endpoint not found.')
 
 
 def players_ready():
-    if JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running':
+    if operation_busy():
         raise ValueError('Player controls are paused during backup, restore or settings changes.')
     if not health():
         raise ValueError('Game is not ready. Player count is unknown until it is healthy.')
@@ -500,12 +581,14 @@ def application(environ, start_response):
             payload = {}
             if method == 'POST':
                 length = int(environ.get('CONTENT_LENGTH') or '0')
-                if not 0 < length <= 65536 or environ.get('CONTENT_TYPE', '').split(';')[0] != 'application/json':
-                    raise ValueError('Expected a JSON body of at most 64 KiB.')
+                body_limit = 524288 if path in ('/api/mod-configs', '/api/mod-configs/validate') else 65536
+                if not 0 < length <= body_limit or environ.get('CONTENT_TYPE', '').split(';')[0] != 'application/json':
+                    raise ValueError(f'Expected a JSON body of at most {body_limit // 1024} KiB.')
                 payload = json.loads(environ['wsgi.input'].read(length))
                 if not isinstance(payload, dict):
                     raise ValueError('Expected a JSON object.')
-            body = json.dumps(setup_request(method, payload) if path == '/api/setup' else api(method, path, urllib.parse.parse_qs(environ.get('QUERY_STRING', '')), payload)).encode()
+            with workshop.authenticated(supplied[7:] if path != '/api/setup' else ''):
+                body = json.dumps(setup_request(method, payload) if path == '/api/setup' else api(method, path, urllib.parse.parse_qs(environ.get('QUERY_STRING', '')), payload)).encode()
         elif method == 'GET' and path in ('/', '/app.js', '/style.css', '/setup.js'):
             name = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/setup.js': 'setup.js'}[path]
             content_type = {'/': 'text/html', '/app.js': 'text/javascript', '/style.css': 'text/css', '/setup.js': 'text/javascript'}[path] + '; charset=utf-8'
@@ -546,7 +629,7 @@ def main():
     print('[ADMIN] Private administration interface listening on port 8080.', flush=True)
     serve(application, host='0.0.0.0', port=8080, threads=4, connection_limit=32,
           # admin_access validates raw headers against the unchanged socket peer.
-          channel_timeout=30, max_request_body_size=65536, clear_untrusted_proxy_headers=False)
+          channel_timeout=30, max_request_body_size=524288, clear_untrusted_proxy_headers=False)
 
 
 if __name__ == '__main__':

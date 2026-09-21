@@ -144,6 +144,8 @@ RUN apt-get update \
         python3 \
         python3-waitress \
         python3-argon2 \
+        python3-cryptography \
+        python3-yaml \
         argon2 \
         tini \
         tzdata \
@@ -252,6 +254,7 @@ COPY --chown=tml:tml admin_schema.py admin_auth.py admin_access.py ./
 COPY --chown=tml:tml admin_recovery.py ./
 COPY --chown=tml:tml admin_players.py ./
 COPY --chown=tml:tml admin_worlds.py admin_world_metadata.py admin_world_time.py admin_journey.py ./
+COPY --chown=tml:tml admin_modconfigs.py ./
 COPY --chown=tml:tml admin_profiles.py admin_playthroughs.py ./
 COPY --chown=tml:tml web ./web
 COPY --chown=root:root --chmod=0755 container-init.sh /usr/local/bin/tmod-init

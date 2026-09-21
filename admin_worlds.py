@@ -10,6 +10,21 @@ from admin_world_metadata import read_metadata
 
 CREATION_KEYS = {'TMOD_WORLDSIZE', 'TMOD_DIFFICULTY', 'TMOD_WORLDSEED', 'TMOD_WORLDEVIL'}
 
+
+def delete(name, current):
+    if os.environ.get('TMOD_USECONFIGFILE', 'No').lower() in ('yes', 'true', '1'):
+        raise ValueError('Cannot determine the active world with custom configuration.')
+    if name in (current['running'].get('TMOD_WORLDNAME'), current['staged'].get('TMOD_WORLDNAME')):
+        raise ValueError('Cannot delete the running or draft-selected world. Change or cancel the draft first.')
+    path = world_path(name)
+    if not path.is_file():
+        raise ValueError('World no longer exists. Refresh the list.')
+    paths = [path.with_suffix(suffix) for suffix in ('.wld', '.twld', '.wld.bak', '.twld.bak', '.wld.bak2', '.twld.bak2')]
+    if any(p.is_symlink() or (p.exists() and not p.is_file()) for p in paths):
+        raise ValueError('Linked or non-file world data cannot be deleted.')
+    for item in paths:
+        item.unlink(missing_ok=True)
+
 def directory():
     path = settings.DATA / 'tModLoader/Worlds'
     if path.is_symlink() or path.parent.is_symlink():

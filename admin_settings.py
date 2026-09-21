@@ -128,6 +128,13 @@ def clean_mod_selection(values, removed=None):
     return values
 
 
+def record_pending_removals(names):
+    """Retain client-only mod notices across edits until the draft is applied."""
+    path = PENDING.with_name('pending-removed.json')
+    previous = read_json(path).get('names', [])
+    atomic_json(path, {'names': sorted(set(previous + names))})
+
+
 def record_removed(names):
     request_id = os.environ.get('TMOD_ADMIN_REQUEST_ID')
     if not request_id or not names:

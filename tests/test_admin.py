@@ -18,6 +18,40 @@ import filter_client_mods
 
 
 class AdminTests(unittest.TestCase):
+    def test_discard_draft_revision_busy_and_cleanup(self):
+        settings.atomic_json(settings.PENDING, {'TMOD_WORLDNAME': 'Draft'})
+        for name in ('pending-world.json', 'pending-removed.json'):
+            settings.atomic_json(settings.PENDING.with_name(name), {})
+        self.assertTrue(self.request('/api/settings/discard', {'revision': 'stale'})[0].startswith('400'))
+        self.assertTrue(settings.PENDING.exists())
+        revision = server.configuration()['revision']
+        server.JOB = {'state': 'running'}
+        self.assertTrue(self.request('/api/settings/discard', {'revision': revision})[0].startswith('400'))
+        server.JOB = {'state': 'idle'}
+        self.assertTrue(self.request('/api/settings/discard', {'revision': revision})[0].startswith('200'))
+        for name in ('pending.json', 'pending-world.json', 'pending-removed.json'):
+            self.assertFalse(settings.PENDING.with_name(name).exists())
+
+    def test_new_mutations_require_auth_and_respect_busy_state(self):
+        for endpoint in ('/api/settings/discard', '/api/worlds/delete', '/api/mod-configs'):
+            self.assertTrue(self.request(endpoint, {}, auth=False)[0].startswith('403'))
+            server.JOB = {'state': 'running'}
+            self.assertTrue(self.request(endpoint, {})[0].startswith('400'))
+
+    def test_busy_guard_includes_api_jobs_and_cli_backups(self):
+        for job_running, backup_running in ((False, False), (True, False), (False, True), (True, True)):
+            with self.subTest(job=job_running, backup=backup_running):
+                server.JOB = {'state': 'running' if job_running else 'success'}
+                settings.atomic_json(metrics.STATE, {'state': 'running' if backup_running else 'success'})
+                self.assertEqual(server.operation_busy(), job_running or backup_running)
+
+    def test_pending_removal_notices_accumulate_across_draft_edits(self):
+        settings.record_pending_removals(['Zebra', 'Alpha', 'Alpha'])
+        settings.record_pending_removals([])
+        settings.record_pending_removals(['Beta', 'Zebra'])
+        self.assertEqual(settings.read_json(settings.PENDING.with_name('pending-removed.json')),
+                         {'names': ['Alpha', 'Beta', 'Zebra']})
+
     def test_playthroughs_auth_and_operation_guard(self):
         self.assertTrue(self.request('/api/playthroughs', auth=False)[0].startswith('403'))
         with patch.object(server.admin_playthroughs, 'change') as change:

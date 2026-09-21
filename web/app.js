@@ -43,7 +43,9 @@ async function api(path, body) {
 
 function action(fn) { return async event => { event?.preventDefault(); try { await fn(); } catch (error) { tell(error.message); } }; }
 
-function confirmAction(title, text, diff = '') {
+function confirmAction(title, text, diff = '', buttonText = 'Confirm') {
+
+  $('confirm-go').textContent = buttonText;
 
   $('confirm-title').textContent = title; $('confirm-text').textContent = text; $('confirm-diff').textContent = diff;
 
@@ -564,7 +566,9 @@ async function loadSettings() {
 
   $('config-jumps').replaceChildren(...configurationGroups.map(group => { const link = node('a', group.title); link.href = '#config-' + group.id; return link; }));
 
-  $('search-help').textContent = config.workshop_search ? 'Browse tModLoader mods with real Steam preview images. Steam metadata does not guarantee multiplayer or version compatibility.' : 'Provide a Steam API key to unlock the full graphical mod browser and search on this page, including real Steam preview images. Mount the key as a secret file, set TMOD_WORKSHOP_KEY_FILE to its container path, and recreate the container. A configured key must have access to Steam’s Workshop API.';
+  $('search-help').textContent = config.workshop_search ? 'Steam API key configured. Browse mods and check their Workshop dependencies before adding them. Steam metadata does not guarantee multiplayer or version compatibility.' : 'Enter a Steam API key below. After Steam validates it, the key field is hidden and search is unlocked.';
+  $('workshop-key-form').hidden = !!config.workshop_search;
+  $('workshop-key-change').hidden = !config.workshop_search;
 
   if (!config.workshop_search) $('search-help').textContent += ' Import by Workshop URL or ID below works without an API key.';
 
@@ -590,13 +594,28 @@ async function stageMod(item) {
 
   const entry = (item.collection ? 'collection:' : '') + item.id;
 
+  const revision = config.revision;
+
   const items = new Set((config.staged.TMOD_MODS || '').split(',').filter(Boolean));
 
   if (item.client_only && !items.has(entry)) throw new Error('Client-only mods cannot be added to the server selection.');
 
-  if (items.has(entry)) items.delete(entry); else items.add(entry);
+  if (items.has(entry)) items.delete(entry); else {
+    tell('Checking Workshop dependencies…');
+    const plan = await api('/api/workshop/dependencies', {id: item.id});
+    const missing = plan.items.filter(dependency => !items.has((dependency.collection ? 'collection:' : '') + dependency.id));
+    if (!plan.checked) {
+      if (!await confirmAction('Dependency check unavailable', 'A Steam API key is required to check dependencies. Add this item without checking, or cancel and configure a key first?', item.title, 'Add without checking')) { tell('Selection unchanged.'); return; }
+    } else if (missing.length || plan.excluded.length) {
+      const listing = missing.map(dependency => dependency.title + ' (' + dependency.id + ')').join('\n');
+      const excluded = plan.excluded.length ? '\n\nClient-only items excluded from this server:\n' + plan.excluded.map(dependency => dependency.title + ' (' + dependency.id + ')').join('\n') : '';
+      if (!await confirmAction('Add required Workshop items', 'Adding ' + item.title + ' also requires the following items. Add saves the complete selection as a draft; Cancel changes nothing.', (listing || 'All server dependencies are already selected.') + excluded, 'Add')) { tell('Selection unchanged.'); return; }
+    }
+    items.add(entry);
+    missing.forEach(dependency => items.add((dependency.collection ? 'collection:' : '') + dependency.id));
+  }
 
-  await api('/api/settings', {revision: config.revision, settings: {TMOD_MODS: [...items].join(',')}});
+  await api('/api/settings', {revision, settings: {TMOD_MODS: [...items].join(',')}});
 
   await loadSettings(); tell('Mod selection staged. Use Apply changes here or Review & apply in Configuration when ready.');
 
@@ -775,6 +794,15 @@ function renderWorlds() {
     if (world.selected) cell.append(node('span', state.healthy ? 'Active' : 'Configured', 'badge'));
 
     if (!world.selected) {
+      const remove = node('button', 'Delete world');
+      remove.disabled = state.busy || worldSubmitting || !state.configured || (state.pending && state.staged_name === world.name);
+      remove.setAttribute('aria-label', 'Delete world ' + world.name);
+      remove.onclick = action(async () => {
+        if (!await confirmAction('Delete world ' + world.name + '?', 'Permanently delete this world, its mod data, and local world backup files. Archived backups are retained.', world.name, 'Delete world')) return;
+        await api('/api/worlds/delete', {name: world.name, revision: state.revision, confirm: true});
+        await refreshWorlds(); tell('World deleted: ' + world.name);
+      });
+      cell.append(remove);
       const select = node('button', 'Switch'); select.disabled = !editable || !world.can_select;
       select.setAttribute('aria-label', 'Switch to ' + world.name);
       select.onclick = action(() => stageWorld({action: 'switch', name: world.name})); cell.append(select);
@@ -1095,6 +1123,12 @@ async function reviewSavedChanges() {
   $('saved-changes-apply').disabled = !differences.length || reviewedSettings.mode !== 'web' || attentionStatus?.job?.state === 'running' || attentionStatus?.backups?.operation?.state === 'running';
   $('saved-changes-dialog').showModal();
 }
+$('saved-changes-cancel').onclick = action(async () => {
+  await api('/api/settings/discard', {revision: reviewedSettings.revision});
+  $('saved-changes-dialog').close();
+  await loadSettings(); await refresh(); await refreshWorlds();
+  tell('Saved draft canceled. Running settings are unchanged.');
+});
 $('saved-changes-close').onclick = () => $('saved-changes-dialog').close();
 $('saved-changes-apply').onclick = action(async () => { $('saved-changes-dialog').close(); await applySavedSettings(reviewedSettings); });
 $('workshop-apply').onclick = $('apply').onclick = action(async () => applySavedSettings(await api('/api/settings')));
@@ -1122,6 +1156,17 @@ async function applySavedSettings(snapshot) {
 $('search-form').onsubmit = action(async () => { page = 1; await search(); });
 
 $('lookup-form').onsubmit = action(async () => { tell('Looking up Workshop item…'); renderMods([await api('/api/workshop/lookup', {value: $('lookup').value.trim()})]); $('page-info').textContent = ''; $('previous').disabled = true; $('next').disabled = true; tell(''); });
+$('workshop-key-change').onclick = () => { $('workshop-key-form').hidden = false; $('workshop-key-change').hidden = true; $('workshop-key').focus(); };
+$('workshop-key-form').onsubmit = action(async () => {
+  $('workshop-key-save').disabled = true;
+  tell('Validating the key with Steam…');
+  try {
+    await api('/api/workshop/key', {key: $('workshop-key').value.trim()});
+    $('workshop-key').value = '';
+    await loadSettings();
+    tell('Steam API key validated and saved privately. Search is ready.');
+  } finally { $('workshop-key-save').disabled = false; }
+});
 
 $('previous').onclick = action(async () => { page--; await search(); }); $('next').onclick = action(async () => { page++; await search(); });
 
@@ -1419,3 +1464,61 @@ function renderAttention() {
   }
   $('attention-banner').hidden = !rows.length;
 }
+let modConfig = null;
+function modConfigDirty() { return modConfig && $('mod-config-content').value !== modConfig.content; }
+async function refreshModConfigs() {
+  const result = await api('/api/mod-configs');
+  const selected = $('mod-config-file').value;
+  $('mod-config-file').replaceChildren(...result.files.map(name => { const option = node('option', name); option.value = name; return option; }));
+  if (result.files.includes(selected)) $('mod-config-file').value = selected;
+  $('mod-config-open').disabled = !result.files.length;
+  $('mod-config-status').textContent = result.files.length ? result.files.length + ' configuration files available.' : 'No generated mod configuration files found.';
+}
+$('mod-config-refresh').onclick = action(refreshModConfigs);
+$('mod-config-open').onclick = action(async () => {
+  if (modConfigDirty() && !await confirmAction('Discard unsaved file edits?', 'Reloading replaces your unsaved file edits.', modConfig.name, 'Discard edits')) return;
+  modConfig = await api('/api/mod-configs?name=' + encodeURIComponent($('mod-config-file').value));
+  modValidationSequence++;
+  $('mod-config-content').value = modConfig.content;
+  $('mod-config-content').disabled = false; $('mod-config-save').disabled = false;
+  $('mod-config-check').disabled = false;
+  $('mod-config-status').textContent = 'Editing ' + modConfig.name + ' · ' + (modConfig.format || 'JSON');
+  $('mod-config-validation').textContent = modConfig.format === 'Text' ? 'Text mode: no format-specific syntax validation.' : 'Use Check syntax or Save file to validate.';
+});
+let modValidationSequence = 0;
+$('mod-config-content').addEventListener('input', () => {
+  modValidationSequence++;
+  $('mod-config-validation').textContent = 'Unsaved edits. Syntax has not been checked for these edits.';
+});
+$('mod-config-check').onclick = action(async () => {
+  if (!modConfig) return;
+  const sequence = ++modValidationSequence, name = modConfig.name, content = $('mod-config-content').value;
+  $('mod-config-validation').textContent = 'Checking syntax…';
+  try {
+    const result = await api('/api/mod-configs/validate', {name, content});
+    if (sequence !== modValidationSequence || name !== modConfig?.name) return;
+    $('mod-config-validation').textContent = result.checked ? result.format + ' syntax is valid. Mod-specific values are not checked.' : 'Text mode: no format-specific syntax validation.';
+  } catch (error) {
+    if (sequence === modValidationSequence && name === modConfig?.name) $('mod-config-validation').textContent = error.message;
+  }
+});
+$('mod-config-form').onsubmit = action(async () => {
+  if (!modConfig) return;
+  const content = $('mod-config-content').value;
+  if (!modConfig.format || modConfig.format === 'JSON') {
+    try { const value = JSON.parse(content); if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('Expected a JSON object.'); }
+    catch (error) { throw new Error('Invalid JSON: ' + error.message); }
+  }
+  const name = modConfig.name;
+  const saved = await api('/api/mod-configs', {name, revision: modConfig.revision, content});
+  if (modConfig?.name !== name) return;
+  modConfig = saved;
+  if ($('mod-config-content').value === content) {
+    $('mod-config-content').value = saved.content;
+    modValidationSequence++;
+    $('mod-config-validation').textContent = saved.format === 'Text' ? 'Saved as text without format-specific validation.' : 'Syntax validated before saving.';
+  }
+  $('mod-config-status').textContent = 'Saved ' + name + '. Restart the server to load these values.';
+});
+document.querySelectorAll('[data-view="mod-configs"]').forEach(button => button.addEventListener('click', action(refreshModConfigs)));
+window.addEventListener('beforeunload', event => { if (modConfigDirty()) { event.preventDefault(); event.returnValue = ''; } });

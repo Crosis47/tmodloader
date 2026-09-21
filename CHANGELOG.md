@@ -12,13 +12,36 @@ immutable deployment identifier.
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-09-21
+
 ### Added
+
+- Edit existing mod configuration files from the dashboard, with syntax checks for
+  JSON, YAML, TOML, INI, and XML, stale-file protection, and atomic saves.
+- Delete unused worlds after confirmation, protecting running and draft-selected worlds.
+- Cancel saved configuration drafts directly from the saved-change review dialog.
+
+- Workshop API key entry with Steam validation, admin-token-based encrypted persistent storage,
+  replacement controls, and an explanation of how the key is stored.
+- Workshop dependency checks, including nested requirements and collections,
+  with an Add / Cancel review before staging missing server items.
 
 - Automatically sync the README and published release changes to Docker Hub's
   Overview, including working screenshot links and documentation-only updates.
 
 - Optional Docker Hub publishing of verified multi-platform releases, with
   digest verification, protected version tags, and retries without rebuilding.
+
+### Changed
+
+- Organize administration API routes into named feature handlers and document
+  startup, configuration, and recovery coordination in a contributor code map.
+
+### Fixed
+
+- Preserve accumulated client-only mod removal notices across draft edits.
+- Consistently block configuration changes during active administration or backup operations.
+- Restore readable punctuation in dashboard labels and install all mod-editor test dependencies in CI.
 
 ## [3.2.0] - 2026-09-16
 
@@ -158,7 +181,7 @@ immutable deployment identifier.
   Game startup waits until the admin hash is saved, then resumes automatically.
   Remote setup requires HTTPS or a localhost SSH tunnel.
 - Include the Argon2 CLI and Python library, plus an interactive hash creation
-  and rotation helper. Admin tokens accept 8–256 non-whitespace ASCII characters;
+  and rotation helper. Admin tokens accept 8â€“256 non-whitespace ASCII characters;
   only the salted hash is persisted with owner-only permissions.
 - Verify setup, hash persistence across restart, and authentication using the
   container's installed dependencies and disposable integration-test volumes.
@@ -343,5 +366,7 @@ immutable deployment identifier.
 - Made generated configuration, shutdown, autosave, and command injection more
   reliable.
 
-[Unreleased]: https://github.com/Crosis47/tmodloader/compare/3.1.1...HEAD
+[Unreleased]: https://github.com/Crosis47/tmodloader/compare/3.3.0...HEAD
+[3.3.0]: https://github.com/Crosis47/tmodloader/compare/3.2.0...3.3.0
+[3.2.0]: https://github.com/Crosis47/tmodloader/compare/3.1.1...3.2.0
 [3.1.1]: https://github.com/Crosis47/tmodloader/compare/3.1.0...3.1.1
