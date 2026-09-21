@@ -16,6 +16,10 @@ its features, fixes, and releases are managed in this repository.
 
 ## Development environment
 
+Start with the [code and process map](docs/code-map.md) to trace startup,
+dashboard requests, staged settings, and background operations. It also records
+the remaining maintainability hotspots and their regression coverage.
+
 Install Git, Docker Engine or Docker Desktop, and Bash. ShellCheck and
 actionlint are recommended; both can also be run from containers. On Windows,
 Git Bash is the simplest way to run the repository's Bash tests.

@@ -32,8 +32,7 @@ def change(payload, current):
         removed = []
         values = settings.clean_mod_selection(settings.validate({'TMOD_MODS': selected['mods']}), removed)
         settings.atomic_json(settings.PENDING, {**current['staged'], **values})
-        notice = settings.PENDING.with_name('pending-removed.json')
-        settings.atomic_json(notice, {'names': sorted(set(settings.read_json(notice).get('names', []) + removed))})
+        settings.record_pending_removals(removed)
         return
     if kind == 'delete' or (kind == 'save' and selected):
         if payload.get('confirm') is not True:

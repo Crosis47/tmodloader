@@ -36,7 +36,12 @@ It is not affiliated with Re-Logic or the tModLoader team.
 ## What it includes
 
 - **Web dashboard:** see server health, loaded mods, connected players, and recent
-  activity; send commands through an interactive console.
+  activity; send commands through an interactive console and cancel saved drafts.
+- **Mod configuration editor:** edit existing UTF-8 configuration files with syntax
+  checks for JSON, YAML, TOML, INI, and XML. Other text formats can be edited without
+  syntax validation. Restart the server to load saved changes.
+- **World cleanup:** delete unused worlds after confirmation; running and
+  draft-selected worlds are protected. Deletion includes their local backup files.
 - **Worlds and playthroughs:** create or switch worlds, save mod profiles, and pair
   a world with its settings and mod selection for later use.
 - **Steam Workshop management:** download mods and collections, look up Workshop
@@ -93,8 +98,29 @@ list. Select a screenshot to view it full size.
 | [![Expanded backup details showing archived worlds, mods, and runtime compatibility](docs/images/dashboard-backups.png)](docs/images/dashboard-backups.png) | [![Steam Workshop search with Calamity Mod, Magic Storage, and Recipe Browser mod cards](docs/images/dashboard-workshop.png)](docs/images/dashboard-workshop.png) |
 | Archive contents, verification, and compatibility | Search controls, Steam preview artwork, and mod selection |
 
-Live Workshop browsing requires a Steam API key. Importing a Workshop URL or ID
-works without one.
+Enter a Steam API key on the Workshop page to unlock search and dependency
+checks. After validation, the key field is hidden; use **Replace API key** to
+change it. Adding a mod checks nested Workshop requirements and lists missing
+items in an **Add / Cancel** dialog before saving the selection as a draft.
+Client-only dependencies are excluded. Apply the draft when ready to restart.
+Importing a Workshop URL or ID works without a key; adding without a key requires
+acknowledging that dependencies have not been checked. Checks use Steam's declared
+requirements, so they cannot detect undeclared dependencies or version conflicts.
+
+Keys entered on the page are encrypted in
+`/data/.tmod-control/workshop.key`, with Linux permissions `0600`. Authenticated
+Workshop requests derive an encryption key from your admin token using Argon2id
+and a random salt, and use Fernet authenticated encryption. The admin token and
+derived encryption key are never saved with the ciphertext. Use a strong, unique
+admin token: the protection of the encrypted Steam key depends on its strength.
+Changing or resetting the admin token requires re-entering the Steam API key.
+Previously saved plaintext keys are encrypted on the next authenticated settings
+or Workshop request. The key is never returned by the dashboard API or included
+in container backup archives. Keep the data volume to preserve it across
+recreations; re-enter it when moving to a fresh volume.
+An optional mounted `TMOD_WORKSHOP_KEY_FILE` remains an externally managed
+plaintext input; a key saved on the page takes precedence. Use HTTPS for
+administration over untrusted networks.
 
 ## Getting started
 

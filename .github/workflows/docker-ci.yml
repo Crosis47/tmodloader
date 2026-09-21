@@ -56,7 +56,7 @@ jobs:
         run: bash -n ./*.sh tests/*.sh
 
       - name: Install Python test dependencies
-        run: python3 -m pip install argon2-cffi waitress
+        run: python3 -m pip install argon2-cffi waitress cryptography PyYAML
 
       - name: Test backup and restore safety
         run: python3 -m unittest discover -s tests -p 'test_backup*.py' -v
