@@ -296,6 +296,25 @@ class UpdateTests(unittest.TestCase):
             updates.announce_available()
         self.assertFalse((self.control / 'announced.json').exists())
 
+    def test_container_notice_uses_container_semver_and_channel_with_cache(self):
+        (self.base / 'VERSION').write_text('3.9.0')
+        releases = [{'tag_name': '3.10.0', 'draft': False, 'prerelease': False},
+                    {'tag_name': '4.0.0-preview', 'draft': False, 'prerelease': True},
+                    {'tag_name': '9.0.0', 'draft': True, 'prerelease': False}]
+        with patch.object(updates.urllib.request, 'urlopen', return_value=io.BytesIO(json.dumps(releases).encode())) as fetch:
+            result = updates.container_status()
+            self.assertTrue(result['available'])
+            self.assertEqual(result['latest'], '3.10.0')
+            self.assertEqual(updates.container_status()['latest'], '3.10.0')
+            fetch.assert_called_once()
+
+    def test_container_check_failure_is_cached_without_false_notice(self):
+        (self.base / 'VERSION').write_text('3.4.0')
+        with patch.object(updates.urllib.request, 'urlopen', side_effect=OSError('offline')) as fetch:
+            self.assertFalse(updates.container_status()['available'])
+            self.assertTrue(updates.container_status()['error'])
+            fetch.assert_called_once()
+
     def test_only_explicit_restart_clears_hold(self):
         settings.atomic_json(self.control / 'hold.json', {'version': self.old['tmodloader_version']})
         updater.boot()

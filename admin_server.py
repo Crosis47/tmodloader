@@ -497,6 +497,8 @@ def api(method, path, query, payload):
         raise ValueError('Wait for startup update preparation to finish before changing server data.')
     if path == '/api/updates' and method == 'GET':
         return admin_updates.status()
+    if path == '/api/container-update' and method == 'GET':
+        return admin_updates.container_status()
     if path == '/api/updates/log' and method == 'GET':
         return admin_updates.diagnostics()
     if path == '/api/updates/announcements' and method == 'POST':

@@ -270,6 +270,7 @@ async function refresh() {
   const data = await api('/api/status');
   renderUpdates(data.updates);
   showUpdateProgress(data.job, data.updates);
+  showContainerReleaseNotice();
   attentionStatus = data;
   try { attentionSettings = await api('/api/settings'); } catch { attentionSettings = null; }
   renderAttention();
@@ -1077,7 +1078,7 @@ document.querySelectorAll('[data-view="players"]').forEach(button => button.addE
 
 setInterval(() => { if (!document.hidden) refreshPlayers(true); }, 10000);
 
-$('login-form').onsubmit = action(async () => { token = $('token').value; await loadSettings(); await refresh(); $('token').value = ''; $('login').hidden = true; $('dashboard').hidden = false; $('logout').hidden = false; tell(''); clearInterval(timer); timer = setInterval(() => refresh().catch(error => tell(error.message)), 15000); clearInterval(consoleTimer); consoleTimer = setInterval(() => refreshConsole().catch(error => { $('console-status').textContent = error.message; }), 2000); });
+$('login-form').onsubmit = action(async () => { token = $('token').value; await loadSettings(); await refresh(); checkContainerRelease(); $('token').value = ''; $('login').hidden = true; $('dashboard').hidden = false; $('logout').hidden = false; tell(''); clearInterval(timer); timer = setInterval(() => refresh().catch(error => tell(error.message)), 15000); clearInterval(consoleTimer); consoleTimer = setInterval(() => refreshConsole().catch(error => { $('console-status').textContent = error.message; }), 2000); });
 
 $('logout').onclick = () => { token = ''; config = null; commandHistory = []; clearInterval(timer); clearInterval(consoleTimer); location.reload(); };
 
@@ -1694,3 +1695,36 @@ $('updates-announcements').onchange = action(async () => {
   catch (error) { control.checked = !enabled; throw error; }
   finally { control.disabled = false; }
 });
+
+let containerReleaseNotice = null;
+const containerReleaseDialog = node('dialog');
+containerReleaseDialog.id = 'container-release-dialog';
+containerReleaseDialog.setAttribute('aria-label', 'Container update available');
+document.body.append(containerReleaseDialog);
+async function checkContainerRelease() {
+  const loginToken = token;
+  containerReleaseNotice = null;
+  containerReleaseDialog.close();
+  try {
+    const release = await api('/api/container-update');
+    if (token !== loginToken || !token || !release.available) return;
+    containerReleaseNotice = release;
+    showContainerReleaseNotice();
+  } catch (_) { /* An unavailable release check must not interrupt login. */ }
+}
+function showContainerReleaseNotice() {
+  if (!token || !containerReleaseNotice || document.querySelector('dialog[open]')) return;
+  const release = containerReleaseNotice;
+  containerReleaseNotice = null;
+  const notes = node('a', 'View release notes');
+  if (/^https:\/\/github\.com\/Crosis47\/tmodloader\/releases\/tag\/\d+\.\d+\.\d+(-preview)?$/.test(release.url || '')) {
+    notes.href = release.url; notes.target = '_blank'; notes.rel = 'noopener noreferrer';
+  }
+  const close = node('button', 'Continue to dashboard');
+  close.onclick = () => containerReleaseDialog.close();
+  const actions = node('div', undefined, 'button-row'); actions.append(notes, close);
+  containerReleaseDialog.replaceChildren(node('h3', 'Container update available'),
+    node('p', 'Installed: ' + release.installed + ' · Available: ' + release.latest),
+    node('p', 'This updates the container and dashboard. Pull the newer image and recreate the container using your deployment tool, keeping your data and backup volumes. The tModLoader update button does not update the container.'), actions);
+  containerReleaseDialog.showModal();
+}

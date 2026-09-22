@@ -14,10 +14,51 @@ import admin_settings as settings
 BASE = Path('/terraria-server')
 ROOT = settings.DATA / '.tmod-control/updates'
 CHECK_LOCK = threading.Lock()
+CONTAINER_LOCK = threading.Lock()
 CHECKS_ENABLED = False
 BUSY = frozenset(('initializing', 'checking', 'downloading', 'staging', 'testing', 'recovering', 'awaiting_start'))
 RELEASES = 'https://api.github.com/repos/tModLoader/tModLoader/releases?per_page=100'
 TAG = re.compile(r'v[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,3}')
+
+
+def container_status():
+    """Check this container project's published releases, independently of tML."""
+    installed = (BASE / 'VERSION').read_text().strip()
+    selected_channel = read(BASE / 'backup-runtime.json').get('update_channel', 'stable')
+    cache_path = ROOT / 'container-check.json'
+    with CONTAINER_LOCK:
+        cached = read(cache_path)
+        if (cached.get('channel') != selected_channel or
+                time.time() - cached.get('attempted', 0) >= (900 if cached.get('error') else 21600)):
+            try:
+                request = urllib.request.Request('https://api.github.com/repos/Crosis47/tmodloader/releases?per_page=100',
+                                                 headers={'User-Agent': 'tmodloader-container-updates', 'Accept': 'application/vnd.github+json'})
+                with urllib.request.urlopen(request, timeout=8) as response:
+                    raw = response.read(4 * 1024 * 1024 + 1)
+                if len(raw) > 4 * 1024 * 1024:
+                    raise ValueError('Release response exceeds the size limit.')
+                candidates = []
+                for item in json.loads(raw):
+                    match = re.fullmatch(r'(\d+)\.(\d+)\.(\d+)(-preview)?', item.get('tag_name', ''))
+                    if item.get('draft') or not match:
+                        continue
+                    if bool(match[4]) != (selected_channel == 'preview') or (selected_channel == 'stable' and item.get('prerelease')):
+                        continue
+                    candidates.append((tuple(map(int, match.group(1, 2, 3))), item['tag_name']))
+                if not candidates:
+                    raise ValueError('No published container release found for this channel.')
+                latest = max(candidates)[1]
+                cached = {'latest': latest, 'channel': selected_channel, 'attempted': time.time(), 'error': ''}
+            except (OSError, ValueError, TypeError, KeyError) as error:
+                cached = {'channel': selected_channel, 'attempted': time.time(), 'error': str(error)[:200]}
+            settings.atomic_json(cache_path, cached)
+    current = re.fullmatch(r'(\d+)\.(\d+)\.(\d+)', installed)
+    latest = cached.get('latest', '')
+    available = bool(current and latest and not cached.get('error') and
+                     tuple(map(int, latest.removesuffix('-preview').split('.'))) > tuple(map(int, current.groups())))
+    return {'installed': installed, 'latest': latest, 'available': available, 'channel': selected_channel,
+            'url': 'https://github.com/Crosis47/tmodloader/releases/tag/' + latest if latest else '',
+            'error': cached.get('error', '')}
 
 
 def read(path):
