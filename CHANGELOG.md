@@ -41,6 +41,8 @@ immutable deployment identifier.
 
 ### Fixed
 
+- Check data-volume writability before creating updater control files, preserving
+  the precise read-only volume startup diagnostic.
 - Cache internal bundled library symlinks safely, including the SDL alias created
   during tModLoader startup, while continuing to reject linked game-data paths.
 - Preserve the game password during dashboard runtime restarts and rollback.

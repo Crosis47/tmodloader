@@ -146,6 +146,7 @@ cleanup() {
 
 [[ "$(id -u)" != "0" ]] || fail "The server refuses to run as root. Use the image's built-in tml user."
 # Lock before recovery or settings reads: a checkpoint restore can replace saved settings.
+ensure_writable_directory /data
 ensure_writable_directory /data/.tmod-control
 exec 9>/data/.tmod-control/server.lock
 flock -n 9 || fail "Another server or restore is using /data."
@@ -169,9 +170,6 @@ TMOD_CRASH_LOG_LINES="${TMOD_CRASH_LOG_LINES:-200}"
 [[ "$TMOD_CRASH_LOG_LINES" =~ ^[0-9]+$ ]] || fail "TMOD_CRASH_LOG_LINES must be a non-negative integer."
 export TMOD_LOG_LEVEL TMOD_CRASH_LOG_LINES TMOD_CONTROL_PIPE TMOD_SERVER_PID_FILE
 
-ensure_writable_directory /data
-ensure_writable_directory /data/.tmod-control
-[[ ! -e /data/.tmod-control/restore-pending ]] || fail "An interrupted restore requires recovery; inspect /data/.tmod-control/restore-pending before starting."
 [[ "${TMOD_BACKUP_INTERVAL:-0}" =~ ^[0-9]{1,7}$ ]] || fail "TMOD_BACKUP_INTERVAL must be a non-negative integer (minutes, maximum 9999999)."
 [[ "${TMOD_BACKUP_KEEP:-7}" =~ ^[1-9][0-9]{0,5}$ ]] || fail "TMOD_BACKUP_KEEP must be a positive integer (maximum 999999)."
 [[ "${TMOD_BACKUP_MIN_FREE_MB:-1024}" =~ ^[0-9]{1,9}$ ]] || fail "TMOD_BACKUP_MIN_FREE_MB must be a non-negative integer (maximum 999999999)."
