@@ -21,6 +21,11 @@ immutable deployment identifier.
 - Cache container-release checks, respect stable/preview image channels, and
   keep failed checks or other open dialogs from interrupting login.
 
+### Fixed
+
+- Keep Docker Hub overview content below its 25,000-byte limit by linking detailed
+  reference sections when necessary, preserving setup instructions and published release notes.
+
 ## [3.4.0] - 2026-09-21
 
 ### Added

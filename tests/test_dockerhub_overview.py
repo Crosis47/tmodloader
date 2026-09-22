@@ -53,6 +53,21 @@ class OverviewTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             overview.render("# Readme", release, "owner/repo")
 
+    def test_long_reference_is_linked_without_cutting_setup_or_release_notes(self):
+        readme = '# Project\nIntro\n## Getting started\n```sh\ndocker compose up -d\n```\n## Essential settings\n' + 'é' * 14000
+        text = overview.render(readme, self.release(), 'owner/repo')
+        self.assertLessEqual(len(text.encode('utf-8')), 25000)
+        self.assertIn('```sh\ndocker compose up -d\n```', text)
+        self.assertIn('Published fix', text)
+        self.assertIn('README.md#essential-settings', text)
+
+    def test_current_readme_fits_with_large_published_notes(self):
+        release = self.release()
+        release['body'] = '## Published changes\n' + '- Fixed a published issue.\n' * 150
+        text = overview.render((Path(__file__).resolve().parents[1] / 'README.md').read_text(encoding='utf-8'), release, 'Crosis47/tmodloader')
+        self.assertLessEqual(len(text.encode('utf-8')), 25000)
+        self.assertIn('## Getting started', text)
+
 
 if __name__ == "__main__":
     unittest.main()
