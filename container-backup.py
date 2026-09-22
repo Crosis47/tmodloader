@@ -64,7 +64,7 @@ def preflight(check_reserve=True):
 
 
 def identity():
-    return Path('/terraria-server/backup-build-id').read_text().strip()
+    return admin_backup_details.current_build()
 
 
 def cold_backup():

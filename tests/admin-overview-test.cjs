@@ -40,7 +40,7 @@ const {chromium} = require('playwright');
     await page.locator('#token').fill('test-token'); await page.getByRole('button', {name: 'Connect', exact: true}).click();
     await page.locator('#overview-world').filter({hasText:'Adventure'}).waitFor();
     await page.locator('#overview-players').filter({hasText:'Test Player'}).waitFor();
-    assert.equal(await page.locator('#overview #backup, #overview #archives, #overview #recovery-restore, #overview input, #overview select').count(), 0);
+    assert.equal(await page.locator('#overview #backup, #overview #archives, #overview #recovery-restore, #overview input:not(#updates-announcements), #overview select').count(), 0);
     await page.locator('#refresh').click(); assert.equal(posts, 0);
     await page.getByRole('button', {name: 'Backups & recovery', exact: true}).click();
     assert.equal(await page.locator('#backup').isVisible(), true);

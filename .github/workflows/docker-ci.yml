@@ -9,6 +9,7 @@ on:
       - "*backup.py"
       - "admin_*.py"
       - workshop_download.py
+      - runtime_updates.py
       - "web/**"
       - CHANGELOG.md
       - Dockerfile
@@ -23,6 +24,7 @@ on:
       - "*backup.py"
       - "admin_*.py"
       - workshop_download.py
+      - runtime_updates.py
       - "web/**"
       - CHANGELOG.md
       - Dockerfile
@@ -89,7 +91,7 @@ jobs:
           docker compose config --quiet
 
       - name: Set up build emulation
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -169,3 +171,7 @@ jobs:
       - name: Test real-server administration controls
         timeout-minutes: 15
         run: sudo python3 tests/admin-integration-test.py tmodloader:ci
+
+      - name: Test dashboard runtime recovery without container restart
+        timeout-minutes: 15
+        run: sudo python3 tests/dashboard-runtime-recovery-test.py tmodloader:ci

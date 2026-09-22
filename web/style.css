@@ -31,3 +31,15 @@
 #journey-dialog,#world-create-dialog,#saved-changes-dialog{max-width:900px}#journey-fields{margin-top:1.2rem}#journey-status,#world-create-error{color:var(--warn)}#saved-changes-dialog td{overflow-wrap:anywhere;vertical-align:top}#saved-changes-dialog small{display:block;color:var(--muted)}#saved-changes-dialog table{table-layout:fixed;width:100%}#saved-changes-dialog th:first-child{width:40%}.world-journey{display:block;font-size:.85rem}#journey-dialog .inline-label input{width:auto}
 
 #archives td{vertical-align:top}#archives td button{margin:.2rem .4rem .2rem 0}#archives td:first-child>button{background:transparent;color:var(--accent);text-align:left;padding:.2rem;border:0}#archives .world-details{min-width:0}
+.config-code-editor{position:relative;min-width:0;margin-top:.4rem;background:#101923;border:1px solid #465566;border-radius:.4rem;overflow:hidden}
+.config-code-editor #mod-config-content,.config-code-editor #mod-config-highlight{box-sizing:border-box;display:block;width:100%;margin:0;border:0;border-radius:0;padding:14px;font:14px/1.6 Consolas,"Liberation Mono",monospace;letter-spacing:normal;tab-size:4;white-space:pre;overflow-wrap:normal;word-break:normal;text-align:left}
+.config-code-editor #mod-config-highlight{position:absolute;inset:0;height:100%;overflow:hidden;pointer-events:none;color:#e1e8f0;background:transparent}
+.config-code-editor #mod-config-content{position:relative;background:transparent;color:transparent;caret-color:#fff;resize:vertical;min-height:16rem;overflow:auto;-webkit-text-fill-color:transparent}
+#mod-config-content::selection{background:#37658a80}
+#mod-config-highlight .syntax-key{color:#8bd5ff}#mod-config-highlight .syntax-string{color:#b6e393}#mod-config-highlight .syntax-number{color:#f3c783}#mod-config-highlight .syntax-literal{color:#d5afff}#mod-config-highlight .syntax-comment{color:#99a6b8}#mod-config-highlight .syntax-punctuation{color:#d9e1ea}
+@media(forced-colors:active){.config-code-editor #mod-config-content{color:CanvasText;-webkit-text-fill-color:CanvasText}.config-code-editor #mod-config-highlight{visibility:hidden}}
+
+.update-announcement-setting{display:flex;flex-direction:row;align-items:flex-start;gap:.65rem;margin:1.1rem 0;padding-top:1rem;border-top:1px solid var(--line);cursor:pointer}
+.update-announcement-setting input[type="checkbox"]{flex:0 0 auto;width:1rem;height:1rem;margin:.25rem 0 0;padding:0;accent-color:var(--accent)}
+.update-announcement-setting>span{min-width:0}
+.update-announcement-setting small{display:block;color:var(--muted);font-size:.8rem;margin-top:.2rem}

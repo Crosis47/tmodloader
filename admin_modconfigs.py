@@ -56,9 +56,16 @@ def directory():
 
 
 def path_for(name):
-    if not isinstance(name, str) or not name or name in ('.', '..') or '/' in name or '\\' in name or ':' in name or any(ord(c) < 32 for c in name):
+    if not isinstance(name, str) or not name or '\\' in name or ':' in name or any(ord(c) < 32 for c in name) or any(part in ('', '.', '..') for part in name.split('/')):
         raise ValueError('Select an existing configuration file.')
-    path = directory() / name
+    root = directory()
+    path = root
+    for part in name.split('/'):
+        path = path / part
+        if path.is_symlink() or path.is_junction():
+            raise ValueError('Linked configuration paths cannot be edited.')
+    if not path.resolve().is_relative_to(root.resolve()):
+        raise ValueError('Configuration path must stay inside ModConfigs.')
     if path.is_symlink() or not path.is_file():
         raise ValueError('Configuration file is missing or linked. Refresh the list.')
     return path
@@ -80,7 +87,18 @@ def read(name):
 
 
 def inventory():
-    return {'files': [p.name for p in sorted(directory().glob('*')) if p.is_file() and not p.is_symlink()]}
+    root = directory()
+    files = []
+    for parent, directories, names in os.walk(root, followlinks=False):
+        directories[:] = [name for name in directories if not (Path(parent) / name).is_symlink() and not (Path(parent) / name).is_junction()]
+        for name in names:
+            relative = (Path(parent) / name).relative_to(root).as_posix()
+            try:
+                path_for(relative)
+            except (OSError, ValueError):
+                continue
+            files.append(relative)
+    return {'files': sorted(files, key=lambda name: (name.casefold(), name))}
 
 
 def save(payload):

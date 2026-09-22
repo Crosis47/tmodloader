@@ -27,6 +27,7 @@ import admin_modconfigs
 import admin_journey
 import admin_profiles
 import admin_playthroughs
+import admin_updates
 
 STATIC = Path(__file__).parent / 'web'
 OPERATION = threading.Lock()
@@ -167,7 +168,8 @@ def operation_busy():
 
     Callers that mutate state must hold STATE_LOCK through their operation.
     """
-    return JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running'
+    return (JOB.get('state') == 'running' or settings.read_json(admin_metrics.STATE).get('state') == 'running'
+            or admin_updates.read(admin_updates.ROOT / 'status.json').get('state') in admin_updates.BUSY)
 
 
 def send_console(payload):
@@ -267,8 +269,10 @@ def job_runner(kind, archive=None, checksum=None):
                 os.kill(int(pid_file.read_text()), 0)
                 time.sleep(1)
         detail = 'Operation completed.'
-        if kind in ('apply', 'restore', 'retry'):
+        if kind in ('apply', 'restore', 'retry', 'runtime-update'):
             detail = 'Game server is healthy.'
+            if kind == 'runtime-update':
+                detail = result.get('detail') or detail
         elif kind == 'preview':
             detail = 'Archive verified; review the preview before restoring.'
         elif kind == 'inspect':
@@ -441,6 +445,7 @@ def recovery_request(path, payload):
 def server_status():
     healthy = health()
     return {'healthy': healthy, 'mods': running_mods(healthy), 'backups': admin_metrics.inventory(), 'job': JOB,
+            'updates': admin_updates.status(),
             'version': Path('/terraria-server/VERSION').read_text().strip()
             if Path('/terraria-server/VERSION').exists() else 'development'}
 
@@ -487,6 +492,55 @@ def operation_request(path, payload):
 
 def api(method, path, query, payload):
     """Dispatch authenticated requests; feature handlers own validation and locking."""
+    if (method == 'POST' and path != '/api/updates/check'
+            and admin_updates.read(admin_updates.ROOT / 'status.json').get('state') in admin_updates.BUSY):
+        raise ValueError('Wait for startup update preparation to finish before changing server data.')
+    if path == '/api/updates' and method == 'GET':
+        return admin_updates.status()
+    if path == '/api/updates/log' and method == 'GET':
+        return admin_updates.diagnostics()
+    if path == '/api/updates/announcements' and method == 'POST':
+        if not isinstance(payload.get('enabled'), bool):
+            raise ValueError('Choose whether update announcements are enabled.')
+        with STATE_LOCK:
+            settings.atomic_json(admin_updates.ROOT / 'announcements.json', {'enabled': payload['enabled']})
+        return admin_updates.status(refresh=False)
+    if path == '/api/updates/check' and method == 'POST':
+        admin_updates.request_check(force=True)
+        return admin_updates.status(refresh=False)
+    if path == '/api/updates/restart' and method == 'POST':
+        with STATE_LOCK:
+            if operation_busy():
+                raise ValueError('Wait for the current operation before restarting the game.')
+            if payload.get('confirm') is not True:
+                raise ValueError('Explicit confirmation is required.')
+            if admin_recovery.status()['interrupted']:
+                raise ValueError('Recover the interrupted archive restore before restarting.')
+            return start_job('runtime-update')
+    if path == '/api/updates/delete-checkpoint' and method == 'POST':
+        with STATE_LOCK:
+            if operation_busy():
+                raise ValueError('Wait for the current operation before deleting recovery data.')
+            if payload.get('confirm') is not True:
+                raise ValueError('Explicit confirmation is required.')
+            if not health():
+                raise ValueError('Verify the game is healthy before deleting its recovery checkpoint.')
+            import runtime_updates
+            runtime_updates.delete_checkpoint(payload.get('checkpoint'))
+            return admin_updates.status(refresh=False)
+    if path in ('/api/updates/rollback', '/api/updates/cancel') and method == 'POST':
+        with STATE_LOCK:
+            if operation_busy():
+                raise ValueError('Wait for the current operation before changing update recovery.')
+            if payload.get('confirm') is not True:
+                raise ValueError('Explicit confirmation is required.')
+            if path.endswith('/rollback'):
+                if not admin_updates.status(refresh=False)['rollback_available']:
+                    raise ValueError('No runtime update checkpoint is available.')
+                settings.atomic_json(admin_updates.ROOT / 'rollback-request.json', {'requested': admin_updates.stamp()})
+            else:
+                (admin_updates.ROOT / 'rollback-request.json').unlink(missing_ok=True)
+            return admin_updates.status(refresh=False)
     if path == '/api/mod-configs/validate' and method == 'POST':
         admin_modconfigs.path_for(payload.get('name'))
         return admin_modconfigs.validate_content(payload['name'], payload.get('content'))
@@ -609,6 +663,17 @@ def application(environ, start_response):
     return [body]
 
 
+def update_announcement_worker():
+    while True:
+        try:
+            with STATE_LOCK:
+                if not operation_busy():
+                    admin_updates.announce_available()
+        except Exception as error:
+            print('[ADMIN] Update announcement check failed: ' + str(error), flush=True)
+        time.sleep(60)
+
+
 def main():
     global TOKEN_HASH, SETUP_CODE
     previous = admin_recovery.status()['operation']
@@ -625,6 +690,7 @@ def main():
         print('[ADMIN] Game startup paused. Open the dashboard to create your admin token.', flush=True)
         print('[ADMIN] One-time setup code: ' + SETUP_CODE, flush=True)
     from waitress import serve
+    threading.Thread(target=update_announcement_worker, daemon=True).start()
     print('[ADMIN] Open ' + (os.environ.get('TMOD_WEB_ORIGIN') or 'http://<server-IP>:<dashboard-port> (default 8080)') + ' in your browser.', flush=True)
     print('[ADMIN] Private administration interface listening on port 8080.', flush=True)
     serve(application, host='0.0.0.0', port=8080, threads=4, connection_limit=32,
@@ -633,4 +699,5 @@ def main():
 
 
 if __name__ == '__main__':
+    admin_updates.CHECKS_ENABLED = True
     main()

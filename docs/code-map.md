@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | Container permissions | `container-init.sh` | Repairs volume ownership, then drops privileges with `setpriv` |
 | Startup and supervision | `entrypoint.sh` | Settings, Workshop preparation, admin startup, game startup, request loop |
+| Runtime updates | `runtime_updates.py`, `admin_updates.py` | Cold-start staging, copied-world probe, persistent runtime selection and recovery journal; cached release notices |
 | Game launch and logs | `run-server.sh` | `create_world.py` → upstream launcher; output through `console_tee.py` and `log-filter.sh` |
 | HTTP access and authentication | `admin_server.application` | `admin_access`, `admin_auth`, then `api` |
 | API routing | `admin_server.api` | Named feature handlers; handlers retain their validation and locks |
@@ -100,3 +101,26 @@ and background polling deliberately have different behavior.
 Supervisor or backup lifecycle changes also require the Docker runtime and
 integration checks listed in [Contributing](../CONTRIBUTING.md). Python mocks do
 not verify an actual game stop, restart or restore.
+
+## Runtime update transaction
+
+The supervisor takes the data lock before `runtime_updates.py boot`, which
+recovers an interrupted switch or consumes confirmed recovery queued by the API.
+After settings and first-run authentication, `prepare` caches the image runtime,
+checks releases, and stages Workshop content against copied data. The native
+candidate must load every enabled mod, reach readiness and exit cleanly.
+
+A journal is written before replacing live mods and runtime selection. It remains
+until the supervisor verifies live health. A crash before that confirmation
+restores the immutable `before` copy on the next boot. A failed live startup also
+restores the checkpoint and sets an update hold. Runtime binaries and checkpoints
+live under `.tmod-control/updates` and are excluded from normal backup archives;
+`admin_backup_details` derives backup identity from the selected runtime.
+
+Upstream logs are relative to the executable. `route_logs` redirects them to the
+trial during validation and restores the live log path afterward and at boot.
+Never run the candidate with the live world, live Workshop tree, or live log path.
+The read-only release checker writes `check.json`, independently of the startup
+worker's `status.json`; dashboard polling must never launch an installation.
+
+Dashboard `POST /api/updates/restart` queues a confirmed `runtime-update` supervisor job. `perform_runtime_update` saves/stops only the game, runs queued recovery or startup update preparation, reloads saved settings, drains old console commands, and checks live health. Candidate startup failure restores the checkpoint and retries the prior runtime. The dashboard and container stay running; failed preparation leaves recovery controls available.

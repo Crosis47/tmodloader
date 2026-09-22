@@ -16,6 +16,9 @@ BUILD_FILE = Path('/terraria-server/backup-build-id')
 
 
 def current_runtime():
+    if RUNTIME_FILE == Path('/terraria-server/backup-runtime.json'):
+        import admin_updates
+        return admin_updates.runtime()
     try:
         value = json.loads(RUNTIME_FILE.read_text())
         return value if isinstance(value, dict) else {}
@@ -25,7 +28,14 @@ def current_runtime():
 
 def current_build():
     try:
-        return BUILD_FILE.read_text().strip()
+        value = BUILD_FILE.read_text().strip()
+        if BUILD_FILE == Path('/terraria-server/backup-build-id'):
+            import admin_updates
+            import hashlib
+            selected = admin_updates.read(admin_updates.ROOT / 'active.json')
+            if selected:
+                value = hashlib.sha256((value + json.dumps(selected, sort_keys=True)).encode()).hexdigest()
+        return value
     except OSError:
         return None
 

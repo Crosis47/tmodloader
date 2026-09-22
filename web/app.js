@@ -268,6 +268,8 @@ historyMore.onclick = () => { historyOffsets.push(historyNext); loadHistory(hist
 async function refresh() {
 
   const data = await api('/api/status');
+  renderUpdates(data.updates);
+  showUpdateProgress(data.job, data.updates);
   attentionStatus = data;
   try { attentionSettings = await api('/api/settings'); } catch { attentionSettings = null; }
   renderAttention();
@@ -302,7 +304,7 @@ async function refresh() {
 
   $('job').textContent = data.job.state === 'idle' ? '' : [data.job.kind, data.job.state, data.job.detail || ''].join(' · ');
 
-  if (['apply', 'restore', 'retry'].includes(data.job.kind) && data.job.state === 'success' && oldJob !== $('job').textContent) await loadSettings();
+  if (['apply', 'restore', 'retry', 'runtime-update'].includes(data.job.kind) && data.job.state === 'success' && oldJob !== $('job').textContent) await loadSettings();
 
   showApplyProgress(data.job);
 
@@ -1452,6 +1454,8 @@ function renderAttention() {
     row.append(copy, button); rows.push(row);
   };
   const unsavedCount = $('fields').querySelectorAll('.setting-unsaved').length;
+  if (status?.updates?.available) add('New tModLoader version available', status.updates.latest.version + ' is available. Mod compatibility must pass before installation.', 'overview', 'View update status');
+  if (status?.updates?.operation?.state === 'blocked') add('Startup update blocked', status.updates.operation.detail, 'overview', 'View update status');
   if (unsavedCount) add('Unsaved settings', unsavedCount + ' setting' + (unsavedCount === 1 ? ' has' : 's have') + ' been edited. Save the draft to keep these changes.', 'settings', 'Review unsaved settings');
   if (recovery?.interrupted) add('Recovery requires attention', 'An interrupted restore needs manual recovery. Read the recovery guidance before restarting.', 'recovery', 'View recovery');
   if (attentionSettings?.pending) add('Saved changes are waiting', busy ? 'A server operation is in progress. Review the saved draft after it finishes.' : 'Review and apply your saved draft when you are ready to restart the game.', 'settings', 'Review saved changes', action(reviewSavedChanges));
@@ -1469,7 +1473,7 @@ function modConfigDirty() { return modConfig && $('mod-config-content').value !=
 async function refreshModConfigs() {
   const result = await api('/api/mod-configs');
   const selected = $('mod-config-file').value;
-  $('mod-config-file').replaceChildren(...result.files.map(name => { const option = node('option', name); option.value = name; return option; }));
+  $('mod-config-file').replaceChildren(...result.files.map(name => { const option = node('option', '/' + name); option.value = name; return option; }));
   if (result.files.includes(selected)) $('mod-config-file').value = selected;
   $('mod-config-open').disabled = !result.files.length;
   $('mod-config-status').textContent = result.files.length ? result.files.length + ' configuration files available.' : 'No generated mod configuration files found.';
@@ -1480,6 +1484,7 @@ $('mod-config-open').onclick = action(async () => {
   modConfig = await api('/api/mod-configs?name=' + encodeURIComponent($('mod-config-file').value));
   modValidationSequence++;
   $('mod-config-content').value = modConfig.content;
+  highlightModConfig();
   $('mod-config-content').disabled = false; $('mod-config-save').disabled = false;
   $('mod-config-check').disabled = false;
   $('mod-config-status').textContent = 'Editing ' + modConfig.name + ' · ' + (modConfig.format || 'JSON');
@@ -1515,6 +1520,7 @@ $('mod-config-form').onsubmit = action(async () => {
   modConfig = saved;
   if ($('mod-config-content').value === content) {
     $('mod-config-content').value = saved.content;
+    highlightModConfig();
     modValidationSequence++;
     $('mod-config-validation').textContent = saved.format === 'Text' ? 'Saved as text without format-specific validation.' : 'Syntax validated before saving.';
   }
@@ -1522,3 +1528,169 @@ $('mod-config-form').onsubmit = action(async () => {
 });
 document.querySelectorAll('[data-view="mod-configs"]').forEach(button => button.addEventListener('click', action(refreshModConfigs)));
 window.addEventListener('beforeunload', event => { if (modConfigDirty()) { event.preventDefault(); event.returnValue = ''; } });
+
+
+// Render only text nodes; file contents never become executable markup.
+function highlightModConfig() {
+  const input = $('mod-config-content'), layer = $('mod-config-highlight');
+  const text = input.value, format = modConfig?.format || 'JSON';
+  const patterns = {
+    JSON: /("(?:\\.|[^"\\])*"\s*:)|("(?:\\.|[^"\\])*")|\b(true|false|null)\b|(-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([{}\[\],:])/g,
+    YAML: /(#[^\n]*)|("(?:\\.|[^"\\])*"|'(?:''|[^'])*')|(^[ \t]*[^\s#][^:\n]*:(?=\s|$))|\b(true|false|null|yes|no)\b|(-?\b\d+(?:\.\d+)?)|([{}\[\],&*|>])/gm,
+    TOML: /(#[^\n]*)|("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'[^']*')|(^[ \t]*[\w.-]+\s*(?==)|^\s*\[.*?\])|\b(true|false)\b|(-?\b\d+(?:\.\d+)?)|([{}\[\],=])/gm,
+    INI: /(^[ \t]*[;#][^\n]*)|("[^"\n]*"|'[^'\n]*')|(^[ \t]*[^=:\n]+(?=[=:])|^\s*\[[^\]\n]*\])|\b(true|false|yes|no)\b|(-?\b\d+(?:\.\d+)?)|([=:])/gm,
+    XML: /(<!--[\s\S]*?-->)|("[^"]*"|'[^']*')|(<\/?[\w:.-]+|[\w:.-]+(?=\s*=))|(\btrue\b|\bfalse\b)|(&[\w#]+;)|([<>/=])/g
+  };
+  const fragment = document.createDocumentFragment();
+  const pattern = patterns[format];
+  let end = 0;
+  if (pattern) for (const match of text.matchAll(pattern)) {
+    fragment.append(document.createTextNode(text.slice(end, match.index)));
+    const token = node('span', match[0]);
+    const classes = format === 'JSON' ? ['key', 'string', 'literal', 'number', 'punctuation'] : ['comment', 'string', 'key', 'literal', 'number', 'punctuation'];
+    token.className = 'syntax-' + classes[match.slice(1).findIndex(value => value !== undefined)];
+    fragment.append(token); end = match.index + match[0].length;
+  }
+  fragment.append(document.createTextNode(text.slice(end) + '\n'));
+  layer.replaceChildren(fragment);
+  layer.scrollTop = input.scrollTop; layer.scrollLeft = input.scrollLeft;
+}
+$('mod-config-content').addEventListener('input', highlightModConfig);
+$('mod-config-content').addEventListener('scroll', () => {
+  $('mod-config-highlight').scrollTop = $('mod-config-content').scrollTop;
+  $('mod-config-highlight').scrollLeft = $('mod-config-content').scrollLeft;
+});
+
+function renderUpdates(value) {
+  if (!value) return;
+  $('updates-versions').textContent = 'Installed: ' + (value.installed || 'Unknown') + ' · Latest ' + value.channel + ': ' + (value.latest?.version || 'Not checked');
+  const summaries = {
+    initializing: 'Preparing the server…', checking: 'Checking for updates…',
+    downloading: 'Downloading the update…', staging: 'Creating a recovery checkpoint and preparing mod updates…',
+    testing: 'Testing mods and dependencies with a copy of your world…', recovering: 'Restoring the previous version…',
+    awaiting_start: 'Starting the updated game and checking its health…', updated: 'Update complete.',
+    rolled_back: 'Previous version restored.'
+  };
+  let detail = value.rollback_pending ? 'Recovery is ready. Restart the game to restore it.'
+    : value.hold ? (value.available ? 'Updates are paused. Restart and apply updates when you’re ready.' : 'Updates are paused.')
+    : summaries[value.operation?.state] || (value.available ? 'Update available. Restart the game to apply it.' : 'You’re up to date.');
+  if (value.operation?.state === 'blocked' && !value.rollback_pending && !value.hold) detail = 'Update paused. ' + (value.operation.detail || 'View diagnostics for details.');
+  if (value.error) detail += ' Could not check for updates. Try again later.';
+  $('updates-detail').textContent = detail;
+  $('updates-policy').textContent = 'Update on restart: ' + (value.hold ? 'paused' : value.automatic ? 'on' : 'off') + (value.pin ? ' · Version pinned: ' + value.pin : '');
+  $('updates-checked').textContent = value.checked_at ? 'Last checked: ' + new Date(value.checked_at).toLocaleString() : 'Not checked yet.';
+  if (!$('updates-announcements').disabled) $('updates-announcements').checked = !!value.announcements;
+  $('updates-check').disabled = !!value.checking;
+  $('updates-check').textContent = value.checking ? 'Checking…' : 'Check for updates';
+  const url = value.latest?.url || '';
+  $('updates-release').hidden = !value.available || !/^https:\/\/github\.com\/tModLoader\/tModLoader\/releases\/tag\/v[0-9.]+$/.test(url);
+  if (!$('updates-release').hidden) $('updates-release').href = url;
+  $('updates-rollback').hidden = !value.rollback_available || !!value.rollback_pending || !!value.hold || ['held', 'rolled_back'].includes(value.operation?.state);
+  $('updates-rollback').disabled = value.rollback_pending || ['initializing', 'checking', 'downloading', 'staging', 'testing', 'recovering', 'awaiting_start'].includes(value.operation?.state);
+  $('updates-rollback').dataset.checkpoint = [value.previous_version, value.checkpoint_created].filter(Boolean).join(' · ');
+  $('updates-resume').hidden = !value.rollback_pending;
+  $('updates-delete').hidden = !value.checkpoint_id || !!value.rollback_pending;
+  $('updates-delete').disabled = ['initializing', 'checking', 'downloading', 'staging', 'testing', 'recovering', 'awaiting_start'].includes(value.operation?.state);
+  $('updates-delete').dataset.checkpoint = value.checkpoint_id || '';
+  $('updates-delete').dataset.description = [value.previous_version, value.checkpoint_created].filter(Boolean).join(' · ');
+  const retry = value.operation?.state === 'blocked';
+  const canUpdate = value.automatic && (!value.pin || value.pin !== value.installed);
+  $('updates-restart').hidden = !value.rollback_pending && !(canUpdate && (value.available || retry));
+  $('updates-logs').hidden = !value.diagnostics_available;
+  if (!value.diagnostics_available) $('updates-log').hidden = true;
+  $('updates-resume').textContent = 'Cancel recovery';
+  $('updates-restart').disabled = ['initializing', 'checking', 'downloading', 'staging', 'testing', 'recovering', 'awaiting_start'].includes(value.operation?.state);
+  $('updates-restart').textContent = value.rollback_pending ? 'Restart game and restore checkpoint' : 'Restart game and apply updates';
+  $('updates-restart').dataset.recovery = String(!!value.rollback_pending);
+}
+$('updates-check').onclick = action(async () => { renderUpdates(await api('/api/updates/check', {})); });
+$('updates-rollback').onclick = action(async () => {
+  if (!await confirmAction('Restore the pre-update checkpoint on next startup?', 'This replaces worlds, mods, mod configuration and saved settings. Progress and saved changes since the checkpoint are reverted; the current data is retained in a separate recovery checkpoint. Use Restart game and restore checkpoint below to perform recovery without restarting the container. Automatic updates will be held afterward.', $('updates-rollback').dataset.checkpoint, 'Queue recovery')) return;
+  renderUpdates(await api('/api/updates/rollback', {confirm: true}));
+});
+$('updates-resume').onclick = action(async () => {
+  if (!await confirmAction('Cancel recovery?', 'Keep the current version and data. Any update hold stays in place.', '', 'Cancel recovery')) return;
+  renderUpdates(await api('/api/updates/cancel', {confirm: true}));
+});
+
+$('updates-logs').onclick = action(async () => { $('updates-log').textContent = (await api('/api/updates/log')).output; $('updates-log').hidden = false; });
+
+$('updates-restart').onclick = action(async () => {
+  const recovery = $('updates-restart').dataset.recovery === 'true';
+  if (!await confirmAction(recovery ? 'Restart game and restore checkpoint?' : 'Restart game and check updates?', recovery ? 'Players will disconnect. Queued recovery replaces worlds, mods and saved settings with the checkpoint; current data is retained. The dashboard stays available.' : 'This clears the update hold. Players will disconnect while the game saves, checks configured runtime and mod updates, and restarts. Saved drafts are not applied. The dashboard stays available.', '', 'Restart game')) return;
+  const job = await api('/api/updates/restart', {confirm: true});
+  dismissedUpdate = '';
+  showUpdateProgress(job, {});
+  await refresh();
+});
+
+const updateDialog = node('dialog'); updateDialog.id = 'update-progress-dialog';
+updateDialog.setAttribute('aria-label', 'Runtime update progress');
+const updateProgress = node('section'); updateProgress.setAttribute('aria-live', 'polite');
+const updateConnection = node('p', '', 'notice'); updateConnection.hidden = true;
+const updateClose = node('button', 'Hide progress');
+updateDialog.append(updateProgress, updateConnection, updateClose); document.body.append(updateDialog);
+let dismissedUpdate = '', currentUpdate = '', updateRunning = false, updatePolling = false;
+updateClose.onclick = () => { dismissedUpdate = currentUpdate; updateDialog.close(); };
+updateDialog.oncancel = () => { dismissedUpdate = currentUpdate; };
+$('updates-progress').onclick = () => { dismissedUpdate = ''; updateDialog.showModal(); };
+function showUpdateProgress(job, updates) {
+  if (job?.kind !== 'runtime-update') {
+    updateRunning = false;
+    $('updates-progress').hidden = true;
+    if (updateDialog.open) {
+      updateProgress.replaceChildren(node('h3', 'Update status unavailable'), node('p', 'The server no longer reports this job. Check game health and update status before retrying.'));
+    }
+    return;
+  }
+  currentUpdate = job.started || 'pending';
+  updateRunning = job.state === 'running';
+  updateClose.textContent = updateRunning ? 'Hide progress' : 'Return to dashboard';
+  updateConnection.hidden = true;
+  const operation = updates?.operation || {};
+  const stage = job.stage === 'updating' ? operation.state : job.stage;
+  const blocked = !updateRunning && operation.state === 'blocked';
+  $('updates-progress').hidden = job.state === 'success' && !blocked;
+  const restored = !updateRunning && ['rolled_back', 'held'].includes(operation.state);
+  const title = updateRunning ? 'Updating the game...' : job.state === 'failed' ? 'Update needs attention' : blocked ? 'Update blocked' : restored ? 'Previous version restored' : 'Game restart complete';
+  const detail = job.stage === 'updating' || blocked || restored ? operation.detail || job.detail : job.detail;
+  const steps = node('ol', undefined, 'apply-steps');
+  const stages = [['queued', 'Wait for the supervisor'], ['stopping', 'Save and stop the game'], ['initializing', 'Prepare runtime or queued recovery'], ['checking', 'Check the selected release'], ['downloading', 'Download tModLoader'], ['staging', 'Create checkpoint and prepare mods'], ['testing', 'Test mods and a copied world'], ['health', 'Start game and verify health'], ['recovering', 'Restore checkpoint if needed']];
+  stages.forEach(([id, label]) => {
+    const active = updateRunning && (stage === id || (stage === 'awaiting_start' && id === 'health'));
+    const item = node('li', label + (active ? ' - in progress' : ''));
+    if (active) item.setAttribute('aria-current', 'step');
+    steps.append(item);
+  });
+  const recovery = !!updates?.rollback_pending || ['recovering', 'rolled_back', 'held'].includes(operation.state) || stage === 'recovering';
+  const complete = job.state === 'success' && !blocked;
+  const completion = node('li', (recovery ? 'Recovery Complete' : 'Update Complete') + (complete ? ' - done' : ' - pending'));
+  completion.dataset.complete = String(complete);
+  if (complete) completion.setAttribute('aria-current', 'step');
+  steps.append(completion);
+  const elapsed = Math.max(0, Math.floor(((job.finished ? Date.parse(job.finished) : Date.now()) - Date.parse(job.started || new Date().toISOString())) / 1000));
+  updateProgress.replaceChildren(node('h3', title), node('p', detail || 'Waiting for progress...'), steps, node('p', 'Elapsed: ' + elapsed + ' seconds. Steps may be skipped when unnecessary. Hiding this window does not cancel the operation.', 'muted'));
+  if (!updateDialog.open && (updateRunning || job.state === 'failed' || blocked) && dismissedUpdate !== currentUpdate) { $('confirmation').close(); updateDialog.showModal(); }
+}
+setInterval(async () => {
+  if (!token || !updateRunning || updatePolling || document.hidden) return;
+  updatePolling = true;
+  try { const data = await api('/api/status'); renderUpdates(data.updates); showUpdateProgress(data.job, data.updates); }
+  catch (error) { updateConnection.hidden = false; updateConnection.textContent = 'Connection interrupted. Retrying status checks; the update may still be running. ' + error.message; }
+  finally { updatePolling = false; }
+}, 2000);
+
+$('updates-delete').onclick = action(async () => {
+  const checkpoint = $('updates-delete').dataset.checkpoint;
+  if (!await confirmAction('Delete recovery checkpoint?', 'Permanently delete this recovery copy and its logs to free space. Your running world, mods and cached runtimes are kept. You will no longer be able to restore this checkpoint. Continue only after testing the server.', $('updates-delete').dataset.description, 'Delete checkpoint')) return;
+  renderUpdates(await api('/api/updates/delete-checkpoint', {confirm: true, checkpoint}));
+});
+
+$('updates-announcements').onchange = action(async () => {
+  const control = $('updates-announcements');
+  const enabled = control.checked;
+  control.disabled = true;
+  try { const state = await api('/api/updates/announcements', {enabled}); control.checked = !!state.announcements; }
+  catch (error) { control.checked = !enabled; throw error; }
+  finally { control.disabled = false; }
+});

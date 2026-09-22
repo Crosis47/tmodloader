@@ -12,6 +12,37 @@ immutable deployment identifier.
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-09-21
+
+### Added
+
+- Download and cache supported tModLoader releases at startup without replacing
+  the container image, with stable/preview channels and optional version pins.
+- Stage Workshop changes and validate enabled mods, dependencies, and a copied
+  world before switching runtimes; retain the existing runtime and mods if checks fail.
+- Recover interrupted updates and automatically restore the previous runtime and
+  data if updated startup fails its health check.
+- Dashboard update notices, release checks, diagnostics, and confirmed game-only
+  restart and recovery actions with step-by-step progress dialogs.
+- Delete recovery checkpoints after testing an update; successful recovery now
+  deletes its checkpoints automatically after the restored game is healthy.
+- Optional in-game new-release announcements, saved immediately and sent once per
+  release even when the dashboard is closed.
+
+### Changed
+
+- Record the selected runtime in backup compatibility metadata.
+- Show update controls only when relevant and explain each stage in a collapsed workflow guide.
+- Support nested mod-configuration files and group their paths in the editor.
+- Upgrade QEMU setup to its Node.js 24 action and pin workflow runners to Ubuntu 24.04.
+- Name the AMD64 SteamCMD build stage explicitly to avoid the constant-platform warning.
+
+### Fixed
+
+- Cache internal bundled library symlinks safely, including the SDL alias created
+  during tModLoader startup, while continuing to reject linked game-data paths.
+- Preserve the game password during dashboard runtime restarts and rollback.
+
 ## [3.3.0] - 2026-09-21
 
 ### Added
@@ -366,7 +397,8 @@ immutable deployment identifier.
 - Made generated configuration, shutdown, autosave, and command injection more
   reliable.
 
-[Unreleased]: https://github.com/Crosis47/tmodloader/compare/3.3.0...HEAD
+[Unreleased]: https://github.com/Crosis47/tmodloader/compare/3.4.0...HEAD
+[3.4.0]: https://github.com/Crosis47/tmodloader/compare/3.3.0...3.4.0
 [3.3.0]: https://github.com/Crosis47/tmodloader/compare/3.2.0...3.3.0
 [3.2.0]: https://github.com/Crosis47/tmodloader/compare/3.1.1...3.2.0
 [3.1.1]: https://github.com/Crosis47/tmodloader/compare/3.1.0...3.1.1

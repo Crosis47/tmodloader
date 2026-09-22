@@ -25,7 +25,7 @@ try:
                   '--security-opt', 'no-new-privileges:true',
                   '--volume', '/data', '--volume', '/backups',
                   '-p', '127.0.0.1::8080',
-                  '-e', 'TMOD_CONFIG_SOURCE=web', '-e', 'TMOD_WORLDSIZE=1',
+                  '-e', 'TMOD_CONFIG_SOURCE=web', '-e', 'TMOD_AUTO_UPDATE=0', '-e', 'TMOD_WORLDSIZE=1',
                   '-e', 'TMOD_AUTOSAVE_INTERVAL=0', '-e', 'TMOD_PASS=test-password', image)
     info = json.loads(backup.docker('inspect', name))[0]
     port = info['NetworkSettings']['Ports']['8080/tcp'][0]['HostPort']
@@ -195,6 +195,14 @@ try:
     base = f'http://127.0.0.1:{port}'
     assert api('/api/settings')['running']['TMOD_MAXPLAYERS'] == '5'
     assert backup.docker('exec', name, 'cat', '/data/admin/token.argon2') == encoded
+    started = json.loads(backup.docker('inspect', name))[0]['State']['StartedAt']
+    old_pid = backup.docker('exec', name, 'cat', '/tmp/tmodloader/server.pid')
+    api('/api/updates/restart', {'confirm': True})
+    job('success')
+    assert api('/api/status')['healthy']
+    assert json.loads(backup.docker('inspect', name))[0]['State']['StartedAt'] == started
+    assert backup.docker('exec', name, 'cat', '/tmp/tmodloader/server.pid') != old_pid
+    print('Dashboard runtime restart changed the game process, preserved container uptime and returned healthy.', flush=True)
     print('Web setup, persisted hash restart, authentication, staged apply, password preservation, backup/verify and low-space safety passed.', flush=True)
 except Exception:
     subprocess.run(['docker', 'logs', '--tail', '100', name], check=False)
