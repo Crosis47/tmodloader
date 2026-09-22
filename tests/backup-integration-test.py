@@ -23,7 +23,7 @@ with tempfile.TemporaryDirectory(prefix='tmod-backup-integration-') as temp:
     try:
         backup.docker('run', '-d', '--name', name, '--mount', f'type=bind,source={data},target=/data',
                       '--mount', f'type=bind,source={bundles},target=/backups',
-                      '-e', 'TMOD_WEB_ENABLED=0', '-e', 'TMOD_MODS=', '-e', 'TMOD_WORLDSIZE=1', '-e', 'TMOD_AUTOSAVE_INTERVAL=0',
+                      '-e', 'TMOD_WEB_ENABLED=0', '-e', 'TMOD_MODS=', '-e', 'TMOD_AUTO_UPDATE=0', '-e', 'TMOD_WORLDSIZE=1', '-e', 'TMOD_AUTOSAVE_INTERVAL=0',
                       '-e', 'TMOD_BACKUP_INTERVAL=1', '-e', 'TMOD_BACKUP_KEEP=2', image)
         backup.wait_healthy(name, 600)
         marker = data / 'restore-proof.txt'

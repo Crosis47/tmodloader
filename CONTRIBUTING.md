@@ -43,7 +43,7 @@ breaking change.
 
 ## Required validation
 
-For local Python tests, install `argon2-cffi` and `waitress`. Also run admin tests inside the
+For local Python tests, install `argon2-cffi`, `waitress`, `cryptography`, and `PyYAML`. Also run admin tests inside the
 built image to verify compatibility with Ubuntu's packaged Argon2 library.
 
 For the administration page, run `python3 -m unittest discover -s tests -p
@@ -138,6 +138,28 @@ When invoking bind mounts from PowerShell, replace `$PWD` with an absolute
 Windows path. GitHub Actions runs the same build and runtime checks on pull
 requests.
 
+## Runtime updater validation
+
+`test_admin_updates.py` covers release filtering, failed compatibility checks,
+interrupted promotion, paired-data rollback, first-world failure handling and
+recovery authorization. `tests/admin-updates-test.cjs` covers the dashboard notice,
+diagnostics and recovery confirmation with deterministic API responses.
+
+For a real upstream upgrade and rollback, build an image with an older supported
+stable release, then run the opt-in integration test (it creates and removes
+only disposable Docker resources):
+
+```sh
+docker build --build-arg TMOD_VERSION=v2026.06.3.6 -t tmodloader:updates-old-test .
+python tests/runtime-update-integration-test.py tmodloader:updates-old-test
+```
+
+Repeat with `--platform linux/arm64` and a separate image tag when changing runtime
+installation. This test contacts GitHub and expects a newer supported release.
+It verifies a cached fallback survives container recreation and restores a paired
+world checkpoint. Existing server lifecycle tests set `TMOD_AUTO_UPDATE=0` so
+upstream release timing cannot silently change their subject under test.
+
 ## Change guidelines
 
 - Use `set -Eeuo pipefail` in Bash scripts unless a documented compatibility
@@ -160,8 +182,9 @@ requests.
 - Increment `MINOR` for backward-compatible container features.
 - Increment `PATCH` for backward-compatible fixes and security updates.
 
-Every new packaged tModLoader release requires a container version bump, even
-when the container code is unchanged. Use a patch bump for upstream-only updates.
+Upstream tModLoader releases are installed by the runtime updater and do not
+require a container version bump. If deliberately publishing a new image with
+a different bundled runtime, use a new container version to preserve immutable tags.
 Before publishing, increment `VERSION`, add a matching `## [X.Y.Z] - YYYY-MM-DD`
 section to `CHANGELOG.md`, and return `## [Unreleased]` to an empty state.
 Follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): newest releases
@@ -171,8 +194,9 @@ and update version comparison links. Generated GitHub release notes lead with
 these changes and keep image/source/validation details in an expandable section.
 Stable releases and images use `X.Y.Z`; previews use `X.Y.Z-preview`.
 The bundled tModLoader version is recorded in release notes and OCI labels.
-Numbered tags are immutable. The scheduled publisher checks upstream releases;
-if upstream changes after publication, bump `VERSION` to package it.
+Numbered tags are immutable. The publisher runs when `VERSION` changes on
+`master`, or through manual dispatch. It selects initial stable/preview runtimes
+for that container release; it does not poll upstream on a schedule.
 
 ## Pull requests and publishing
 
@@ -190,3 +214,5 @@ section. The automation refuses to reuse numbered tags; only `latest` and `previ
 Dashboard browser regression tests also include `tests/admin-profiles-test.cjs`,
 `tests/admin-playthroughs-test.cjs`, `tests/admin-overview-test.cjs`,
 `tests/admin-attention-test.cjs` and `tests/admin-unsaved-test.cjs`.
+
+Validate dashboard runtime recovery with `python tests/dashboard-runtime-recovery-test.py IMAGE`. This uses disposable data, confirms checkpoint restoration and game health, and verifies the authenticated dashboard remains responsive without changing container uptime.

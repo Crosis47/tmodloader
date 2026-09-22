@@ -145,6 +145,13 @@ cleanup() {
 }
 
 [[ "$(id -u)" != "0" ]] || fail "The server refuses to run as root. Use the image's built-in tml user."
+# Lock before recovery or settings reads: a checkpoint restore can replace saved settings.
+ensure_writable_directory /data
+ensure_writable_directory /data/.tmod-control
+exec 9>/data/.tmod-control/server.lock
+flock -n 9 || fail "Another server or restore is using /data."
+[[ ! -e /data/.tmod-control/restore-pending ]] || fail "An interrupted restore requires recovery; inspect /data/.tmod-control/restore-pending before starting."
+python3 /terraria-server/runtime_updates.py boot
 admin_exports="$(python3 /terraria-server/admin_settings.py boot)" || fail "Invalid web-managed configuration."
 # Only allowlisted keys and shlex-quoted values are emitted by admin_settings.
 eval "$admin_exports"
@@ -163,11 +170,6 @@ TMOD_CRASH_LOG_LINES="${TMOD_CRASH_LOG_LINES:-200}"
 [[ "$TMOD_CRASH_LOG_LINES" =~ ^[0-9]+$ ]] || fail "TMOD_CRASH_LOG_LINES must be a non-negative integer."
 export TMOD_LOG_LEVEL TMOD_CRASH_LOG_LINES TMOD_CONTROL_PIPE TMOD_SERVER_PID_FILE
 
-ensure_writable_directory /data
-ensure_writable_directory /data/.tmod-control
-exec 9>/data/.tmod-control/server.lock
-flock -n 9 || fail "Another server or restore is using /data."
-[[ ! -e /data/.tmod-control/restore-pending ]] || fail "An interrupted restore requires recovery; inspect /data/.tmod-control/restore-pending before starting."
 [[ "${TMOD_BACKUP_INTERVAL:-0}" =~ ^[0-9]{1,7}$ ]] || fail "TMOD_BACKUP_INTERVAL must be a non-negative integer (minutes, maximum 9999999)."
 [[ "${TMOD_BACKUP_KEEP:-7}" =~ ^[1-9][0-9]{0,5}$ ]] || fail "TMOD_BACKUP_KEEP must be a positive integer (maximum 999999)."
 [[ "${TMOD_BACKUP_MIN_FREE_MB:-1024}" =~ ^[0-9]{1,9}$ ]] || fail "TMOD_BACKUP_MIN_FREE_MB must be a non-negative integer (maximum 999999999)."
@@ -221,7 +223,13 @@ fi
 unset TMOD_PASS TMOD_PASS_FILE
 
 # Download missing/outdated Workshop items and enable the requested mods.
-./manage-mods.sh
+startup_update_ready=1
+if ! python3 /terraria-server/runtime_updates.py prepare "$config_path"; then
+    [[ "${TMOD_WEB_ENABLED:-1}" == 1 ]] || fail "Startup update preparation failed; inspect container logs."
+    startup_update_ready=0
+    admin_failed=1
+    printf '[UPDATE] Game startup paused after update preparation failed. Inspect the dashboard diagnostics and correct the configuration.\n' >&2
+fi
 python3 /terraria-server/admin_settings.py snapshot
 
 rm -f "$control_pipe" "$pid_path"
@@ -232,6 +240,8 @@ exec 3<> "$control_pipe"
 
 start_server() {
 printf '[SYSTEM] Launching tModLoader with %s\n' "$config_path"
+TMOD_SCRIPT_CALLER="$(python3 /terraria-server/runtime_updates.py launcher)" || return 1
+export TMOD_SCRIPT_CALLER
 setsid --wait "$server_runner" "$config_path" <&3 &
 server_pid=$!
 printf '%s\n' "$server_pid" > "$pid_path"
@@ -462,9 +472,112 @@ perform_recovery() {
     mv "$runtime_dir/admin-result.tmp" "$runtime_dir/admin-result"
 }
 
+reload_runtime_settings() {
+    # Recovery preserves the generated password, which is absent from our environment.
+    python3 /terraria-server/admin_settings.py recover || return 1
+    # shellcheck disable=SC1091
+    source "$runtime_dir/admin.env"
+    python3 /terraria-server/admin_settings.py snapshot
+}
+
+perform_runtime_update() {
+    local request_id="$1" status=0 deadline attempt detail='Game server is healthy.'
+    admin_failed=1
+    admin_progress stopping 'Saving the world and stopping the game. The dashboard remains available.'
+    stop_autosave
+    if server_is_running; then
+        inject 'say Server restarting for runtime update or recovery.' || true
+        inject exit || true
+        if ! wait_for_server_exit "$((SECONDS + ${TMOD_SHUTDOWN_TIMEOUT:-90}))"; then
+            signal_server_group TERM
+            wait_for_server_exit "$((SECONDS + 5))" || signal_server_group KILL
+            status=1
+        fi
+        wait "$server_pid" || status=1
+    fi
+    server_pid=''
+    rm -f "$pid_path"
+    if ((status == 0)); then
+        admin_progress updating 'Applying queued recovery or testing runtime and mod updates against a copied world.'
+        python3 /terraria-server/runtime_updates.py restart-boot || status=1
+        if ((status == 0)); then reload_runtime_settings || status=1; fi
+        if ((status == 0)); then python3 /terraria-server/runtime_updates.py prepare "$config_path" || status=1; fi
+    fi
+    if ((status == 0)); then
+        for attempt in 1 2; do
+            exec 3>&-
+            rm -f "$control_pipe"
+            mkfifo -m 0600 "$control_pipe"
+            exec 3<> "$control_pipe"
+            admin_progress health 'Starting the game and checking live readiness.'
+            if start_server; then
+                deadline=$((SECONDS + ${TMOD_UPDATE_TEST_TIMEOUT:-600}))
+                while server_is_running && ! healthcheck && ((SECONDS < deadline)); do sleep 2; done
+                if server_is_running && healthcheck; then
+                    if python3 /terraria-server/runtime_updates.py needs-confirmation; then
+                        python3 /terraria-server/runtime_updates.py confirm || status=1
+                    fi
+                    python3 /terraria-server/runtime_updates.py finish-recovery || status=1
+                    break
+                fi
+            fi
+            stop_autosave
+            signal_server_group TERM
+            wait_for_server_exit "$((SECONDS + 5))" || signal_server_group KILL
+            wait "$server_pid" 2>/dev/null || true
+            server_pid=''
+            rm -f "$pid_path"
+            if ((attempt == 1)) && python3 /terraria-server/runtime_updates.py needs-confirmation; then
+                admin_progress recovering 'Updated game failed readiness. Restoring the previous runtime and data.'
+                if ! python3 /terraria-server/runtime_updates.py failed-start || ! reload_runtime_settings; then
+                    status=1
+                    break
+                fi
+                detail='Update failed readiness; previous runtime and data restored and game health validated.'
+            else
+                status=1
+                break
+            fi
+        done
+    fi
+    if ((status == 0)); then
+        admin_failed=0
+    else
+        detail='Game restart failed. Inspect update diagnostics and container logs; the dashboard remains available.'
+        # Clear a stale busy marker so the administrator can retry recovery.
+        python3 -c 'import runtime_updates as r, admin_updates as u; s=u.read(u.ROOT / "status.json"); r.report("blocked", "Dashboard restart failed; inspect diagnostics and retry.", checkpoint=s.get("checkpoint"))'
+    fi
+    backup_interval=$((10#${TMOD_BACKUP_INTERVAL:-0} * 60))
+    next_backup=$((SECONDS + backup_interval))
+    jq -n --arg id "$request_id" --argjson status "$status" --arg detail "$detail" '{id:$id,status:$status,detail:$detail}' > "$runtime_dir/admin-result.tmp"
+    mv "$runtime_dir/admin-result.tmp" "$runtime_dir/admin-result"
+}
+
+if ((startup_update_ready)); then
 start_server
+if python3 /terraria-server/runtime_updates.py needs-confirmation; then
+    update_deadline=$((SECONDS + ${TMOD_UPDATE_TEST_TIMEOUT:-600}))
+    while server_is_running && ! healthcheck && ((SECONDS < update_deadline)); do sleep 2; done
+    if server_is_running && healthcheck; then
+        python3 /terraria-server/runtime_updates.py confirm
+    else
+        stop_autosave
+        signal_server_group TERM
+        wait_for_server_exit "$((SECONDS + 5))" || signal_server_group KILL
+        wait "$server_pid" 2>/dev/null || true
+        server_pid=""
+        rm -f "$pid_path"
+        python3 /terraria-server/runtime_updates.py failed-start
+        reload_runtime_settings
+        start_server
+    fi
+fi
+fi
 next_backup=$((SECONDS + backup_interval))
 while server_is_running || ((admin_failed)); do
+    if [[ -f /data/.tmod-control/updates/recovery-cleanup.json ]] && healthcheck; then
+        python3 /terraria-server/runtime_updates.py finish-recovery || true
+    fi
     if [[ -n "$admin_pid" ]] && ! kill -0 "$admin_pid" 2>/dev/null; then
         fail "Admin interface exited unexpectedly; inspect container logs."
     fi
@@ -474,7 +587,9 @@ while server_is_running || ((admin_failed)); do
         request_archive="$(jq -r '.archive // ""' "$runtime_dir/admin-request")"
         request_checksum="$(jq -r '.sha256 // ""' "$runtime_dir/admin-request")"
         rm -f "$runtime_dir/admin-request"
-        if [[ "$request_kind" == restore || "$request_kind" == retry ]]; then
+        if [[ "$request_kind" == runtime-update ]]; then
+            perform_runtime_update "$request_id"
+        elif [[ "$request_kind" == restore || "$request_kind" == retry ]]; then
             perform_recovery "$request_id" "$request_kind" "$request_archive" "$request_checksum"
         else
             perform_admin_apply "$request_id"

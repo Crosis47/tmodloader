@@ -28,6 +28,32 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'changed'):
             configs.save(original)
 
+    def test_nested_inventory_read_save_and_traversal(self):
+        for name in ('SSCS/config.json', 'SSCS/Backup/config.json', 'Other/config.json'):
+            path = configs.directory() / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('{}')
+            self.assertIn(name, configs.inventory()['files'])
+            current = configs.read(name)
+            configs.save({**current, 'content': '{"enabled": true}'})
+            self.assertEqual(path.read_text(), '{"enabled": true}')
+        for name in ('/SSCS/config.json', 'SSCS/../Example_Server.json', 'SSCS//config.json', 'SSCS/./config.json', 'SSCS\\config.json'):
+            with self.assertRaises(ValueError):
+                configs.read(name)
+
+    def test_linked_child_directory_rejected(self):
+        outside = settings.DATA / 'outside'
+        outside.mkdir()
+        (outside / 'config.json').write_text('{}')
+        link = configs.directory() / 'linked'
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except OSError:
+            self.skipTest('Symbolic links unavailable on this host')
+        self.assertNotIn('linked/config.json', configs.inventory()['files'])
+        with self.assertRaises(ValueError):
+            configs.read('linked/config.json')
+
     def test_formats_validate_and_preserve_comments(self):
         examples = [
             ('custom.YAML', '# comment\nenabled: true\n', 'enabled: [', 'YAML'),

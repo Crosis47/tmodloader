@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - run: python3 -m unittest discover -s tests -p 'test_readme_stats.py' -v
@@ -33,7 +33,7 @@ jobs:
   refresh:
     needs: validate
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     outputs:

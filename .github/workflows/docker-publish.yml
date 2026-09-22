@@ -1,18 +1,13 @@
-name: Publish tModLoader images and releases
+name: Publish container releases
 
 on:
   push:
     branches:
       - master
+    # Runtime releases are installed by the server updater. Publish images only
+    # when the maintained container version changes (or via a manual run).
     paths:
       - VERSION
-      - Dockerfile
-      - "*.sh"
-      - workshop_download.py
-      - .github/scripts/mirror-dockerhub.py
-      - .github/workflows/docker-publish.yml
-  schedule:
-    - cron: "17 2 * * *"
   workflow_dispatch:
     inputs:
       mirror_only:
@@ -26,16 +21,16 @@ concurrency:
 
 jobs:
   releases:
-    name: Resolve upstream releases
+    name: Select bundled runtimes for the container release
     if: ${{ !inputs.mirror_only }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     outputs:
       image: ${{ steps.resolve.outputs.image }}
       matrix: ${{ steps.resolve.outputs.matrix }}
     steps:
-      - name: Resolve stable and preview versions
+      - name: Select initial stable and preview runtime versions
         id: resolve
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -75,7 +70,7 @@ jobs:
     name: Publish ${{ matrix.channel }} (${{ matrix.tml_version }})
     if: ${{ !inputs.mirror_only }}
     needs: releases
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
       contents: write
@@ -109,7 +104,7 @@ jobs:
             }
 
       - name: Set up build emulation
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -142,16 +137,6 @@ jobs:
           fi
 
           if [[ "$image_exists" == true && "$release_exists" == true ]]; then
-            if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
-              notes="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
-              if ! grep -Fq "**tModLoader ${TMODLOADER_VERSION}**" <<< "$notes"; then
-                echo "Upstream changed to $TMODLOADER_VERSION. Bump VERSION and update CHANGELOG.md to publish it." >&2
-                exit 1
-              fi
-              echo "publish=false" >> "$GITHUB_OUTPUT"
-              echo "$RELEASE_TAG is already complete; skipping the scheduled build."
-              exit 0
-            fi
             echo "Exact release $RELEASE_TAG already exists. Bump VERSION for container changes." >&2
             exit 1
           fi
@@ -180,6 +165,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: |
             TMOD_VERSION=${{ matrix.tml_version }}
+            TMOD_CHANNEL=${{ matrix.channel }}
           outputs: type=image,name=${{ needs.releases.outputs.image }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -308,7 +294,7 @@ jobs:
       ${{ !cancelled() && vars.DOCKERHUB_IMAGE != '' &&
           (needs.publish.result == 'success' ||
            (inputs.mirror_only && needs.publish.result == 'skipped')) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: write

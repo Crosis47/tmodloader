@@ -2,7 +2,7 @@
 
 # The Steam client is still 32-bit, so use its Ubuntu image as the source for
 # steamcmd and the i386 libraries it needs.
-FROM --platform=linux/amd64 steamcmd/steamcmd:ubuntu-22 AS builder
+FROM --platform=linux/amd64 steamcmd/steamcmd:ubuntu-22 AS builder_amd64
 
 # Install prerequisites to download steamcmd
 RUN apt-get update \
@@ -22,6 +22,10 @@ ARG TARGETARCH
 
 # The TMOD Version. Ensure that you follow the correct format. Version releases can be found at https://github.com/tModLoader/tModLoader/releases if you're lost.
 ARG TMOD_VERSION=v2026.07.3.0
+ARG TMOD_CHANNEL=stable
+ENV TMOD_AUTO_UPDATE="1"
+ENV TMOD_UPDATE_MIN_FREE_MB="1024"
+ENV TMOD_UPDATE_TEST_TIMEOUT="600"
 
 # Published images use an unprivileged runtime identity. Custom local builds can
 # select another fixed identity. The root-only initializer repairs mounted data
@@ -201,9 +205,9 @@ WORKDIR /terraria-server
 
 FROM runtime-base AS runtime-amd64
 # Valve's downloader is kept on the existing AMD64 platform only.
-COPY --from=builder /root/installer/ /opt/steamcmd-seed/
-COPY --from=builder /lib/i386-linux-gnu/ /opt/steam-runtime/lib/
-COPY --from=builder /root/installer/linux32/libstdc++.so.6 /opt/steam-runtime/lib/
+COPY --from=builder_amd64 /root/installer/ /opt/steamcmd-seed/
+COPY --from=builder_amd64 /lib/i386-linux-gnu/ /opt/steam-runtime/lib/
+COPY --from=builder_amd64 /root/installer/linux32/libstdc++.so.6 /opt/steam-runtime/lib/
 USER root:root
 RUN ln -s /opt/steam-runtime/lib/ld-linux.so.2 /lib/ld-linux.so.2
 COPY --chown=root:root --chmod=0755 steamcmd-wrapper.sh /usr/bin/steamcmd
@@ -255,6 +259,7 @@ COPY --chown=tml:tml admin_recovery.py ./
 COPY --chown=tml:tml admin_players.py ./
 COPY --chown=tml:tml admin_worlds.py admin_world_metadata.py admin_world_time.py admin_journey.py ./
 COPY --chown=tml:tml admin_modconfigs.py ./
+COPY --chown=tml:tml admin_updates.py runtime_updates.py ./
 COPY --chown=tml:tml admin_profiles.py admin_playthroughs.py ./
 COPY --chown=tml:tml web ./web
 COPY --chown=root:root --chmod=0755 container-init.sh /usr/local/bin/tmod-init
@@ -295,6 +300,7 @@ RUN bash -c 'set -Eeo pipefail; \
     && ln -s /data/tModLoader/Logs ./tModLoader-Logs
 
 RUN python3 -c 'import json,hashlib,sys; from pathlib import Path; print(json.dumps({"container_version":Path("VERSION").read_text().strip(),"tmodloader_version":sys.argv[1],"tmodloader_sha256":hashlib.sha256(Path("tModLoader.dll").read_bytes()).hexdigest()}))' "$TMOD_VERSION" > backup-runtime.json
+RUN python3 -c 'import json,sys; from pathlib import Path; p=Path("backup-runtime.json"); d=json.loads(p.read_text()); d["update_channel"]=sys.argv[1]; p.write_text(json.dumps(d))' "$TMOD_CHANNEL"
 
 RUN sha256sum VERSION tModLoader.dll entrypoint.sh run-server.sh create_world.py backup.py admin_backup_details.py backup-runtime.json \
         /usr/local/bin/tmod-backup /usr/local/bin/tmod-init \
@@ -305,7 +311,8 @@ RUN sha256sum VERSION tModLoader.dll entrypoint.sh run-server.sh create_world.py
 # entrypoint, leaving no root-owned wrapper process behind.
 USER root:root
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10m --retries=3 CMD ["healthcheck"]
+# Startup may stage downloads and test a copied modded world before live launch.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30m --retries=3 CMD ["healthcheck"]
 
 STOPSIGNAL SIGTERM
 

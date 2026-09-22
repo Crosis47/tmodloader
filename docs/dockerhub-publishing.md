@@ -1,6 +1,6 @@
 # Docker Hub publishing
 
-The existing **Publish tModLoader images and releases** Action can mirror its
+The existing **Publish container releases** Action can mirror its
 verified GHCR releases to Docker Hub. It copies the complete multi-platform image
 index, including AMD64, ARM64, provenance, and SBOM manifests; no rebuild is needed.
 
@@ -28,7 +28,7 @@ run the publishing workflow manually with **mirror_only** selected. This copies
 the stable release named in `VERSION` and its preview release if present, without
 resolving new upstream versions or building an image. It requires a completed
 GitHub Release and a matching GHCR image. The workflow change must be on the
-selected branch; merge it into `master` for scheduled and normal release runs.
+selected branch; merge it into `master` for version-triggered release runs.
 
 The mirror verifies the release-note digest against the GHCR numbered tag, then
 verifies every copied Docker Hub tag against the same digest. An existing numbered

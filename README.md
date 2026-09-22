@@ -66,9 +66,65 @@ See [Docker Hub publishing setup and retries](docs/dockerhub-publishing.md).
 | `latest` | Follow the latest tested stable build |
 | `preview` | Follow the latest tested preview build |
 
-Release notes include the bundled tModLoader version and its upstream release
-link. Numbered tags are never overwritten; upstream updates get a new container
-version. Previously published tags remain available but receive no new updates.
+Release notes identify the tModLoader version bundled as the initial runtime.
+Numbered image tags are never overwritten. By default, the server can update its
+persistent runtime at startup independently of the image; use `TMOD_AUTO_UPDATE=0`
+to retain the selected runtime. Container releases still deliver dashboard,
+security, system-library and downloader updates.
+
+Container images publish when `VERSION` changes on `master`, or through a manual
+workflow run. New upstream tModLoader releases are handled by the runtime updater;
+they do not trigger scheduled image builds. Container releases still bundle an
+initial stable or preview runtime.
+
+### Startup updates and compatibility
+
+With `TMOD_AUTO_UPDATE=1`, startup checks the image's stable or preview channel
+for supported Terraria 1.4.4 releases. Set `TMOD_UPDATE_CHANNEL` to override the
+channel, or `TMOD_UPDATE_VERSION` to pin an exact supported release. Pins may
+advance the runtime; downgrades require a matching data checkpoint. Major
+Terraria branch migrations are blocked until explicitly supported.
+
+Downloads are cached in `/data/.tmod-control/updates`, including the original
+runtime and its native .NET installation. Workshop updates happen in a separate
+copy of the game data. The candidate must load every enabled mod and its
+required dependencies, load or generate a copied world, reach server readiness,
+and exit cleanly. Only then are the runtime and staged mods selected. The live
+world is not replaced with the test copy. Startup checks cannot prove every mod
+works throughout gameplay.
+
+If download or compatibility checks fail, the installed runtime and live mods
+are retained together. The dashboard shows the available version, blocked-update
+reason, and Workshop/compatibility diagnostics. If live startup then fails, the
+pre-update runtime and world/mod checkpoint are restored automatically. Custom
+server configurations are not automatically updated because their external paths
+cannot be safely redirected for the compatibility test.
+
+The overview checks for new releases in the background (cached for six hours;
+failed checks retry after fifteen minutes). **Check for updates** refreshes the
+notice, rate-limited to once per minute; it does not install anything. Startup is
+the installation point. **Restart game and apply updates** runs the same checks
+from the dashboard without restarting the container; it disconnects players and
+leaves saved drafts unapplied. **Restore previous runtime and data** queues recovery for
+the next game restart and requires confirmation: worlds, mods, mod configs
+and saved settings revert to the checkpoint. Current data is retained in another
+checkpoint until recovery passes its health check; both recovery copies are then
+deleted automatically. Failed recovery retains them. Credentials are preserved, and automatic updates are held until
+**Restart game and apply updates** is selected. Queued recovery can be performed with **Restart
+game and restore checkpoint** while the dashboard remains available. Compose
+values are not part of a checkpoint.
+
+Staging needs free space for three copies of game data plus
+`TMOD_UPDATE_MIN_FREE_MB` (default 1024 MiB). Runtime caches and update checkpoints
+are excluded from ordinary backup archives and retained on the data volume;
+backups record the actual selected runtime for compatibility checks. Keep an
+independent backup of this volume for disaster recovery. Existing dashboard
+**Apply** operations still intentionally refresh the selected Workshop mods;
+the automatic compatibility gate applies to startup updates.
+
+Set `TMOD_UPDATE_TEST_TIMEOUT` above the default 600 seconds if a large modded
+world needs longer to test or start. A timeout blocks the update rather than
+assuming compatibility.
 
 For Drydock, use a numbered stable tag and opt into version updates with this
 Compose label (the double dollar sign escapes Compose interpolation):
@@ -331,3 +387,5 @@ Thanks also to [ldericher](https://github.com/ldericher/tmodloader-docker),
 
 Container code and scripts are distributed under [LICENSE.md](LICENSE.md).
 Terraria, tModLoader, and bundled third-party tools retain their respective licenses.
+
+The update card offers an opt-in **Announce new tModLoader versions in game chat** setting. It saves immediately without a restart, defaults to off, and sends one announcement per newly detected release while the game is healthy. The administration service checks in the background even without an open dashboard, using the existing release-check cache. Disabling and re-enabling the option does not repeat an already announced release.

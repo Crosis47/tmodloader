@@ -32,7 +32,7 @@ probe_permission_layout() {
     local output
     local status
 
-    if output="$(timeout 30 docker run --env TMOD_WEB_ENABLED=0 --rm \
+    if output="$(timeout 30 docker run --env TMOD_AUTO_UPDATE=0 --env TMOD_WEB_ENABLED=0 --rm \
         --name "$permission_probe_name" \
         --tmpfs "$tmpfs_spec" \
         --env TMOD_SERVER_RUNNER=/bin/true \
@@ -61,7 +61,7 @@ probe_permission_layout "arbitrary owner/group with group-only access" \
 probe_permission_layout "tml-owned directory missing owner access" \
     "/data:rw,uid=1000,gid=1000,mode=0070"
 
-nonroot_output="$(timeout 20 docker run --env TMOD_WEB_ENABLED=0 --rm \
+nonroot_output="$(timeout 20 docker run --env TMOD_AUTO_UPDATE=0 --env TMOD_WEB_ENABLED=0 --rm \
     --name "$nonroot_probe_name" \
     --user 1000:1000 \
     "$image" 2>&1 || true)"
@@ -71,7 +71,7 @@ if ! grep -Fq "initialization must start as root" <<<"$nonroot_output"; then
     exit 1
 fi
 
-readonly_output="$(timeout 20 docker run --env TMOD_WEB_ENABLED=0 --rm \
+readonly_output="$(timeout 20 docker run --env TMOD_AUTO_UPDATE=0 --env TMOD_WEB_ENABLED=0 --rm \
     --name "$readonly_probe_name" \
     --mount "type=volume,source=$volume_name,target=/data,readonly" \
     "$image" 2>&1 || true)"
@@ -81,7 +81,7 @@ if ! grep -Fq "/data is not writable" <<<"$readonly_output"; then
     exit 1
 fi
 
-docker run --env TMOD_WEB_ENABLED=0 --rm \
+docker run --env TMOD_AUTO_UPDATE=0 --env TMOD_WEB_ENABLED=0 --rm \
     --entrypoint sh \
     --mount "type=volume,source=$volume_name,target=/data" \
     "$image" \
@@ -99,7 +99,7 @@ docker run --detach \
     --tmpfs /tmp:rw,exec,nosuid,nodev,size=64m,mode=1777 \
     --mount "type=volume,source=$volume_name,target=/data" \
     --mount "type=volume,source=$backup_volume_name,target=/backups" \
-    --env TMOD_WEB_ENABLED=0 \
+    --env TMOD_AUTO_UPDATE=0 --env TMOD_WEB_ENABLED=0 \
     --env TMOD_PASS=N/A \
     --env TMOD_MODS= \
     --env TMOD_WORLDNAME=SmokeTest \
@@ -186,7 +186,7 @@ if [[ "$exit_code" != "0" ]]; then
     exit 1
 fi
 
-docker run --env TMOD_WEB_ENABLED=0 --rm \
+docker run --env TMOD_AUTO_UPDATE=0 --env TMOD_WEB_ENABLED=0 --rm \
     --entrypoint bash \
     --mount "type=volume,source=$volume_name,target=/data" \
     "$image" \
