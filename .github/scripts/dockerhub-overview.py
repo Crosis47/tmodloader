@@ -55,6 +55,19 @@ def render(readme, release, repository):
     if position < 0:
         position = len(readme)
     result = absolute_links(readme[:position] + section + readme[position:], repository)
+    # Prefer complete sections and copyable setup commands over byte truncation.
+    # Detailed reference material remains available in the full GitHub README.
+    for heading in ('Essential settings', 'Dashboard gallery', 'Data and backups',
+                    'Image tags and updates', 'Help and project information', 'Credits',
+                    'What it includes'):
+        if len(result.encode('utf-8')) <= 25000:
+            break
+        pattern = re.compile(r'^## ' + re.escape(heading) + r'\s*\n.*?(?=^## |\Z)', re.M | re.S)
+        anchor = heading.lower().replace(' ', '-')
+        replacement = (f'## {heading}\n\n'
+                       f'[Read {heading.lower()} in the full documentation]'
+                       f'(https://github.com/{repository}/blob/master/README.md#{anchor})\n\n')
+        result = pattern.sub(lambda match: replacement, result, count=1)
     if len(result.encode("utf-8")) > 25000:
         raise ValueError("Docker Hub overview exceeds 25,000 bytes; shorten the README or release notes")
     return result

@@ -19,6 +19,7 @@ const {chromium} = require('playwright');
         return route.fulfill({body:fs.readFileSync(path.join(__dirname,'../web',name)), contentType:name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html'});
       }
       let data = {};
+      if (url.pathname === '/api/container-update') data={installed:'3.3.0',latest:'3.4.0',available:true,url:'https://github.com/Crosis47/tmodloader/releases/tag/3.4.0'};
       if (url.pathname === '/api/settings') data={mode:'env',pending:false,staged:{},running:{},compose_only:{},fields:{},groups:[],choices:{},ranges:{}};
       if (url.pathname === '/api/status') data={healthy:true,version:'test',updates,job:{state:'idle'},backups:{operation:{},archives:[],count:0,bytes:0,free_bytes:0,warnings:[]}};
       if (url.pathname === '/api/recovery') data={operation:{},interrupted:false,originals:[]};
@@ -36,6 +37,9 @@ const {chromium} = require('playwright');
     await page.goto('http://updates.test/');
     await page.locator('#token').fill('test-token');
     await page.getByRole('button',{name:'Connect',exact:true}).click();
+    await page.locator('#container-release-dialog').waitFor({state:'visible'});
+    assert.match(await page.locator('#container-release-dialog').innerText(),/Installed: 3.3.0/);
+    await page.getByRole('button',{name:'Continue to dashboard',exact:true}).click();
     await page.locator('#updates-versions').filter({hasText:'v2026.06.3.0'}).waitFor();
     assert.match(await page.locator('#attention-items').innerText(),/New tModLoader version available/);
     assert.match(await page.locator('#updates-detail').innerText(),/Missing dependency/);

@@ -12,6 +12,20 @@ immutable deployment identifier.
 
 ## [Unreleased]
 
+## [3.4.1] - 2026-09-22
+
+### Added
+
+- Notify administrators at dashboard login when a newer container release is
+  available, with release notes and guidance for updating the container.
+- Cache container-release checks, respect stable/preview image channels, and
+  keep failed checks or other open dialogs from interrupting login.
+
+### Fixed
+
+- Keep Docker Hub overview content below its 25,000-byte limit by linking detailed
+  reference sections when necessary, preserving setup instructions and published release notes.
+
 ## [3.4.0] - 2026-09-21
 
 ### Added
@@ -401,7 +415,8 @@ immutable deployment identifier.
 - Made generated configuration, shutdown, autosave, and command injection more
   reliable.
 
-[Unreleased]: https://github.com/Crosis47/tmodloader/compare/3.4.0...HEAD
+[Unreleased]: https://github.com/Crosis47/tmodloader/compare/3.4.1...HEAD
+[3.4.1]: https://github.com/Crosis47/tmodloader/compare/3.4.0...3.4.1
 [3.4.0]: https://github.com/Crosis47/tmodloader/compare/3.3.0...3.4.0
 [3.3.0]: https://github.com/Crosis47/tmodloader/compare/3.2.0...3.3.0
 [3.2.0]: https://github.com/Crosis47/tmodloader/compare/3.1.1...3.2.0

@@ -71,3 +71,5 @@ are deleted by this workflow.
 
 Docker Hub's built-in README auto-import applies to its own automated builds;
 this repository uses GitHub Actions, so the Overview is synced explicitly.
+
+When README content and published release notes exceed Docker Hub's 25,000-byte limit, the renderer replaces detailed reference sections with links to the full README. Setup instructions and published release changes stay intact; Markdown is never cut mid-section. Shorter overviews retain the complete README.
