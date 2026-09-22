@@ -31,6 +31,8 @@ immutable deployment identifier.
 
 ### Changed
 
+- Publish container images on container version changes or manual runs; remove
+  scheduled upstream release polling now that runtime updates happen in the server.
 - Record the selected runtime in backup compatibility metadata.
 - Show update controls only when relevant and explain each stage in a collapsed workflow guide.
 - Support nested mod-configuration files and group their paths in the editor.

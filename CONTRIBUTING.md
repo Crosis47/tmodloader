@@ -182,8 +182,9 @@ upstream release timing cannot silently change their subject under test.
 - Increment `MINOR` for backward-compatible container features.
 - Increment `PATCH` for backward-compatible fixes and security updates.
 
-Every new packaged tModLoader release requires a container version bump, even
-when the container code is unchanged. Use a patch bump for upstream-only updates.
+Upstream tModLoader releases are installed by the runtime updater and do not
+require a container version bump. If deliberately publishing a new image with
+a different bundled runtime, use a new container version to preserve immutable tags.
 Before publishing, increment `VERSION`, add a matching `## [X.Y.Z] - YYYY-MM-DD`
 section to `CHANGELOG.md`, and return `## [Unreleased]` to an empty state.
 Follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): newest releases
@@ -193,8 +194,9 @@ and update version comparison links. Generated GitHub release notes lead with
 these changes and keep image/source/validation details in an expandable section.
 Stable releases and images use `X.Y.Z`; previews use `X.Y.Z-preview`.
 The bundled tModLoader version is recorded in release notes and OCI labels.
-Numbered tags are immutable. The scheduled publisher checks upstream releases;
-if upstream changes after publication, bump `VERSION` to package it.
+Numbered tags are immutable. The publisher runs when `VERSION` changes on
+`master`, or through manual dispatch. It selects initial stable/preview runtimes
+for that container release; it does not poll upstream on a schedule.
 
 ## Pull requests and publishing
 

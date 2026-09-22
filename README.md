@@ -72,6 +72,11 @@ persistent runtime at startup independently of the image; use `TMOD_AUTO_UPDATE=
 to retain the selected runtime. Container releases still deliver dashboard,
 security, system-library and downloader updates.
 
+Container images publish when `VERSION` changes on `master`, or through a manual
+workflow run. New upstream tModLoader releases are handled by the runtime updater;
+they do not trigger scheduled image builds. Container releases still bundle an
+initial stable or preview runtime.
+
 ### Startup updates and compatibility
 
 With `TMOD_AUTO_UPDATE=1`, startup checks the image's stable or preview channel
