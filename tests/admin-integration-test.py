@@ -106,7 +106,7 @@ try:
     assert 'test-password' not in json.dumps(original)
     old_world = Path('/data/tModLoader/Worlds') / (original['running']['TMOD_WORLDNAME'] + '.wld')
     backup.docker('exec', name, 'test', '-f', str(old_world).replace('\\', '/'))
-    staged = api('/api/settings', {'revision': original['revision'], 'settings': {'TMOD_MAXPLAYERS': '5'}})
+    staged = api('/api/settings', {'revision': original['revision'], 'settings': {'TMOD_MAXPLAYERS': '5'}, 'server_password': 'dashboard-password'})
     worlds = api('/api/worlds')
     assert any(world['selected'] for world in worlds['worlds'])
     staged = api('/api/worlds/stage', {'revision': staged['revision'], 'action': 'create', 'name': 'AdminCorruption',
@@ -151,7 +151,7 @@ try:
     # Frequent dashboard reads must not consume anonymous player slots.
     for _ in range(20):
         assert api('/api/status')['healthy'], 'Readiness polling disrupted the game listener'
-    backup.docker('exec', name, 'bash', '-c', 'grep -Fxq "password=test-password" /terraria-server/serverconfig.txt')
+    backup.docker('exec', name, 'bash', '-c', 'grep -Fxq "password=dashboard-password" /terraria-server/serverconfig.txt')
     api('/api/backup', {'confirm': True})
     job()
     state = api('/api/status')
@@ -225,6 +225,8 @@ try:
     port = info['NetworkSettings']['Ports']['8080/tcp'][0]['HostPort']
     base = f'http://127.0.0.1:{port}'
     assert api('/api/settings')['running']['TMOD_MAXPLAYERS'] == '5'
+    backup.docker('exec', name, 'bash', '-c', 'grep -Fxq "password=dashboard-password" /terraria-server/serverconfig.txt')
+    assert 'dashboard-password' not in json.dumps(api('/api/settings'))
     assert backup.docker('exec', name, 'cat', '/data/admin/token.argon2') == encoded
     assert api('/api/players')['history']['server']['total'] == 2
     assert api('/api/players')['history']['world']['players'][0]['name'] == 'AfterBackupFixture'
@@ -237,6 +239,11 @@ try:
     assert api('/api/status')['healthy']
     assert json.loads(backup.docker('inspect', name))[0]['State']['StartedAt'] == started
     assert backup.docker('exec', name, 'cat', '/tmp/tmodloader/server.pid') != old_pid
+    current = api('/api/settings')
+    cleared = api('/api/settings', {'revision': current['revision'], 'settings': {}, 'server_password': ''})
+    api('/api/apply', {'confirm': True, 'revision': cleared['revision']})
+    job('success')
+    backup.docker('exec', name, 'bash', '-c', '! grep -q "^password=dashboard-password$" /terraria-server/serverconfig.txt')
     print('Dashboard runtime restart changed the game process, preserved container uptime and returned healthy.', flush=True)
     print('Web setup, persisted hash restart, authentication, staged apply, password preservation, backup/verify and low-space safety passed.', flush=True)
 except Exception:

@@ -65,6 +65,21 @@ def read_json(path, default=None):
     return json.loads(path.read_text())
 
 
+def password_file(pending=False):
+    return ACTIVE.with_name('pending-password.json' if pending else 'server-password.json')
+
+
+def validate_password(value):
+    if not isinstance(value, str) or len(value) > 1000 or any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ValueError('Server password must be text without control characters (maximum 1000 characters).')
+    return value
+
+
+def password_value(pending=False):
+    value = read_json(password_file(pending))
+    return validate_password(value['value']) if 'value' in value else None
+
+
 def validate(values):
     if not isinstance(values, dict) or set(values) - KEYS:
         raise ValueError('Unknown settings; networking, paths, and secrets remain Compose-managed.')
@@ -160,6 +175,11 @@ def exports(values):
 
 
 def main(command):
+    if command == 'password':
+        value = password_value() if web_mode() else None
+        if value is not None:
+            print('export TMOD_PASS=' + shlex.quote(value))
+        return
     if command == 'boot':
         mode = os.environ.get('TMOD_CONFIG_SOURCE', 'env')
         if mode not in ('env', 'web'):
@@ -195,12 +215,19 @@ def main(command):
         config = Path('/terraria-server/serverconfig.txt')
         password = next((line.partition('=')[2] for line in config.read_text().splitlines()
                          if line.startswith('password=')), '')
-        environment['TMOD_PASS'] = password
+        saved_password = password_value(command == 'apply')
+        if saved_password is None:
+            saved_password = password_value()
+        environment['TMOD_PASS'] = password if saved_password is None else saved_password
         # Compose mounts /tmp as tmpfs; atomic replacement must stay on the
         # destination filesystem rather than staging in the runtime directory.
         environment['TMOD_CONFIG_PATH'] = str(config.with_name('.admin-serverconfig.txt'))
         subprocess.run(['/terraria-server/prepare-config.sh'], env=environment, check=True)
         os.replace(environment['TMOD_CONFIG_PATH'], config)
+        if saved_password is not None:
+            atomic_json(password_file(), {'value': saved_password})
+        if command == 'apply':
+            password_file(True).unlink(missing_ok=True)
         if command == 'apply':
             import admin_journey
             admin_journey.remember_applied(values)

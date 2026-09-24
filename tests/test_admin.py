@@ -254,6 +254,28 @@ class AdminTests(unittest.TestCase):
         self.assertNotIn(b'do-not-leak', body)
         self.assertNotIn(b'TMOD_PASS"', body)
 
+    def test_password_draft_hidden_preserved_and_clearable(self):
+        current = server.configuration()
+        status, body = self.request('/api/settings', {'revision': current['revision'], 'settings': {}, 'server_password': 'private-new-password'})
+        self.assertTrue(status.startswith('200'), body)
+        self.assertNotIn(b'private-new-password', body)
+        self.assertEqual(settings.password_value(True), 'private-new-password')
+        self.assertIsNone(settings.password_value())
+        current = server.configuration()
+        self.assertTrue(current['pending'])
+        self.assertTrue(current['password_pending'])
+        self.assertNotEqual(current['revision'], server.revision(current['staged']))
+        status, body = self.request('/api/settings', {'revision': current['revision'], 'settings': {'TMOD_MOTD': 'Next'}})
+        self.assertTrue(status.startswith('200'), body)
+        self.assertEqual(settings.password_value(True), 'private-new-password')
+        status, body = self.request('/api/settings', {'revision': server.configuration()['revision'], 'settings': {}, 'server_password': ''})
+        self.assertTrue(status.startswith('200'), body)
+        self.assertEqual(settings.password_value(True), '')
+        self.assertTrue(server.configuration()['pending'])
+        for value in ('bad\npassword', 123, 'x' * 1001):
+            status, _ = self.request('/api/settings', {'revision': server.configuration()['revision'], 'settings': {}, 'server_password': value})
+            self.assertTrue(status.startswith('400'))
+
     def test_stage_does_not_modify_active(self):
         current = server.configuration()
         status, body = self.request('/api/settings', {'revision': current['revision'], 'settings': {'TMOD_MOTD': 'Next'}})

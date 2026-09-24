@@ -272,6 +272,9 @@ dashboard still provides monitoring, console, and backup controls. Set
 Review the [essential settings](#essential-settings) below before starting,
 particularly the game password, world name, and mods.
 
+Server passwords can be changed or removed in **Configuration** when web management is enabled. Save the password as a draft, then review and apply to restart the game. Passwords are never returned by the settings API; the protected server data stores the value needed to generate the game configuration. A saved dashboard password (including an empty value) overrides the Compose password or password file on later starts.
+
+
 ### 3. Start and complete setup
 
 ```bash
@@ -331,7 +334,7 @@ These are the main values to review for a new server:
 | --- | --- |
 | `TMOD_CONFIG_SOURCE` | `env` for `.env` settings; `web` for dashboard-managed settings. |
 | `TMOD_WEB_ENABLED` | `1` enables the dashboard; `0` disables it and skips admin setup. |
-| `TMOD_PASS` | Game password, separate from the admin token. Empty means no game password. |
+| `TMOD_PASS` | Initial game password, separate from the admin token. Empty means no game password. A saved Configuration password overrides it in web-managed mode. |
 | `TMOD_HOST_PORT` | Port players connect to; defaults to `7777`. |
 | `TMOD_WORLDNAME` | Selects a saved world or creates it if missing; defaults to `Docker`. |
 | `TMOD_WORLDSIZE` | New world size: `1` small, `2` medium, `3` large (default). |

@@ -8,6 +8,7 @@ const {chromium} = require('playwright');
     const page = await browser.newPage({viewport: {width: 1280, height: 1000}});
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     let configured = false, rejectKey = true, failDependencies = false, saves = 0;
+    let passwordPayload;
     let staged = {TMOD_MODS: '3'}, running = {TMOD_MODS: '3'};
     const item = {id: '1', title: 'Main mod', description: '', url: 'https://steamcommunity.com/sharedfiles/filedetails/?id=1'};
     const dependency = {id: '2', title: 'Required library'};
@@ -19,7 +20,7 @@ const {chromium} = require('playwright');
       }
       let data = {};
       if (url.pathname === '/api/settings') {
-        if (route.request().method() === 'POST') { staged = {...staged, ...route.request().postDataJSON().settings}; saves++; }
+        if (route.request().method() === 'POST') { passwordPayload = route.request().postDataJSON().server_password; staged = {...staged, ...route.request().postDataJSON().settings}; saves++; }
         data = {mode: 'web', pending: saves > 0, running, staged, revision: 'revision', workshop_search: configured, compose_only: {}, fields: {}, groups: [], choices: {}, ranges: {}};
       }
       if (url.pathname === '/api/status') data = {healthy: true, version: 'test', job: {state: 'idle'}, backups: {operation: {}, archives: [], count: 0, bytes: 0, free_bytes: 0, warnings: []}};
@@ -85,6 +86,19 @@ const {chromium} = require('playwright');
     assert.equal(await page.locator('#workshop-key-form').isVisible(), true);
     await page.setViewportSize({width: 390, height: 844});
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.getByRole('button', {name: 'Configuration', exact: true}).click();
+    await page.locator('#server-password-action').selectOption('change');
+    await page.locator('#server-password').fill('test-new-password');
+    await page.locator('#save-settings').click();
+    await page.waitForFunction(() => document.getElementById('server-password').value === '');
+    assert.equal(passwordPayload, 'test-new-password');
+    await page.locator('#server-password-action').selectOption('remove');
+    await page.locator('#save-settings').click();
+    await page.waitForFunction(() => document.getElementById('server-password-action').value === 'keep');
+    assert.equal(passwordPayload, '');
+    await page.locator('#save-settings').click();
+    await page.waitForTimeout(100);
+    assert.equal(passwordPayload, undefined);
     assert.deepEqual(errors, []);
     console.log('Workshop key, dependency review, cancellation, failure, and mobile tests passed.');
   } finally { await browser.close(); }

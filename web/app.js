@@ -587,6 +587,11 @@ async function loadSettings() {
 
   $('search-button').disabled = !config.workshop_search;
 
+  $('server-password-action').value = 'keep';
+  $('server-password-action').disabled = config.mode !== 'web';
+  $('server-password').value = ''; $('server-password').required = false; $('server-password').disabled = config.mode !== 'web';
+  $('server-password-field').hidden = true;
+  $('server-password-status').textContent = config.password_pending ? 'Password change saved · waiting to apply' : 'The saved password is hidden. Keeping it leaves any existing draft unchanged.';
   $('selection-summary').textContent = 'Staged Workshop entries: ' + (config.staged.TMOD_MODS || '(none)');
 
 }
@@ -1224,7 +1229,19 @@ $('refresh').onclick = action(refresh);
 
 $('backup').onclick = action(async () => { if (await confirmAction('Back up now?', 'Players will be disconnected while the world is saved, archived, and restarted.')) { await api('/api/backup', {confirm: true}); await refresh(); } });
 
-$('settings-form').onsubmit = action(async () => { const values = Object.fromEntries(new FormData($('settings-form'))); await api('/api/settings', {revision: config.revision, settings: values}); await loadSettings(); tell('Changes saved as a draft. The running server has not changed.'); });
+$('server-password-action').onchange = () => {
+  $('server-password-field').hidden = $('server-password-action').value !== 'change';
+  $('server-password').required = $('server-password-action').value === 'change';
+  $('server-password-status').textContent = $('server-password-action').value === 'keep' ? (config.password_pending ? 'Password change saved · waiting to apply' : 'Existing password will be kept.') : 'Unsaved password change';
+};
+$('settings-form').onsubmit = action(async () => {
+  const values = Object.fromEntries(new FormData($('settings-form')));
+  const payload = {revision: config.revision, settings: values};
+  const passwordAction = $('server-password-action').value;
+  if (passwordAction !== 'keep') payload.server_password = passwordAction === 'remove' ? '' : $('server-password').value;
+  await api('/api/settings', payload); await loadSettings();
+  tell('Changes saved as a draft. The running server has not changed.');
+});
 
 function savedDifferences(snapshot) {
   return snapshot.changes || Object.entries(snapshot.staged).filter(([key, value]) => value !== snapshot.running[key]).map(([key, value]) => ({key, label: snapshot.fields?.[key]?.label || key, running: snapshot.running[key], staged: value}));

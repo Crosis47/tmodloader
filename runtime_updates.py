@@ -179,7 +179,7 @@ def boot(retry=False):
         mark_recovery_cleanup(old, new)
         # Hold the restored release, otherwise the next startup could reapply it.
         settings.atomic_json(updates.ROOT / 'hold.json', {'version': manifest['runtime']['tmodloader_version']})
-        for name in ('pending.json', 'pending-world.json', 'pending-removed.json'):
+        for name in ('pending.json', 'pending-world.json', 'pending-removed.json', 'pending-password.json'):
             (settings.DATA / 'admin' / name).unlink(missing_ok=True)
         settings.atomic_json(updates.ROOT / 'checkpoint.json', {'id': new})
         (updates.ROOT / 'rollback-request.json').unlink()

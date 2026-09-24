@@ -198,14 +198,22 @@ def revision(values):
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
 
+PASSWORD_REVISION_KEY = secrets.token_bytes(32)
+
+
 def configuration():
     running = settings.read_json(settings.RUNTIME / 'admin-effective.json', settings.effective())
     staged = settings.clean_mod_selection({**running, **settings.read_json(settings.PENDING, running)})
     changes = [{'key': key, 'label': admin_schema.FIELDS.get(key, {}).get('label', key),
                 'running': running.get(key), 'staged': value}
                for key, value in sorted(staged.items()) if value != running.get(key)]
-    return {'mode': 'web' if settings.web_mode() else 'env', 'running': running,
-            'staged': staged, 'revision': revision(staged),
+    password = settings.password_value(True)
+    if password is not None and settings.PENDING.exists():
+        changes.append({'key': 'Server password', 'label': 'Server password', 'running': 'Hidden',
+                        'staged': 'Password changed' if password else 'Password removed'})
+    return {'password_pending': password is not None and settings.PENDING.exists(),
+            'mode': 'web' if settings.web_mode() else 'env', 'running': running,
+            'staged': staged, 'revision': revision({'settings': staged, 'password': hashlib.sha256(PASSWORD_REVISION_KEY + json.dumps(password).encode()).hexdigest()}),
             'pending': settings.PENDING.exists() and bool(changes),
             'changes': changes if settings.PENDING.exists() else [],
             'draft_exists': settings.PENDING.exists(),
@@ -214,7 +222,7 @@ def configuration():
             'fields': admin_schema.FIELDS,
             'compose_only': {'TMOD_PORT': os.environ.get('TMOD_PORT', '7777'),
                              'TMOD_USECONFIGFILE': os.environ.get('TMOD_USECONFIGFILE', 'No'),
-                             'password': 'Hidden; managed through Compose or a secret file'},
+                             'password': 'Managed in Configuration when web management is enabled'},
             'workshop_search': workshop.key_available()}
 
 
@@ -465,9 +473,12 @@ def save_settings(payload):
         current = configuration()
         if payload.get('revision') != current['revision']:
             raise ValueError('Settings changed in another session. Reload before saving.')
+        password = settings.validate_password(payload['server_password']) if 'server_password' in payload else None
         removed = []
         values = settings.clean_mod_selection(settings.validate(payload.get('settings')), removed)
         settings.atomic_json(settings.PENDING, {**current['staged'], **values})
+        if password is not None:
+            settings.atomic_json(settings.password_file(True), {'value': password})
         settings.record_pending_removals(removed)
     return configuration()
 
@@ -567,7 +578,7 @@ def api(method, path, query, payload):
             if payload.get('revision') != current['revision']:
                 raise ValueError('Settings changed. Refresh and review again.')
             if path == '/api/settings/discard':
-                for name in ('pending.json', 'pending-world.json', 'pending-removed.json'):
+                for name in ('pending.json', 'pending-world.json', 'pending-removed.json', 'pending-password.json'):
                     settings.PENDING.with_name(name).unlink(missing_ok=True)
                 return configuration()
             if payload.get('confirm') is not True:
