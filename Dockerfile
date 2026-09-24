@@ -20,8 +20,7 @@ RUN curl --fail --silent --show-error --location \
 FROM ubuntu:24.04 AS runtime-base
 ARG TARGETARCH
 
-# The TMOD Version. Ensure that you follow the correct format. Version releases can be found at https://github.com/tModLoader/tModLoader/releases if you're lost.
-ARG TMOD_VERSION=v2026.07.3.0
+# Runtime releases are installed into persistent storage on first startup.
 ARG TMOD_CHANNEL=stable
 ENV TMOD_AUTO_UPDATE="1"
 ENV TMOD_UPDATE_MIN_FREE_MB="1024"
@@ -232,13 +231,6 @@ RUN depotdownloader --version
 
 FROM runtime-${TARGETARCH} AS runtime
 
-RUN curl --fail --silent --show-error --location \
-        --retry 5 --retry-delay 5 --retry-max-time 120 --retry-all-errors \
-        --output tModLoader.zip \
-        "https://github.com/tModLoader/tModLoader/releases/download/${TMOD_VERSION}/tModLoader.zip" \
-    && unzip -o tModLoader.zip \
-    && rm tModLoader.zip
-
 COPY --chown=tml:tml entrypoint.sh .
 COPY --chown=tml:tml run-server.sh .
 COPY --chown=tml:tml create_world.py .
@@ -257,6 +249,9 @@ COPY --chown=tml:tml admin_settings.py admin_metrics.py admin_workshop.py admin_
 COPY --chown=tml:tml admin_schema.py admin_auth.py admin_access.py ./
 COPY --chown=tml:tml admin_recovery.py ./
 COPY --chown=tml:tml admin_players.py ./
+COPY --chown=tml:tml admin_player_history.py ./
+COPY --chown=tml:tml character_bridge.py ./
+COPY --chown=tml:tml server-mod ./server-mod
 COPY --chown=tml:tml admin_worlds.py admin_world_metadata.py admin_world_time.py admin_journey.py ./
 COPY --chown=tml:tml admin_modconfigs.py ./
 COPY --chown=tml:tml admin_updates.py runtime_updates.py ./
@@ -279,30 +274,10 @@ RUN sed -i 's/\r$//' /usr/local/bin/tmod-backup
 USER tml
 RUN /usr/local/bin/tmod-backup --help > /dev/null
 
-RUN find ./LaunchUtils -type f -name '*.sh' -exec chmod 755 {} + \
-    && chmod 755 ./entrypoint.sh \
-    && chmod 755 ./run-server.sh \
-    && chmod 755 ./log-filter.sh \
-    && chmod 755 ./manage-mods.sh \
-    && chmod 755 ./autosave.sh \
-    && chmod 755 ./prepare-config.sh \
-    && chmod 755 ./start-tModLoaderServer.sh
+RUN chmod 755 ./entrypoint.sh ./run-server.sh ./log-filter.sh ./manage-mods.sh ./autosave.sh ./prepare-config.sh
 
-RUN bash -c 'set -Eeo pipefail; \
-        cd ./LaunchUtils; \
-        . ./BashUtils.sh; \
-        LogFile=/tmp/dotnet-install.log; \
-        . ./DotNetVersion.sh; \
-        run_script ./InstallDotNet.sh' \
-    && test -x ./dotnet/dotnet \
-    && ./dotnet/dotnet --info \
-    && rm -rf ./tModLoader-Logs \
-    && ln -s /data/tModLoader/Logs ./tModLoader-Logs
-
-RUN python3 -c 'import json,hashlib,sys; from pathlib import Path; print(json.dumps({"container_version":Path("VERSION").read_text().strip(),"tmodloader_version":sys.argv[1],"tmodloader_sha256":hashlib.sha256(Path("tModLoader.dll").read_bytes()).hexdigest()}))' "$TMOD_VERSION" > backup-runtime.json
-RUN python3 -c 'import json,sys; from pathlib import Path; p=Path("backup-runtime.json"); d=json.loads(p.read_text()); d["update_channel"]=sys.argv[1]; p.write_text(json.dumps(d))' "$TMOD_CHANNEL"
-
-RUN sha256sum VERSION tModLoader.dll entrypoint.sh run-server.sh create_world.py backup.py admin_backup_details.py backup-runtime.json \
+RUN python3 -c 'import json,sys; from pathlib import Path; print(json.dumps({"container_version":Path("VERSION").read_text().strip(),"update_channel":sys.argv[1]}))' "$TMOD_CHANNEL" > backup-runtime.json
+RUN sha256sum VERSION entrypoint.sh run-server.sh create_world.py backup.py admin_backup_details.py backup-runtime.json \
         /usr/local/bin/tmod-backup /usr/local/bin/tmod-init \
         | sha256sum | cut -d ' ' -f 1 > backup-build-id
 

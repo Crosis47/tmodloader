@@ -43,3 +43,9 @@
 .update-announcement-setting input[type="checkbox"]{flex:0 0 auto;width:1rem;height:1rem;margin:.25rem 0 0;padding:0;accent-color:var(--accent)}
 .update-announcement-setting>span{min-width:0}
 .update-announcement-setting small{display:block;color:var(--muted);font-size:.8rem;margin-top:.2rem}
+
+.player-history-card .table-wrap{max-height:24rem;overflow:auto}.player-history-card table{min-width:820px}.player-history-card .button-row{margin-top:.8rem}
+
+.history-ban-target{margin:.7rem 0}.history-ban-target p{margin:.2rem 0}.history-ban-target button{display:block;margin-top:.4rem}.player-history-card td:nth-child(2){min-width:16rem}
+
+.history-addresses summary{cursor:pointer;color:var(--accent);padding:.35rem 0}.history-addresses summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.history-addresses[open] summary{margin-bottom:.5rem}

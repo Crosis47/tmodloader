@@ -12,6 +12,7 @@
 | API routing | `admin_server.api` | Named feature handlers; handlers retain their validation and locks |
 | Settings | `admin_settings.py` | Validation, Compose defaults, saved settings and pending draft |
 | Feature rules | `admin_worlds`, `admin_profiles`, `admin_playthroughs`, `admin_journey`, `admin_players` | Filesystem state or native game commands |
+| Player history | `admin_player_history.py`, `console_tee.py` | Live join announcements → persistent SQLite visits by character name and world GUID; `/api/players` reads paged history |
 | Browser | `web/app.js` | `api()` requests, feature render/refresh functions, event handlers |
 | Container backup CLI | `container-backup.py` (`tmod-backup`) | Backup coordination plus archive primitives in `backup.py` |
 | Host backup CLI | `backup.py` | Docker orchestration plus the same archive primitives |
@@ -124,3 +125,11 @@ The read-only release checker writes `check.json`, independently of the startup
 worker's `status.json`; dashboard polling must never launch an installation.
 
 Dashboard `POST /api/updates/restart` queues a confirmed `runtime-update` supervisor job. `perform_runtime_update` saves/stops only the game, runs queued recovery or startup update preparation, reloads saved settings, drains old console commands, and checks live health. Candidate startup failure restores the checkpoint and retries the prior runtime. The dashboard and container stay running; failed preparation leaves recovery controls available.
+
+Character joins and connection addresses are captured by `server-mod/ContainerCharacters`,
+compiled by `character_bridge.py` against the selected runtime before game startup.
+Its authenticated console events feed `admin_player_history.py`; history groups by
+name and retains individual observed ban targets. Older appearance records are
+aggregated by display name without deleting historical evidence. Compatibility
+probes rebuild the helper against the candidate runtime. No client-side mod or
+character artwork is required.

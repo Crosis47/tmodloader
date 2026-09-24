@@ -2,22 +2,17 @@
 
 set -Eeuo pipefail
 
-if (($# != 3)); then
-    printf 'Usage: %s CONTAINER_VERSION TMODLOADER_VERSION CHANNEL\n' "$0" >&2
+if (($# != 2)); then
+    printf 'Usage: %s CONTAINER_VERSION CHANNEL\n' "$0" >&2
     exit 2
 fi
 
 container_version="$1"
-tml_version="$2"
-channel="$3"
+channel="$2"
 semver_component='(0|[1-9][0-9]*)'
 
 if ! [[ "$container_version" =~ ^${semver_component}\.${semver_component}\.${semver_component}$ ]]; then
     printf '[!!] Invalid container SemVer core: %s\n' "$container_version" >&2
-    exit 1
-fi
-if ! [[ "$tml_version" =~ ^v[0-9]{4}\.[0-9]{1,2}\.[0-9]+\.[0-9]+$ ]]; then
-    printf '[!!] Invalid tModLoader release tag: %s\n' "$tml_version" >&2
     exit 1
 fi
 case "$channel" in
@@ -52,7 +47,6 @@ emit_output() {
 }
 
 emit_output container_version "$container_version"
-emit_output tml_version "$tml_version"
 emit_output channel "$channel"
 emit_output release_tag "$release_tag"
 emit_output docker_tag "$docker_tag"

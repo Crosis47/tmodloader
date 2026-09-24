@@ -7,10 +7,28 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 This changelog records changes made by this maintained container fork. It does
 not reproduce the tModLoader release notes. `VERSION` contains the container's
 SemVer core. GitHub Releases and image tags use that version, with `-preview`
-for preview builds. Release notes identify the bundled tModLoader version. An image digest remains the
-immutable deployment identifier.
+for preview builds. Release notes identify the default runtime channel. An image
+digest identifies the container tools; persistent runtime metadata identifies the
+installed tModLoader release.
 
 ## [Unreleased]
+
+## [3.5.0] - 2026-09-24
+
+### Added
+
+- Set or remove the server password through Configuration with hidden values and reviewed draft application.
+
+- Capture character joins and connection addresses through a server-only helper, group history by name, and retain per-address ban controls without requiring character artwork.
+- Persist server-wide and per-world character join history, with searchable player cards, visit counts, and first/last join dates. Track live joins without an open dashboard and keep world history across switches.
+- Retain observed connection identifiers and offer reviewed bans from player history after someone disconnects. Clearly distinguish character names and IP/Steam ban targets from unavailable verified account names.
+- Add confirmed per-address unban controls, collapsible multi-address lists, and paging controls that hide when unavailable.
+- Show the running Workshop selection as cards for easier draft removals, including fallback cards when Steam details are unavailable.
+
+### Changed
+
+- Install tModLoader and its native .NET runtime into persistent storage on first startup instead of bundling them in the image. Publishing uses fixed stable/preview channels without upstream release discovery or game-version build inputs.
+
 
 ## [3.4.1] - 2026-09-22
 
@@ -230,7 +248,7 @@ immutable deployment identifier.
   Game startup waits until the admin hash is saved, then resumes automatically.
   Remote setup requires HTTPS or a localhost SSH tunnel.
 - Include the Argon2 CLI and Python library, plus an interactive hash creation
-  and rotation helper. Admin tokens accept 8â€“256 non-whitespace ASCII characters;
+  and rotation helper. Admin tokens accept 8–256 non-whitespace ASCII characters;
   only the salted hash is persisted with owner-only permissions.
 - Verify setup, hash persistence across restart, and authentication using the
   container's installed dependencies and disposable integration-test volumes.

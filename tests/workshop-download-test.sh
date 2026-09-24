@@ -9,8 +9,20 @@ export TMOD_MOD_OFFLINE_POLICY=strict
 bash /terraria-server/manage-mods.sh
 test -s "$TMOD_DATA_DIR/tModLoader/Mods/enabled.json"
 jq -e 'length > 0' "$TMOD_DATA_DIR/tModLoader/Mods/enabled.json" >/dev/null
-# A second run must recognize the downloaded manifest without downloading again.
-output="$(bash /terraria-server/manage-mods.sh 2>&1)"
-printf '%s\n' "$output"
-grep -Fq 'All requested mods are already current' <<< "$output"
-echo "Live Workshop download and cache reuse passed."
+# A metadata timeout on the first download leaves the native cache deliberately
+# unverified. Allow one verification download before requiring cache reuse.
+for attempt in 1 2 3; do
+    if output="$(bash /terraria-server/manage-mods.sh 2>&1)"; then
+        printf '%s\n' "$output"
+    else
+        printf '%s\n' "$output" >&2
+        exit 1
+    fi
+    if grep -Fq 'All requested mods are already current' <<< "$output"; then
+        echo "Live Workshop download and cache reuse passed."
+        exit 0
+    fi
+    echo "Cache not verified on attempt $attempt; checking again."
+done
+echo "Workshop cache reuse was not confirmed after three checks." >&2
+exit 1

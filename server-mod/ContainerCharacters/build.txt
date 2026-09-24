@@ -1,0 +1,5 @@
+displayName = Container Character Tracking
+author = Container dashboard
+version = 1.0
+side = Server
+includeSource = true

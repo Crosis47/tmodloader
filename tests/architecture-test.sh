@@ -8,9 +8,15 @@ import platform
 import struct
 from pathlib import Path
 
+import runtime_updates as runtime
+import admin_updates as updates
+assert not (updates.BASE / 'tModLoader.dll').exists(), 'Image must not bundle tModLoader'
+runtime.boot()
+runtime.install_initial()
+native = runtime.dotnet(updates.active())
 machine = platform.machine()
 expected = {'x86_64': 62, 'aarch64': 183, 'arm64': 183}[machine]
-for filename in ('/usr/bin/python3', '/usr/bin/tini', '/terraria-server/dotnet/dotnet'):
+for filename in ('/usr/bin/python3', '/usr/bin/tini', str(native)):
     header = Path(filename).read_bytes()[:20]
     assert header[:4] == b'\x7fELF', filename
     actual = struct.unpack('<H', header[18:20])[0]
@@ -24,4 +30,3 @@ else:
     assert struct.unpack('<H', steam[18:20])[0] == 3, 'SteamCMD must remain isolated x86'
 print(f'Native {machine} runtime and platform Workshop downloader verified.')
 PY
-/terraria-server/dotnet/dotnet --info

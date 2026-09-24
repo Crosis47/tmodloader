@@ -1,12 +1,8 @@
-name: Publish an exact tModLoader image and release
+name: Publish a container channel release
 
 on:
   workflow_dispatch:
     inputs:
-      tmodloader_version:
-        description: Exact tModLoader release tag, such as v2026.07.3.0
-        required: true
-        type: string
       channel:
         description: Release channel represented by this build
         required: true
@@ -36,19 +32,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Validate tModLoader release and resolve metadata
+      - name: Resolve container release metadata
         id: metadata
         env:
           CHANNEL: ${{ inputs.channel }}
-          TMODLOADER_VERSION: ${{ inputs.tmodloader_version }}
         run: |
           set -euo pipefail
           container_version="$(tr -d '\r\n' < VERSION)"
-          bash release-metadata.sh "$container_version" "$TMODLOADER_VERSION" "$CHANNEL"
-
-          curl --fail --silent --show-error --location --head \
-            "https://github.com/tModLoader/tModLoader/releases/download/${TMODLOADER_VERSION}/tModLoader.zip" \
-            >/dev/null
+          bash release-metadata.sh "$container_version" "$CHANNEL"
 
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           echo "image=ghcr.io/${owner}/tmodloader" >> "$GITHUB_OUTPUT"
@@ -97,7 +88,6 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           build-args: |
-            TMOD_VERSION=${{ inputs.tmodloader_version }}
             TMOD_CHANNEL=${{ inputs.channel }}
           outputs: type=image,name=${{ steps.metadata.outputs.image }},push-by-digest=true,name-canonical=true,push=true
           labels: |
@@ -106,7 +96,6 @@ jobs:
             org.opencontainers.image.version=${{ steps.metadata.outputs.release_tag }}
             org.opencontainers.image.title=tModLoader dedicated server
             io.github.crosis47.container.version=${{ steps.metadata.outputs.container_version }}
-            io.github.crosis47.tmodloader.version=${{ inputs.tmodloader_version }}
             io.github.crosis47.release.channel=${{ inputs.channel }}
           cache-from: type=gha,scope=custom
           cache-to: type=gha,mode=max,scope=custom
@@ -185,12 +174,10 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
           DOCKER_TAG: ${{ steps.metadata.outputs.docker_tag }}
           IMAGE: ${{ steps.metadata.outputs.image }}
-          TMODLOADER_VERSION: ${{ inputs.tmodloader_version }}
           UPDATE_CHANNEL_ALIASES: ${{ inputs.update_channel_aliases }}
         run: |
           bash release-notes.sh \
             "$CONTAINER_VERSION" \
-            "$TMODLOADER_VERSION" \
             "$CHANNEL" \
             "$IMAGE" \
             "$DIGEST" \

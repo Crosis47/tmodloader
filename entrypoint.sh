@@ -215,6 +215,9 @@ if use_custom_config; then
     printf '[CONFIG] Using the mounted custom configuration file.\n'
 else
     load_password_file
+    password_exports="$(python3 /terraria-server/admin_settings.py password)"
+    eval "$password_exports"
+    unset password_exports
     ./prepare-config.sh
 fi
 

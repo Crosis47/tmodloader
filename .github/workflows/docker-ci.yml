@@ -10,6 +10,9 @@ on:
       - "admin_*.py"
       - workshop_download.py
       - runtime_updates.py
+      - console_tee.py
+      - character_bridge.py
+      - "server-mod/**"
       - "web/**"
       - CHANGELOG.md
       - Dockerfile
@@ -25,6 +28,9 @@ on:
       - "admin_*.py"
       - workshop_download.py
       - runtime_updates.py
+      - console_tee.py
+      - character_bridge.py
+      - "server-mod/**"
       - "web/**"
       - CHANGELOG.md
       - Dockerfile

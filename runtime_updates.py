@@ -179,7 +179,7 @@ def boot(retry=False):
         mark_recovery_cleanup(old, new)
         # Hold the restored release, otherwise the next startup could reapply it.
         settings.atomic_json(updates.ROOT / 'hold.json', {'version': manifest['runtime']['tmodloader_version']})
-        for name in ('pending.json', 'pending-world.json', 'pending-removed.json'):
+        for name in ('pending.json', 'pending-world.json', 'pending-removed.json', 'pending-password.json'):
             (settings.DATA / 'admin' / name).unlink(missing_ok=True)
         settings.atomic_json(updates.ROOT / 'checkpoint.json', {'id': new})
         (updates.ROOT / 'rollback-request.json').unlink()
@@ -253,12 +253,13 @@ def download(candidate):
             raise ValueError('Runtime download size does not match GitHub.')
         package = temporary / 'package'
         extract(archive, package)
-        # Upstream installs the matching native runtime, just as the image build does.
+        # Keep installer scratch space on /data; a small /tmp tmpfs cannot hold .NET.
         install_log = updates.ROOT / 'dotnet-install.log'
         with install_log.open('w') as output:
             subprocess.run(['bash', '-c', 'set -Eeo pipefail; cd LaunchUtils; . ./BashUtils.sh; '
                             'LogFile=/tmp/tmod-update-dotnet.log; . ./DotNetVersion.sh; run_script ./InstallDotNet.sh'],
-                           cwd=package, check=True, timeout=360, stdout=output, stderr=subprocess.STDOUT)
+                           cwd=package, env={**os.environ, 'TMPDIR': str(temporary)},
+                           check=True, timeout=360, stdout=output, stderr=subprocess.STDOUT)
         executable = dotnet(package)
         subprocess.run([str(executable), '--info'], check=True, timeout=30, stdout=subprocess.DEVNULL)
         saved = {'tmodloader_version': tag, 'tmodloader_sha256': digest(package / 'tModLoader.dll')}
@@ -269,53 +270,6 @@ def download(candidate):
         return root, saved
     finally:
         remove(temporary)
-
-
-def copy_bundled(source, target):
-    """Materialize image-owned library aliases; game-data copies still reject links."""
-    if not source.exists():
-        return
-    base = updates.BASE.resolve()
-    for path in [source, *source.rglob('*')] if source.is_dir() else [source]:
-        if path.is_symlink():
-            resolved = path.resolve(strict=True)
-            if not resolved.is_relative_to(base) or not resolved.is_file():
-                raise ValueError('Unsupported bundled runtime link: ' + str(path))
-        elif not (path.is_file() or path.is_dir()):
-            raise ValueError('Unsupported bundled runtime file: ' + str(path))
-    if source.is_dir():
-        shutil.copytree(source, target)
-    else:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
-
-
-def cache_bundled():
-    """Preserve the original runtime too, so recovery survives container replacement."""
-    if updates.active() != updates.BASE:
-        return
-    metadata = updates.runtime()
-    tag = metadata['tmodloader_version']
-    updates.version(tag)
-    root = updates.ROOT / 'releases' / tag
-    saved = {'tmodloader_version': tag, 'tmodloader_sha256': metadata['tmodloader_sha256']}
-    if not (root / 'installed.json').exists():
-        temporary = updates.ROOT / ('seed-' + uuid.uuid4().hex)
-        temporary.mkdir(parents=True, mode=0o700)
-        try:
-            for name in ('tModLoader.dll', 'tModLoader.deps.json', 'tModLoader.runtimeconfig.json',
-                         'tModLoader.runtimeconfig.dev.json', 'tModLoader.pdb',
-                         'Libraries', 'Content', 'LaunchUtils', 'dotnet', 'dotnet_arm64'):
-                copy_bundled(updates.BASE / name, temporary / name)
-            settings.atomic_json(temporary / 'installed.json', saved)
-            root.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(temporary, root)
-            (root / 'tModLoader-Logs').symlink_to(settings.DATA / 'tModLoader/Logs', target_is_directory=True)
-        finally:
-            remove(temporary)
-    if digest(root / 'tModLoader.dll') != saved['tmodloader_sha256']:
-        raise ValueError('Bundled runtime cache does not match the image.')
-    settings.atomic_json(updates.ROOT / 'active.json', saved)
 
 
 def digest(path):
@@ -364,6 +318,9 @@ def probe(directory, data, config, log):
 
 def probe_process(directory, data, config, log):
     """Ask the target tModLoader itself to resolve dependencies and load copied data."""
+    if 'ContainerCharacters' in mod_names(data):
+        from character_bridge import prepare
+        prepare(runtime=directory, data=data)
     text = config.read_text()
     # Custom config may point outside /data or run an unexpected world; block it upstream.
     text = text.replace(str(settings.DATA) + '/', str(data) + '/')
@@ -424,10 +381,33 @@ def probe_process(directory, data, config, log):
                     child.wait()
 
 
+def install_initial():
+    """Install once, independently of the subsequent automatic-update policy."""
+    if updates.runtime().get('tmodloader_version'):
+        updates.active()  # Never replace a missing selected runtime silently.
+        return False
+    report('checking', 'First startup: selecting the initial tModLoader release.')
+    pin = os.environ.get('TMOD_UPDATE_VERSION', '')
+    if pin:
+        target = updates.pinned_release(pin)
+    else:
+        checked = updates.check()
+        if checked.get('error'):
+            raise ValueError(checked['error'])
+        target = checked['latest']
+    report('downloading', 'Installing tModLoader ' + target['version'] + ' and its .NET runtime.',
+           target=target['version'])
+    _, metadata = download(target)
+    settings.atomic_json(updates.ROOT / 'active.json', metadata)
+    report('initializing', 'Initial runtime installed; preparing the server.', installed=target['version'])
+    return True
+
+
 def prepare(config):
     auto = os.environ.get('TMOD_AUTO_UPDATE', '1')
     if auto not in ('0', '1'):
         raise ValueError('TMOD_AUTO_UPDATE must be 0 or 1.')
+    initial = install_initial()
     if updates.read(updates.ROOT / 'hold.json').get('version'):
         report('held', 'Recovery hold active; preserving the restored runtime and mods. Use Restart game and apply updates from the dashboard when ready.')
         return
@@ -441,14 +421,16 @@ def prepare(config):
         return
     identity = None
     try:
-        cache_bundled()
-        report('checking', 'Checking the selected tModLoader release channel.')
-        cached = updates.check()
-        if cached.get('error'):
-            raise ValueError(cached['error'])
         current = updates.runtime()
         selected, metadata = updates.active(), updates.read(updates.ROOT / 'active.json')
-        target = cached['latest']
+        if initial:
+            target = {'version': current['tmodloader_version']}
+        else:
+            report('checking', 'Checking the selected tModLoader release channel.')
+            cached = updates.check()
+            if cached.get('error'):
+                raise ValueError(cached['error'])
+            target = cached['latest']
         pin = os.environ.get('TMOD_UPDATE_VERSION', '')
         if pin:
             updates.version(pin)
@@ -499,6 +481,8 @@ def prepare(config):
             # two full game copies on every restart of a blocked update.
             for name in ('before', 'trial'):
                 remove(transaction(identity) / name)
+        if initial:
+            raise RuntimeError('Initial server validation failed; inspect diagnostics and retry.') from error
         # No in-place Workshop refresh here: fallback must retain its working mods.
         if (os.environ.get('TMOD_MODS') or os.environ.get('TMOD_ENABLEDMODS')) and not any(
                 (settings.DATA / 'tModLoader/Worlds').glob('*.wld')):

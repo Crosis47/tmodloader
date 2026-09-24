@@ -22,6 +22,7 @@ import admin_workshop as workshop
 import admin_schema
 import admin_recovery
 import admin_players
+import admin_player_history
 import admin_worlds
 import admin_modconfigs
 import admin_journey
@@ -197,14 +198,22 @@ def revision(values):
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
 
+PASSWORD_REVISION_KEY = secrets.token_bytes(32)
+
+
 def configuration():
     running = settings.read_json(settings.RUNTIME / 'admin-effective.json', settings.effective())
     staged = settings.clean_mod_selection({**running, **settings.read_json(settings.PENDING, running)})
     changes = [{'key': key, 'label': admin_schema.FIELDS.get(key, {}).get('label', key),
                 'running': running.get(key), 'staged': value}
                for key, value in sorted(staged.items()) if value != running.get(key)]
-    return {'mode': 'web' if settings.web_mode() else 'env', 'running': running,
-            'staged': staged, 'revision': revision(staged),
+    password = settings.password_value(True)
+    if password is not None and settings.PENDING.exists():
+        changes.append({'key': 'Server password', 'label': 'Server password', 'running': 'Hidden',
+                        'staged': 'Password changed' if password else 'Password removed'})
+    return {'password_pending': password is not None and settings.PENDING.exists(),
+            'mode': 'web' if settings.web_mode() else 'env', 'running': running,
+            'staged': staged, 'revision': revision({'settings': staged, 'password': hashlib.sha256(PASSWORD_REVISION_KEY + json.dumps(password).encode()).hexdigest()}),
             'pending': settings.PENDING.exists() and bool(changes),
             'changes': changes if settings.PENDING.exists() else [],
             'draft_exists': settings.PENDING.exists(),
@@ -213,7 +222,7 @@ def configuration():
             'fields': admin_schema.FIELDS,
             'compose_only': {'TMOD_PORT': os.environ.get('TMOD_PORT', '7777'),
                              'TMOD_USECONFIGFILE': os.environ.get('TMOD_USECONFIGFILE', 'No'),
-                             'password': 'Hidden; managed through Compose or a secret file'},
+                             'password': 'Managed in Configuration when web management is enabled'},
             'workshop_search': workshop.key_available()}
 
 
@@ -391,10 +400,11 @@ def stage_world(payload):
         return configuration()
 
 
-def players_status():
+def players_status(query=None):
     with STATE_LOCK:
         result = {'available': False, 'players': [], 'updated': None,
-                  'activity': admin_players.activity(), 'can_ban': False}
+                  'activity': admin_players.activity(), 'can_ban': False,
+                  'history': admin_player_history.history(query)}
         try:
             players_ready()
             roster = admin_players.snapshot(CONSOLE_LOG)
@@ -412,6 +422,10 @@ def players_status():
 
 def player_command(path, payload):
     with STATE_LOCK:
+        if path.endswith(('/history/ban', '/history/unban')):
+            if operation_busy():
+                raise ValueError('Wait for the current server operation before changing bans.')
+            return admin_players.unban_recorded(payload) if path.endswith('/unban') else admin_players.ban_recorded(payload)
         players_ready()
         if path.endswith('/moderate'):
             return admin_players.moderate(CONSOLE_LOG, payload)
@@ -459,9 +473,12 @@ def save_settings(payload):
         current = configuration()
         if payload.get('revision') != current['revision']:
             raise ValueError('Settings changed in another session. Reload before saving.')
+        password = settings.validate_password(payload['server_password']) if 'server_password' in payload else None
         removed = []
         values = settings.clean_mod_selection(settings.validate(payload.get('settings')), removed)
         settings.atomic_json(settings.PENDING, {**current['staged'], **values})
+        if password is not None:
+            settings.atomic_json(settings.password_file(True), {'value': password})
         settings.record_pending_removals(removed)
     return configuration()
 
@@ -561,7 +578,7 @@ def api(method, path, query, payload):
             if payload.get('revision') != current['revision']:
                 raise ValueError('Settings changed. Refresh and review again.')
             if path == '/api/settings/discard':
-                for name in ('pending.json', 'pending-world.json', 'pending-removed.json'):
+                for name in ('pending.json', 'pending-world.json', 'pending-removed.json', 'pending-password.json'):
                     settings.PENDING.with_name(name).unlink(missing_ok=True)
                 return configuration()
             if payload.get('confirm') is not True:
@@ -579,8 +596,8 @@ def api(method, path, query, payload):
     if method == 'POST' and path == '/api/worlds/stage':
         return stage_world(payload)
     if path == '/api/players' and method == 'GET':
-        return players_status()
-    if path in ('/api/players/moderate', '/api/players/announce') and method == 'POST':
+        return players_status(query)
+    if path in ('/api/players/moderate', '/api/players/announce', '/api/players/history/ban', '/api/players/history/unban') and method == 'POST':
         return player_command(path, payload)
     if method == 'GET' and path == '/api/recovery':
         return admin_recovery.status()

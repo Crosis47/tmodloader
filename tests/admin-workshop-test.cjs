@@ -8,6 +8,7 @@ const {chromium} = require('playwright');
     const page = await browser.newPage({viewport: {width: 1280, height: 1000}});
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     let configured = false, rejectKey = true, failDependencies = false, saves = 0;
+    let passwordPayload;
     let staged = {TMOD_MODS: '3'}, running = {TMOD_MODS: '3'};
     const item = {id: '1', title: 'Main mod', description: '', url: 'https://steamcommunity.com/sharedfiles/filedetails/?id=1'};
     const dependency = {id: '2', title: 'Required library'};
@@ -19,7 +20,7 @@ const {chromium} = require('playwright');
       }
       let data = {};
       if (url.pathname === '/api/settings') {
-        if (route.request().method() === 'POST') { staged = {...staged, ...route.request().postDataJSON().settings}; saves++; }
+        if (route.request().method() === 'POST') { passwordPayload = route.request().postDataJSON().server_password; staged = {...staged, ...route.request().postDataJSON().settings}; saves++; }
         data = {mode: 'web', pending: saves > 0, running, staged, revision: 'revision', workshop_search: configured, compose_only: {}, fields: {}, groups: [], choices: {}, ranges: {}};
       }
       if (url.pathname === '/api/status') data = {healthy: true, version: 'test', job: {state: 'idle'}, backups: {operation: {}, archives: [], count: 0, bytes: 0, free_bytes: 0, warnings: []}};
@@ -30,7 +31,7 @@ const {chromium} = require('playwright');
         configured = true; data = {saved: true};
       }
       if (url.pathname === '/api/workshop') data = {items: [item], total: 1};
-      if (url.pathname === '/api/workshop/lookup') data = item;
+      if (url.pathname === '/api/workshop/lookup') data = route.request().postDataJSON().value === '3' ? {...item, id: '3', title: 'Running mod'} : item;
       if (url.pathname === '/api/workshop/dependencies') {
         if (failDependencies) return route.fulfill({status: 400, json: {error: 'Dependency unavailable'}});
         data = {checked: configured, items: configured ? [dependency, {id: '3', title: 'Already selected'}] : [], excluded: configured ? [{id: '4', title: 'Client helper'}] : []};
@@ -42,6 +43,11 @@ const {chromium} = require('playwright');
     await page.getByRole('button', {name: 'Workshop', exact: true}).click();
     assert.equal(await page.locator('#workshop-key-form').isVisible(), true);
     assert.equal(await page.locator('#search-form').isVisible(), false);
+    await page.locator('#show-current-mods').click();
+    await page.locator('#results').getByRole('link', {name: 'Running mod', exact: true}).waitFor();
+    assert.equal(await page.locator('#results .mod-card').count(), 1);
+    assert.equal(await page.getByRole('button', {name: 'Remove from selection', exact: true}).isEnabled(), true);
+    assert.equal(saves, 0);
     await page.locator('#lookup').fill('1'); await page.locator('#lookup-form button').click();
     await page.getByRole('button', {name: 'Add to selection', exact: true}).click();
     await page.locator('#confirmation').waitFor();
@@ -71,10 +77,28 @@ const {chromium} = require('playwright');
     await page.getByRole('button', {name: 'Add to selection', exact: true}).click();
     await page.locator('#message').filter({hasText: 'Dependency unavailable'}).waitFor();
     assert.equal(saves, 2); assert.equal(staged.TMOD_MODS, '3,2');
+    await page.locator('#show-current-mods').click();
+    await page.locator('#results').getByRole('link', {name: 'Running mod', exact: true}).waitFor();
+    await page.getByRole('button', {name: 'Remove from selection', exact: true}).click();
+    await page.getByRole('button', {name: 'Add to selection', exact: true}).waitFor();
+    assert.equal(staged.TMOD_MODS, '2'); assert.equal(running.TMOD_MODS, '3');
     await page.locator('#workshop-key-change').click();
     assert.equal(await page.locator('#workshop-key-form').isVisible(), true);
     await page.setViewportSize({width: 390, height: 844});
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.getByRole('button', {name: 'Configuration', exact: true}).click();
+    await page.locator('#server-password-action').selectOption('change');
+    await page.locator('#server-password').fill('test-new-password');
+    await page.locator('#save-settings').click();
+    await page.waitForFunction(() => document.getElementById('server-password').value === '');
+    assert.equal(passwordPayload, 'test-new-password');
+    await page.locator('#server-password-action').selectOption('remove');
+    await page.locator('#save-settings').click();
+    await page.waitForFunction(() => document.getElementById('server-password-action').value === 'keep');
+    assert.equal(passwordPayload, '');
+    await page.locator('#save-settings').click();
+    await page.waitForTimeout(100);
+    assert.equal(passwordPayload, undefined);
     assert.deepEqual(errors, []);
     console.log('Workshop key, dependency review, cancellation, failure, and mobile tests passed.');
   } finally { await browser.close(); }

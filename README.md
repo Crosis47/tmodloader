@@ -66,7 +66,8 @@ See [Docker Hub publishing setup and retries](docs/dockerhub-publishing.md).
 | `latest` | Follow the latest tested stable build |
 | `preview` | Follow the latest tested preview build |
 
-Release notes identify the tModLoader version bundled as the initial runtime.
+Release notes identify the default runtime channel; the installed tModLoader
+version is shown in the dashboard.
 Numbered image tags are never overwritten. By default, the server can update its
 persistent runtime at startup independently of the image; use `TMOD_AUTO_UPDATE=0`
 to retain the selected runtime. Container releases still deliver dashboard,
@@ -74,8 +75,57 @@ security, system-library and downloader updates.
 
 Container images publish when `VERSION` changes on `master`, or through a manual
 workflow run. New upstream tModLoader releases are handled by the runtime updater;
-they do not trigger scheduled image builds. Container releases still bundle an
-initial stable or preview runtime.
+they do not trigger scheduled image builds. Images contain the server management
+tools and system dependencies. First startup
+downloads the newest supported release for the selected stable or preview channel
+and installs its matching native .NET runtime into `/data`. Internet access is
+required for this initial installation, even with `TMOD_AUTO_UPDATE=0`; that
+setting disables subsequent automatic updates. Later starts reuse the cached runtime.
+
+### Persistent player history
+
+The Players page shows everyone recorded on this server and everyone recorded on
+its currently loaded world, with first/last join dates and visit counts. Search
+and paging cover the full history. Tracking runs with the game, including when
+the dashboard is closed or disabled, and begins when this feature is installed.
+A small server-only component captures character joins and connection addresses; clients do
+not install an extra mod. It is built using the downloaded runtime's compiler
+and rebuilt when that runtime or the component changes. If it cannot load,
+English join announcements (`TMOD_LANGUAGE=en-US`) provide name-only history.
+Older visits cannot be reconstructed reliably.
+
+Character history groups visits by character name and lists observed connection
+addresses for that name. Names can be reused or changed, and IP addresses can be
+shared or change; these records do not identify verified accounts or unique people.
+Older appearance-based records are combined by name in the dashboard while retaining
+their visit counts, dates and recorded ban targets. No portrait artwork is required.
+
+The server-only helper appears as `ContainerCharacters` in the server's mod list;
+startup ensures it is enabled. Its build diagnostics are in
+`/data/.tmod-control/character-bridge/build.log`.
+
+History also retains server-observed IP addresses or supported Steam identifiers
+from native player queries and native network log entries that explicitly pair
+an endpoint with the character. A verified account name is not supplied for
+direct-IP players. The cards show that limitation and each recorded ban target;
+no IP or account is inferred from a character name or connection timing.
+
+**Ban player** reviews and appends the selected identifier to the persistent
+native ban list, even after the player has left. It blocks subsequent connections
+using that identifier and does not kick an existing session. IP bans can affect
+other people sharing an address and can be bypassed by changing addresses.
+Names without a captured identifier cannot be banned offline. Custom server
+configurations continue to require manual ban-list management.
+
+World history follows the world's internal GUID across switches and file renames.
+A newly generated world with the same filename starts a separate history; copies
+of the same world retain the same identity. Unknown world formats still allow
+server-wide tracking but cannot be assigned a world history.
+
+Records persist in `/data/.tmod-control/player-history.sqlite3`. World switches,
+container recreation, and world restores do not clear them. This control data is
+excluded from the dashboard's world backups; preserve the full data volume (or
+copy the database with the server stopped) when migrating the entire server.
 
 ### Startup updates and compatibility
 
@@ -85,7 +135,7 @@ channel, or `TMOD_UPDATE_VERSION` to pin an exact supported release. Pins may
 advance the runtime; downgrades require a matching data checkpoint. Major
 Terraria branch migrations are blocked until explicitly supported.
 
-Downloads are cached in `/data/.tmod-control/updates`, including the original
+Downloads are cached in `/data/.tmod-control/updates`, including each installed
 runtime and its native .NET installation. Workshop updates happen in a separate
 copy of the game data. The candidate must load every enabled mod and its
 required dependencies, load or generate a copied world, reach server readiness,
@@ -222,6 +272,9 @@ dashboard still provides monitoring, console, and backup controls. Set
 Review the [essential settings](#essential-settings) below before starting,
 particularly the game password, world name, and mods.
 
+Server passwords can be changed or removed in **Configuration** when web management is enabled. Save the password as a draft, then review and apply to restart the game. Passwords are never returned by the settings API; the protected server data stores the value needed to generate the game configuration. A saved dashboard password (including an empty value) overrides the Compose password or password file on later starts.
+
+
 ### 3. Start and complete setup
 
 ```bash
@@ -281,7 +334,7 @@ These are the main values to review for a new server:
 | --- | --- |
 | `TMOD_CONFIG_SOURCE` | `env` for `.env` settings; `web` for dashboard-managed settings. |
 | `TMOD_WEB_ENABLED` | `1` enables the dashboard; `0` disables it and skips admin setup. |
-| `TMOD_PASS` | Game password, separate from the admin token. Empty means no game password. |
+| `TMOD_PASS` | Initial game password, separate from the admin token. Empty means no game password. A saved Configuration password overrides it in web-managed mode. |
 | `TMOD_HOST_PORT` | Port players connect to; defaults to `7777`. |
 | `TMOD_WORLDNAME` | Selects a saved world or creates it if missing; defaults to `Docker`. |
 | `TMOD_WORLDSIZE` | New world size: `1` small, `2` medium, `3` large (default). |

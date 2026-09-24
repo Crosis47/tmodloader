@@ -64,6 +64,14 @@ try:
     roster = api('/api/players')
     assert roster['available'] and roster['players'] == [], roster
     assert roster['can_ban']
+    first_world_id = roster['history']['current_world']['id']
+    assert first_world_id and not roster['history']['error'], roster['history']
+    assert 'faces unavailable' not in roster['history']['current_world']['detail'], roster['history']
+    assert any(line.startswith('[CHARACTER] ') and '"action":"ready"' in line for line in backup.docker('logs', name).splitlines())
+    # Seed a fixture visit to exercise persistence; no multiplayer client is simulated.
+    backup.docker('exec', name, 'python3', '-c',
+                  "import admin_player_history as h; h.record('HistoryFixture', h.current_world()['id'])")
+    assert api('/api/players')['history']['world']['players'][0]['name'] == 'HistoryFixture'
     assert api('/api/players/announce', {'message': 'Dashboard player-management integration test', 'confirm': True})['detail']
     assert api('/api/players')['activity'][0]['action'] == 'announcement'
     backup.docker('exec', name, 'bash', '-c', 'grep -Fxq "banlist=/data/tModLoader/banlist.txt" /terraria-server/serverconfig.txt')
@@ -98,7 +106,7 @@ try:
     assert 'test-password' not in json.dumps(original)
     old_world = Path('/data/tModLoader/Worlds') / (original['running']['TMOD_WORLDNAME'] + '.wld')
     backup.docker('exec', name, 'test', '-f', str(old_world).replace('\\', '/'))
-    staged = api('/api/settings', {'revision': original['revision'], 'settings': {'TMOD_MAXPLAYERS': '5'}})
+    staged = api('/api/settings', {'revision': original['revision'], 'settings': {'TMOD_MAXPLAYERS': '5'}, 'server_password': 'dashboard-password'})
     worlds = api('/api/worlds')
     assert any(world['selected'] for world in worlds['worlds'])
     staged = api('/api/worlds/stage', {'revision': staged['revision'], 'action': 'create', 'name': 'AdminCorruption',
@@ -112,11 +120,19 @@ try:
     assert api('/api/settings')['running']['TMOD_MAXPLAYERS'] == '5'
     assert api('/api/settings')['running']['TMOD_WORLDEVIL'] == 'corruption'
     assert api('/api/worlds')['configured'] == 'AdminCorruption'
+    changed_history = api('/api/players')['history']
+    assert changed_history['current_world']['id'] != first_world_id
+    assert changed_history['world']['total'] == 0
+    assert changed_history['server']['total'] == 1
     world_settings = api('/api/settings')
     switched = api('/api/worlds/stage', {'revision': world_settings['revision'], 'action': 'switch', 'name': original['running']['TMOD_WORLDNAME']})
     api('/api/apply', {'confirm': True, 'revision': switched['revision']})
     job()
     assert api('/api/worlds')['configured'] == original['running']['TMOD_WORLDNAME']
+    returned_history = api('/api/players')['history']
+    assert returned_history['current_world']['id'] == first_world_id
+    assert returned_history['world']['players'][0]['name'] == 'HistoryFixture'
+    print('Player history followed the live world across switching away and back.', flush=True)
     catalog = api('/api/playthroughs')
     catalog = api('/api/playthroughs', {'action': 'save', 'name': 'Adventure', 'source': 'running',
                                       'world': 'AdminCorruption', 'revision': catalog['revision'],
@@ -135,7 +151,7 @@ try:
     # Frequent dashboard reads must not consume anonymous player slots.
     for _ in range(20):
         assert api('/api/status')['healthy'], 'Readiness polling disrupted the game listener'
-    backup.docker('exec', name, 'bash', '-c', 'grep -Fxq "password=test-password" /terraria-server/serverconfig.txt')
+    backup.docker('exec', name, 'bash', '-c', 'grep -Fxq "password=dashboard-password" /terraria-server/serverconfig.txt')
     api('/api/backup', {'confirm': True})
     job()
     state = api('/api/status')
@@ -147,6 +163,8 @@ try:
     api('/api/recovery/preview', {'archive': archive})
     job()
     preview = api('/api/status')['job']['preview']
+    backup.docker('exec', name, 'python3', '-c',
+                  "import admin_player_history as h; h.record('AfterBackupFixture', h.current_world()['id'])")
     assert 'AdminCorruption.wld' in preview['worlds']
     backup.docker('exec', name, 'touch', '/data/recovery-marker')
     pid = backup.docker('exec', name, 'cat', '/tmp/tmodloader/server.pid')
@@ -157,6 +175,8 @@ try:
     job()
     assert api('/api/status')['healthy']
     assert api('/api/recovery')['originals']
+    assert api('/api/players')['history']['world']['players'][0]['name'] == 'AfterBackupFixture'
+    assert api('/api/players')['history']['server']['total'] == 2
     backup.docker('exec', name, 'test', '!', '-e', '/data/recovery-marker')
     retained = api('/api/recovery')['originals'][-1]
     backup.docker('exec', name, 'test', '-f', '/data/.tmod-control/' + retained + '/recovery-marker')
@@ -168,6 +188,17 @@ try:
     api('/api/recovery/retry', {'confirm': True})
     job('failed')
     assert not api('/api/status')['healthy']
+    # Explicit evidence fixture: exercise offline moderation without pretending
+    # this is an authenticated multiplayer client or a verified account.
+    backup.docker('exec', name, 'python3', '-c',
+                  "import admin_player_history as h; h.observe('HistoryFixture', '203.0.113.4:1234', None, 'Integration fixture')")
+    historical = api('/api/players')['history']['server']['players']
+    target = next(p for p in historical if p['name'] == 'HistoryFixture')['identities'][0]
+    assert api('/api/players/history/ban', {'key': target['key'], 'confirm': True})['detail'].startswith('Ban saved')
+    assert '203.0.113.4' in backup.docker('exec', name, 'cat', '/data/tModLoader/banlist.txt').splitlines()
+    historical = api('/api/players')['history']['server']['players']
+    assert next(p for p in historical if p['name'] == 'HistoryFixture')['identities'][0]['banned']
+    print('Offline history ban was saved and confirmed while the game was stopped.', flush=True)
     backup.docker('exec', name, 'bash', '-c', 'cp /tmp/recovery-runner-original run-server.sh')
     api('/api/recovery/retry', {'confirm': True})
     job()
@@ -194,7 +225,13 @@ try:
     port = info['NetworkSettings']['Ports']['8080/tcp'][0]['HostPort']
     base = f'http://127.0.0.1:{port}'
     assert api('/api/settings')['running']['TMOD_MAXPLAYERS'] == '5'
+    backup.docker('exec', name, 'bash', '-c', 'grep -Fxq "password=dashboard-password" /terraria-server/serverconfig.txt')
+    assert 'dashboard-password' not in json.dumps(api('/api/settings'))
     assert backup.docker('exec', name, 'cat', '/data/admin/token.argon2') == encoded
+    assert api('/api/players')['history']['server']['total'] == 2
+    assert api('/api/players')['history']['world']['players'][0]['name'] == 'AfterBackupFixture'
+    assert '203.0.113.4' in backup.docker('exec', name, 'cat', '/data/tModLoader/banlist.txt').splitlines()
+    print('Player history survived restoring an older backup and restarting the container.', flush=True)
     started = json.loads(backup.docker('inspect', name))[0]['State']['StartedAt']
     old_pid = backup.docker('exec', name, 'cat', '/tmp/tmodloader/server.pid')
     api('/api/updates/restart', {'confirm': True})
@@ -202,6 +239,11 @@ try:
     assert api('/api/status')['healthy']
     assert json.loads(backup.docker('inspect', name))[0]['State']['StartedAt'] == started
     assert backup.docker('exec', name, 'cat', '/tmp/tmodloader/server.pid') != old_pid
+    current = api('/api/settings')
+    cleared = api('/api/settings', {'revision': current['revision'], 'settings': {}, 'server_password': ''})
+    api('/api/apply', {'confirm': True, 'revision': cleared['revision']})
+    job('success')
+    backup.docker('exec', name, 'bash', '-c', '! grep -q "^password=dashboard-password$" /terraria-server/serverconfig.txt')
     print('Dashboard runtime restart changed the game process, preserved container uptime and returned healthy.', flush=True)
     print('Web setup, persisted hash restart, authentication, staged apply, password preservation, backup/verify and low-space safety passed.', flush=True)
 except Exception:
