@@ -28,13 +28,19 @@ umask 077
 : > "$raw_log"
 rm -f "$raw_log.first"
 
+python3 "$(dirname "${BASH_SOURCE[0]}")/character_bridge.py"
+# Only the game process and its console reader share this per-launch token.
+# Player chat that resembles a tracking event must not become history evidence.
+TMOD_CHARACTER_EVENT_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+export TMOD_CHARACTER_EVENT_KEY
+
 set +e
 python3 "$(dirname "${BASH_SOURCE[0]}")/create_world.py" "$config_path" bash "$script_caller" \
     -server \
     -tmlsavedirectory /data/tModLoader \
     -steamworkshopfolder /data/steamMods/steamapps/workshop \
     -config "$config_path" \
-    2>&1 | python3 "$(dirname "${BASH_SOURCE[0]}")/console_tee.py" "$raw_log" | bash "$log_filter" "$log_level"
+    2>&1 | python3 "$(dirname "${BASH_SOURCE[0]}")/console_tee.py" "$raw_log" "$config_path" | bash "$log_filter" "$log_level"
 pipeline_status=("${PIPESTATUS[@]}")
 set -e
 

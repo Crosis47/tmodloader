@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 image="${1:-tmodloader:ci}"
-timeout_seconds="${TMOD_SMOKE_TIMEOUT:-600}"
+timeout_seconds="${TMOD_SMOKE_TIMEOUT:-1200}"
 suffix="${GITHUB_RUN_ID:-local}-$RANDOM-$$"
 container_name="tmodloader-smoke-$suffix"
 volume_name="tmodloader-smoke-$suffix"
@@ -35,10 +35,10 @@ probe_permission_layout() {
     if output="$(timeout 30 docker run --env TMOD_AUTO_UPDATE=0 --env TMOD_WEB_ENABLED=0 --rm \
         --name "$permission_probe_name" \
         --tmpfs "$tmpfs_spec" \
-        --env TMOD_SERVER_RUNNER=/bin/true \
+        --entrypoint /usr/local/bin/tmod-init \
         --env TMOD_AUTOSAVE_INTERVAL=0 \
         --env TMOD_MODS= \
-        "$image" 2>&1)"; then
+        "$image" /bin/bash -c 'test -w /data && test -w /backups' 2>&1)"; then
         status=0
     else
         status=$?
@@ -192,4 +192,27 @@ docker run --env TMOD_AUTO_UPDATE=0 --env TMOD_WEB_ENABLED=0 --rm \
     "$image" \
     -lc "test -s /data/tModLoader/Logs/server.log && grep -Fq 'Server started' /data/tModLoader/Logs/server.log"
 
-echo "server smoke test passed."
+# Recreate without network access: the persisted runtime must be sufficient.
+docker rm "$container_name" >/dev/null
+docker run --detach --name "$container_name" --network none \
+    --mount "type=volume,source=$volume_name,target=/data" \
+    --mount "type=volume,source=$backup_volume_name,target=/backups" \
+    --env TMOD_AUTO_UPDATE=0 --env TMOD_WEB_ENABLED=0 \
+    --env TMOD_WORLDNAME=SmokeTest --env TMOD_MODS= --env TMOD_AUTOSAVE_INTERVAL=0 \
+    "$image" >/dev/null
+deadline=$((SECONDS + timeout_seconds))
+while [[ "$(docker inspect --format '{{.State.Health.Status}}' "$container_name")" != healthy ]]; do
+    if [[ "$(docker inspect --format '{{.State.Running}}' "$container_name")" != true ]] || ((SECONDS >= deadline)); then
+        docker logs "$container_name" >&2
+        echo 'Offline recreation failed to reuse the installed runtime.' >&2
+        exit 1
+    fi
+    sleep 3
+done
+if docker logs "$container_name" 2>&1 | grep -Fq 'First startup: selecting'; then
+    echo 'Recreated container attempted a fresh runtime installation.' >&2
+    exit 1
+fi
+docker stop --time 120 "$container_name" >/dev/null
+[[ "$(docker inspect --format '{{.State.ExitCode}}' "$container_name")" == 0 ]]
+echo "server smoke test passed, including offline recreation."

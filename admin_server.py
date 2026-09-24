@@ -22,6 +22,7 @@ import admin_workshop as workshop
 import admin_schema
 import admin_recovery
 import admin_players
+import admin_player_history
 import admin_worlds
 import admin_modconfigs
 import admin_journey
@@ -391,10 +392,11 @@ def stage_world(payload):
         return configuration()
 
 
-def players_status():
+def players_status(query=None):
     with STATE_LOCK:
         result = {'available': False, 'players': [], 'updated': None,
-                  'activity': admin_players.activity(), 'can_ban': False}
+                  'activity': admin_players.activity(), 'can_ban': False,
+                  'history': admin_player_history.history(query)}
         try:
             players_ready()
             roster = admin_players.snapshot(CONSOLE_LOG)
@@ -412,6 +414,10 @@ def players_status():
 
 def player_command(path, payload):
     with STATE_LOCK:
+        if path.endswith(('/history/ban', '/history/unban')):
+            if operation_busy():
+                raise ValueError('Wait for the current server operation before changing bans.')
+            return admin_players.unban_recorded(payload) if path.endswith('/unban') else admin_players.ban_recorded(payload)
         players_ready()
         if path.endswith('/moderate'):
             return admin_players.moderate(CONSOLE_LOG, payload)
@@ -579,8 +585,8 @@ def api(method, path, query, payload):
     if method == 'POST' and path == '/api/worlds/stage':
         return stage_world(payload)
     if path == '/api/players' and method == 'GET':
-        return players_status()
-    if path in ('/api/players/moderate', '/api/players/announce') and method == 'POST':
+        return players_status(query)
+    if path in ('/api/players/moderate', '/api/players/announce', '/api/players/history/ban', '/api/players/history/unban') and method == 'POST':
         return player_command(path, payload)
     if method == 'GET' and path == '/api/recovery':
         return admin_recovery.status()

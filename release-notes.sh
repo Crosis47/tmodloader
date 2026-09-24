@@ -2,18 +2,17 @@
 
 set -Eeuo pipefail
 
-if (($# != 7)); then
-    printf 'Usage: %s CONTAINER_VERSION TMODLOADER_VERSION CHANNEL IMAGE DIGEST DOCKER_TAG UPDATE_CHANNEL_ALIASES\n' "$0" >&2
+if (($# != 6)); then
+    printf 'Usage: %s CONTAINER_VERSION CHANNEL IMAGE DIGEST DOCKER_TAG UPDATE_CHANNEL_ALIASES\n' "$0" >&2
     exit 2
 fi
 
 container_version="$1"
-tml_version="$2"
-channel="$3"
-image="$4"
-digest="$5"
-docker_tag="$6"
-update_channel_aliases="$7"
+channel="$2"
+image="$3"
+digest="$4"
+docker_tag="$5"
+update_channel_aliases="$6"
 changelog_path="${CONTAINER_CHANGELOG_PATH:-CHANGELOG.md}"
 repository="${GITHUB_REPOSITORY:-Crosis47/tmodloader}"
 commit="${GITHUB_SHA:-local}"
@@ -77,8 +76,8 @@ fi
 printf '## [%s](https://github.com/%s/releases/tag/%s) - %s\n%s\n\n' \
     "$github_release_tag" "$repository" "$github_release_tag" "$release_date" "$changes"
 printf '<details>\n<summary>Images, validation, and source</summary>\n\n'
-printf 'This release packages container **v%s** with **tModLoader %s** on the **%s** channel.\n\n' \
-    "$container_version" "$tml_version" "$channel"
+printf 'Container **v%s** installs the newest supported tModLoader release on the **%s** channel at first startup. Runtime files persist in `/data`; no game runtime is bundled.\n\n' \
+    "$container_version" "$channel"
 printf '### Published images\n\n'
 printf -- '- GitHub Release tag: `%s`\n' "$github_release_tag"
 printf -- '- Version tag: `%s:%s`\n' "$image" "$docker_tag"
@@ -92,8 +91,6 @@ printf 'graceful shutdown, password-leak detection, and persistent-log verificat
 printf 'on both linux/amd64 and linux/arm64 before these tags were assigned.\n\n'
 printf 'Native executable architecture and live Workshop download/cache reuse were also verified.\n\n'
 printf '### Upstream and source\n\n'
-printf -- '- [tModLoader %s release notes](https://github.com/tModLoader/tModLoader/releases/tag/%s)\n' \
-    "$tml_version" "$tml_version"
 printf -- '- [Container source at %s](https://github.com/%s/tree/%s)\n' \
     "$commit" "$repository" "$commit"
 printf '\n</details>\n'

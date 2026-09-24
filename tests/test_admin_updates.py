@@ -54,12 +54,77 @@ class UpdateTests(unittest.TestCase):
         def download_mods(*args, **kwargs):
             staged = Path(kwargs['env']['TMOD_DATA_DIR'])
             (staged / 'steamMods/example.tmod').write_text('new-mod')
-        with patch.object(updater, 'cache_bundled'), patch.object(updates, 'check', return_value={
+        with patch.object(updates, 'check', return_value={
                 'latest': {'version': self.new['tmodloader_version']}}), \
                 patch.object(updater, 'download', return_value=(self.candidate, self.new)), \
                 patch.object(updater.subprocess, 'run', side_effect=download_mods), \
                 patch.object(updater, 'probe', side_effect=probe):
             updater.prepare(self.config)
+
+    def fresh_image(self):
+        settings.atomic_json(self.base / 'backup-runtime.json', {'container_version': 'test', 'update_channel': 'stable'})
+
+    def test_first_install_with_automatic_updates_disabled(self):
+        self.fresh_image()
+        with patch.dict(os.environ, {'TMOD_AUTO_UPDATE': '0'}), \
+                patch.object(updates, 'check', return_value={'latest': {'version': self.new['tmodloader_version']}}), \
+                patch.object(updater, 'download', return_value=(self.candidate, self.new)), \
+                patch.object(updater.subprocess, 'run') as mods:
+            updater.prepare(self.config)
+        self.assertEqual(updates.active(), self.candidate)
+        mods.assert_called_once()
+        with patch.object(updates, 'check') as check:
+            self.assertFalse(updater.install_initial())
+        check.assert_not_called()
+
+    def test_first_install_failure_does_not_select_partial_runtime(self):
+        self.fresh_image()
+        with patch.object(updates, 'check', return_value={'error': 'offline'}):
+            with self.assertRaisesRegex(ValueError, 'offline'):
+                updater.prepare(self.config)
+        self.assertFalse((self.control / 'active.json').exists())
+
+    def test_first_install_pin_does_not_require_channel_listing(self):
+        self.fresh_image()
+        with patch.dict(os.environ, {'TMOD_UPDATE_VERSION': self.new['tmodloader_version']}), \
+                patch.object(updates, 'pinned_release', return_value={'version': self.new['tmodloader_version']}) as pin, \
+                patch.object(updates, 'check') as check, \
+                patch.object(updater, 'download', return_value=(self.candidate, self.new)):
+            self.assertTrue(updater.install_initial())
+        pin.assert_called_once_with(self.new['tmodloader_version'])
+        check.assert_not_called()
+
+    def test_failed_initial_download_is_retryable(self):
+        self.fresh_image()
+        with patch.object(updates, 'check', return_value={'latest': {'version': self.new['tmodloader_version']}}), \
+                patch.object(updater, 'download', side_effect=OSError('download interrupted')):
+            with self.assertRaisesRegex(OSError, 'interrupted'):
+                updater.prepare(self.config)
+        self.assertFalse((self.control / 'active.json').exists())
+        with patch.object(updates, 'check', return_value={'latest': {'version': self.new['tmodloader_version']}}), \
+                patch.object(updater, 'download', return_value=(self.candidate, self.new)):
+            self.assertTrue(updater.install_initial())
+        self.assertEqual(updates.active(), self.candidate)
+
+    def test_missing_selected_runtime_is_not_silently_replaced(self):
+        self.fresh_image()
+        settings.atomic_json(self.control / 'active.json', self.old)
+        with patch.object(updates, 'check') as check:
+            with self.assertRaisesRegex(ValueError, 'Selected runtime is missing'):
+                updater.install_initial()
+        check.assert_not_called()
+
+    def test_first_automatic_install_discovers_once_and_validates_mods(self):
+        self.fresh_image()
+        with patch.object(updates, 'check', return_value={'latest': {'version': self.new['tmodloader_version']}}) as check, \
+                patch.object(updater, 'download', return_value=(self.candidate, self.new)), \
+                patch.object(updater.subprocess, 'run'), \
+                patch.object(updater, 'mod_fingerprint', side_effect=['new', 'old']), \
+                patch.object(updater, 'probe') as probe:
+            updater.prepare(self.config)
+        check.assert_called_once()
+        probe.assert_called_once()
+        self.assertEqual(updates.active(), self.candidate)
 
     def test_failed_probe_preserves_runtime_world_and_mods(self):
         self.prepare(ValueError('Missing dependency ExampleLibrary'))
@@ -100,7 +165,7 @@ class UpdateTests(unittest.TestCase):
         self.assertFalse((self.control / 'journal.json').exists())
 
     def test_network_failure_never_refreshes_live_mods(self):
-        with patch.object(updater, 'cache_bundled'), patch.object(updates, 'check', return_value={'error': 'Offline'}), \
+        with patch.object(updates, 'check', return_value={'error': 'Offline'}), \
                 patch.object(updater.subprocess, 'run') as run:
             updater.prepare(self.config)
         run.assert_not_called()
@@ -108,7 +173,7 @@ class UpdateTests(unittest.TestCase):
 
     def test_recovery_pin_blocks_automatic_upgrade(self):
         settings.atomic_json(self.control / 'hold.json', {'version': self.old['tmodloader_version']})
-        with patch.object(updater, 'cache_bundled'), patch.object(updates, 'check', return_value={
+        with patch.object(updates, 'check', return_value={
                 'latest': {'version': self.new['tmodloader_version']}}), \
                 patch.object(updater, 'download') as download, \
                 patch.object(updater.subprocess, 'run'), patch.object(updater, 'probe') as probe:
@@ -219,20 +284,6 @@ class UpdateTests(unittest.TestCase):
         with patch.object(server, 'operation_busy', return_value=False):
             result = server.api('POST', '/api/updates/cancel', {}, {'confirm': True})
         self.assertFalse(result['rollback_pending'])
-
-    def test_bundled_library_alias_is_materialized_but_external_links_are_rejected(self):
-        library = self.base / 'Libraries'
-        library.mkdir()
-        (library / 'actual.so').write_bytes(b'library')
-        (library / 'alias.so').symlink_to(library / 'actual.so')
-        target = self.root / 'cached-libraries'
-        updater.copy_bundled(library, target)
-        self.assertEqual((target / 'alias.so').read_bytes(), b'library')
-        self.assertFalse((target / 'alias.so').is_symlink())
-        (library / 'external.so').symlink_to(self.config.parent.parent / 'outside.so')
-        (self.root / 'outside.so').write_bytes(b'outside')
-        with self.assertRaisesRegex(ValueError, 'runtime link'):
-            updater.copy_bundled(library, self.root / 'rejected')
 
     def test_checkpoint_delete_preserves_live_data_and_rejects_pending_recovery(self):
         identity, directory = updater.snapshot()

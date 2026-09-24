@@ -18,6 +18,20 @@ import filter_client_mods
 
 
 class AdminTests(unittest.TestCase):
+    def test_historical_bans_require_auth_and_idle_state_but_not_live_game(self):
+        endpoint = '/api/players/history/ban'
+        payload = {'key': 'a' * 64, 'confirm': True}
+        with patch.object(server.admin_players, 'ban_recorded', return_value={'detail': 'Ban saved.'}) as ban, \
+                patch.object(server, 'players_ready', side_effect=AssertionError('Offline bans must not query the game')):
+            self.assertTrue(self.request(endpoint, payload, auth=False)[0].startswith('403'))
+            ban.assert_not_called()
+            server.JOB = {'state': 'running'}
+            self.assertTrue(self.request(endpoint, payload)[0].startswith('400'))
+            ban.assert_not_called()
+            server.JOB = {'state': 'idle'}
+            self.assertTrue(self.request(endpoint, payload)[0].startswith('200'))
+            ban.assert_called_once_with(payload)
+
     def test_discard_draft_revision_busy_and_cleanup(self):
         settings.atomic_json(settings.PENDING, {'TMOD_WORLDNAME': 'Draft'})
         for name in ('pending-world.json', 'pending-removed.json'):

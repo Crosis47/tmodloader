@@ -1,6 +1,6 @@
 """Opt-in real upstream upgrade/rollback test with disposable Docker volumes.
 
-Build the supplied image with an older supported stable TMOD_VERSION first.
+Pass the image and an older supported stable release tag to install on first boot.
 """
 import json
 import subprocess
@@ -9,6 +9,7 @@ import time
 import uuid
 
 image = sys.argv[1]
+initial_version = sys.argv[2]
 name = 'tmod-update-test-' + uuid.uuid4().hex[:10]
 volume = name + '-data'
 
@@ -23,7 +24,8 @@ def docker(*args, check=True):
 def start(automatic):
     docker('run', '-d', '--name', name, '--volume', volume + ':/data',
            '-e', 'TMOD_WEB_ENABLED=0', '-e', 'TMOD_AUTOSAVE_INTERVAL=0', '-e', 'TMOD_WORLDSIZE=1',
-           '-e', 'TMOD_AUTO_UPDATE=' + automatic, image)
+           '-e', 'TMOD_AUTO_UPDATE=' + automatic,
+           '-e', 'TMOD_UPDATE_VERSION=' + (initial_version if automatic == '0' else ''), image)
 
 
 def stop():
@@ -51,7 +53,7 @@ try:
     docker('volume', 'create', volume)
     start('0')
     healthy()
-    old = read('/terraria-server/backup-runtime.json')['tmodloader_version']
+    old = read('/data/.tmod-control/updates/active.json')['tmodloader_version']
     print('Original real server is healthy: ' + old, flush=True)
     stop()
     start('1')

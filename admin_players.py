@@ -10,6 +10,8 @@ import json
 import os
 import re
 import subprocess
+import stat
+import sqlite3
 import time
 
 import admin_metrics
@@ -113,6 +115,11 @@ def snapshot(log, force=False):
                     player['key'] = hashlib.sha256(json.dumps([current, player['name'], player['address']]).encode()).hexdigest()
                 CACHE = {'players': players, 'updated': stamp, '_session': current}
                 CACHE_AT = time.monotonic()
+                try:
+                    import admin_player_history
+                    admin_player_history.observe_roster(players)
+                except (OSError, ValueError, sqlite3.Error) as error:
+                    print('[ADMIN] Could not retain player connection identifiers: ' + str(error), flush=True)
                 return CACHE
             time.sleep(.1)
     raise ValueError('The game did not return a complete player list. Refresh or inspect the console; player count is unknown.')
@@ -141,6 +148,101 @@ def ban_path():
     if custom:
         raise ValueError('Dashboard bans require the generated configuration with its persistent ban list. Use the console for a custom configuration.')
     return settings.DATA / 'tModLoader/banlist.txt'
+
+
+def ban_entries():
+    path = ban_path()
+    if path.is_symlink() or path.parent.is_symlink():
+        raise ValueError('Linked ban files cannot be managed here.')
+    if not path.exists():
+        return set()
+    if not path.is_file() or path.stat().st_size > 1024 * 1024:
+        raise ValueError('The ban file is unsupported or exceeds 1 MiB; inspect it before editing.')
+    return set(path.read_text(encoding='utf-8-sig').splitlines())
+
+
+def ban_recorded(payload):
+    """Append one reviewed native identifier; never send an offline name command."""
+    import admin_player_history
+    if payload.get('confirm') is not True:
+        raise ValueError('Review and confirm the recorded connection before banning.')
+    target = admin_player_history.ban_target(payload.get('key'))
+    value = target['identifier']
+    # Revalidate stored data too; no newlines, names, or client-provided targets.
+    normalized = identifier(value if target['kind'] == 'steam' else '[' + value + ']:1')
+    if normalized != value:
+        raise ValueError('The saved ban identifier is invalid.')
+    entries = ban_entries()
+    if value in entries:
+        return {'detail': 'This identifier is already in the persistent ban list.'}
+    path = ban_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_RDWR | os.O_APPEND | os.O_CREAT | getattr(os, 'O_NOFOLLOW', 0)
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 1024 * 1024:
+            raise ValueError('Ban file changed; refresh and review it again.')
+        existing = os.read(descriptor, 1024 * 1024 + 1)
+        if value not in existing.decode('utf-8-sig').splitlines():
+            # Append preserves concurrent native bans instead of replacing the file.
+            addition = (b'\n' if existing and not existing.endswith(b'\n') else b'') + (value + '\n').encode()
+            if len(existing) + len(addition) > 1024 * 1024:
+                raise ValueError('The ban file would exceed 1 MiB; inspect it before editing.')
+            if os.write(descriptor, addition) != len(addition):
+                raise OSError('Ban write was incomplete; inspect the ban list before retrying.')
+            os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    if value not in ban_entries():
+        raise ValueError('Ban persistence could not be verified. Inspect the ban list.')
+    detail = 'Ban saved for ' + value + '. It applies to future connections using this identifier; it does not disconnect an existing session.'
+    if target['kind'] == 'ip':
+        detail += ' This is an IP ban, not an account ban; shared or changed IP addresses affect its scope.'
+    audit('historical ban', target['name'], detail)
+    return {'detail': detail}
+
+
+def unban_recorded(payload):
+    """Clear exact identifier lines in place, preserving concurrent native appends."""
+    import admin_player_history
+    if payload.get('confirm') is not True:
+        raise ValueError('Review and confirm the recorded connection before unbanning.')
+    target = admin_player_history.ban_target(payload.get('key'))
+    value = target['identifier']
+    if identifier(value if target['kind'] == 'steam' else '[' + value + ']:1') != value:
+        raise ValueError('The saved ban identifier is invalid.')
+    if value not in ban_entries():
+        return {'detail': 'This identifier is not in the persistent ban list.'}
+    descriptor = os.open(ban_path(), os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0))
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 1024 * 1024:
+            raise ValueError('Ban file changed; refresh and review it again.')
+        raw = os.read(descriptor, 1024 * 1024 + 1)
+        offset = 0
+        for line in raw.splitlines(keepends=True):
+            prefix = 3 if offset == 0 and line.startswith(b'\xef\xbb\xbf') else 0
+            content = line[prefix:].rstrip(b'\r\n')
+            if content.decode('utf-8') == value:
+                # Equal-length comments avoid truncating or replacing native bans
+                # appended by the game while this operation is in progress.
+                os.lseek(descriptor, offset + prefix, os.SEEK_SET)
+                if os.read(descriptor, len(content)) != content:
+                    raise ValueError('Ban file changed; refresh and review it again.')
+                os.lseek(descriptor, offset + prefix, os.SEEK_SET)
+                replacement = b'//' + b' ' * (len(content) - 2)
+                if os.write(descriptor, replacement) != len(content):
+                    raise OSError('Unban write was incomplete; inspect the ban list.')
+            offset += len(line)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    if value in ban_entries():
+        raise ValueError('Unban persistence could not be verified. Refresh the ban list.')
+    detail = 'Ban removed for ' + value + '. Other banned addresses remain blocked.'
+    audit('unban', target['name'], detail)
+    return {'detail': detail}
 
 
 def moderate(log, payload):

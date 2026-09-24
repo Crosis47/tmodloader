@@ -963,10 +963,94 @@ document.querySelectorAll('[data-view="worlds"]').forEach(button => button.addEv
 setInterval(() => { if (!document.hidden) refreshWorlds(true); }, 10000);
 
 let playerState = null, playersBusy = false, playerActionBusy = false;
+const playerHistoryOffsets = {server: 0, world: 0};
+let historyWorld = null, historySearchTimer;
+
+function characterCell(player) {
+  const cell = node('td'); cell.append(node('strong', player.name)); return cell;
+}
+
+const expandedHistoryAddresses = new Set();
+
+function renderPlayerHistory() {
+  const history = playerState?.history;
+  $('player-history-status').textContent = [history?.error, history?.current_world?.detail, history?.ban_detail].filter(Boolean).join(' ');
+  $('player-history-status').hidden = !$('player-history-status').textContent;
+  $('player-history-world-name').textContent = history?.current_world?.name || 'No world is currently loaded.';
+  for (const scope of ['server', 'world']) {
+    const data = history?.[scope];
+    const rows = (data?.players || []).map(player => {
+      const row = node('tr');
+      const identityCell = node('td');
+      let identityList = identityCell;
+      if (player.identities?.length > 1) {
+        const key = JSON.stringify([scope, scope === 'world' ? history.current_world?.id : '', player.name]);
+        const details = node('details', undefined, 'history-addresses');
+        const allIPs = player.identities.every(identity => identity.kind === 'ip');
+        const banned = player.identities.filter(identity => identity.banned).length;
+        details.append(node('summary', player.identities.length + (allIPs ? ' observed IP addresses' : ' observed connections') + (banned ? ' · ' + banned + ' banned' : '')));
+        details.open = expandedHistoryAddresses.has(key);
+        details.addEventListener('toggle', () => {
+          if (!details.isConnected) return;
+          if (details.open) expandedHistoryAddresses.add(key); else expandedHistoryAddresses.delete(key);
+        });
+        identityCell.append(details); identityList = details;
+      }
+      for (const identity of player.identities || []) {
+        const entry = node('div', undefined, 'history-ban-target');
+        entry.append(node('p', (identity.kind === 'steam' ? 'Server-reported Steam ID: ' : 'Observed IP address: ') + identity.identifier),
+          node('small', 'Observed ' + new Date(identity.last_seen).toLocaleString(), 'muted'));
+        const button = node('button', identity.banned ? 'Unban IP' : 'Ban IP');
+        button.setAttribute('aria-label', (identity.banned ? 'Unban IP for ' : 'Ban IP for ') + player.name + ' at ' + identity.identifier);
+        button.disabled = !history?.can_ban || playersBusy || playerActionBusy;
+        button.onclick = action(async () => {
+          if (identity.banned) {
+            if (await confirmAction('Unban this recorded connection?',
+              'Allow future connections from this address. Other banned addresses remain blocked. This applies to everyone sharing the address.',
+              'Character: ' + player.name + '\nBan target: ' + identity.identifier, 'Unban IP')) {
+              await playerAction('/api/players/history/unban', {key: identity.key, confirm: true});
+            }
+            return;
+          }
+          const explanation = identity.kind === 'ip'
+            ? 'Block future connections from this recorded IP address. This is not an account ban: other people sharing this address can be blocked, and an address change can bypass it.'
+            : 'Block future connections using this server-reported Steam identifier. A verified account name is not available.';
+          if (await confirmAction('Ban this recorded connection?', explanation + ' Existing sessions are not disconnected; use Connected players to kick someone who is still online.',
+            'Character: ' + player.name + '\nBan target: ' + identity.identifier + '\nLast observed: ' + new Date(identity.last_seen).toLocaleString(), 'Ban IP')) {
+            await playerAction('/api/players/history/ban', {key: identity.key, confirm: true});
+          }
+        });
+        entry.append(button); identityList.append(entry);
+      }
+      if (!player.identities?.length) {
+        const button = node('button', 'Ban IP'); button.disabled = true;
+        button.title = 'No connection identifier was captured. A character name alone cannot be used for an offline ban.';
+        identityCell.append(node('p', 'No connection identifier captured.', 'muted'), button);
+      }
+      row.append(characterCell(player), identityCell, node('td', new Date(player.first_joined).toLocaleString()),
+        node('td', new Date(player.last_joined).toLocaleString()), node('td', String(player.visits)));
+      return row;
+    });
+    if (!rows.length) {
+      const row = node('tr');
+      const message = !history || history.error ? 'History unavailable.' : scope === 'world' && !history.current_world?.id
+        ? 'Load a supported world to see its player history.' : $('player-history-search').value
+          ? 'No recorded players match your search.' : 'No player visits recorded yet.';
+      const cell = node('td', message); cell.colSpan = 5; row.append(cell); rows.push(row);
+    }
+    $('player-history-' + scope + '-list').replaceChildren(...rows);
+    const total = data?.total || 0, offset = data?.offset || 0, size = data?.page_size || 50;
+    $('player-history-' + scope + '-count').textContent = total
+      ? `${offset + 1}–${Math.min(total, offset + size)} of ${total} characters` : '0 recorded characters';
+    $('player-history-' + scope + '-previous').hidden = playersBusy || !offset || !!history?.error;
+    $('player-history-' + scope + '-next').hidden = playersBusy || offset + size >= total || !!history?.error;
+  }
+}
 
 function renderPlayers() {
 
   const state = playerState;
+  renderPlayerHistory();
 
   const ready = state?.available && !playerActionBusy && !playersBusy;
 
@@ -986,23 +1070,23 @@ function renderPlayers() {
 
   const rows = players.map(player => {
 
-    const row = node('tr'); row.append(node('td', player.name), node('td', player.address));
+    const row = node('tr'); row.append(characterCell(player), node('td', player.address));
 
     const cell = node('td'), buttons = node('div', undefined, 'button-row');
 
     for (const kind of ['kick', 'ban']) {
 
-      const button = node('button', kind === 'kick' ? 'Kick' : 'Ban');
+      const button = node('button', kind === 'kick' ? 'Kick' : 'Ban IP');
 
       button.disabled = !ready || !player.can_moderate || (kind === 'ban' && !state.can_ban);
 
-      button.setAttribute('aria-label', (kind === 'kick' ? 'Kick ' : 'Ban ') + player.name);
+      button.setAttribute('aria-label', (kind === 'kick' ? 'Kick ' : 'Ban IP for ') + player.name);
 
       button.onclick = action(async () => {
 
-        const title = (kind === 'kick' ? 'Kick ' : 'Ban ') + player.name + '?';
+        const title = (kind === 'kick' ? 'Kick ' : 'Ban IP for ') + player.name + '?';
 
-        const explanation = kind === 'kick' ? 'Disconnect this player. They can reconnect afterward.' : 'Disconnect this player and persistently ban ' + player.identifier + '. An IP ban also blocks others sharing that address. Removing a ban currently requires editing the server ban list.';
+        const explanation = kind === 'kick' ? 'Disconnect this player. They can reconnect afterward.' : 'Disconnect this player and persistently ban ' + player.identifier + '. An IP ban also blocks others sharing that address. Recorded addresses can be unbanned in Player history.';
 
         if (await confirmAction(title, explanation, 'Player: ' + player.name + '\nConnection: ' + player.address)) await playerAction('/api/players/moderate', {action: kind, key: player.key, confirm: true});
 
@@ -1037,12 +1121,32 @@ async function refreshPlayers(background = false) {
 
   playersBusy = true;
   if (!background) renderPlayers();
+  const historySearch = $('player-history-search').value;
 
-  try { playerState = await api('/api/players'); }
+  try {
+    const query = new URLSearchParams({server_offset: playerHistoryOffsets.server, world_offset: playerHistoryOffsets.world,
+      history_search: historySearch});
+    playerState = await api('/api/players?' + query);
+    const world = playerState.history?.current_world?.id || null;
+    if (historyWorld !== world && playerHistoryOffsets.world) {
+      playerHistoryOffsets.world = 0; query.set('world_offset', '0');
+      playerState = await api('/api/players?' + query);
+    }
+    historyWorld = world;
+    for (const scope of ['server', 'world']) playerHistoryOffsets[scope] = playerState.history?.[scope]?.offset || 0;
+  }
 
-  catch (error) { playerState = {available: false, players: [], detail: 'Player query failed: ' + error.message, activity: playerState?.activity || []}; }
+  catch (error) { playerState = {available: false, players: [], detail: 'Player query failed: ' + error.message, activity: playerState?.activity || [],
+    history: playerState?.history ? {...playerState.history, error: 'History could not refresh; showing the last received records.'} : null}; }
 
-  finally { playersBusy = false; if (!background || !refreshWouldInterrupt('players')) renderPlayers(); }
+  finally {
+    playersBusy = false;
+    if (!background || !refreshWouldInterrupt('players')) renderPlayers();
+    if ($('player-history-search').value !== historySearch) {
+      playerHistoryOffsets.server = playerHistoryOffsets.world = 0;
+      void refreshPlayers();
+    }
+  }
 
 }
 
@@ -1063,6 +1167,20 @@ async function playerAction(path, body) {
 $('players-refresh').onclick = action(refreshPlayers);
 
 $('players-filter').oninput = renderPlayers;
+for (const scope of ['server', 'world']) {
+  for (const direction of ['previous', 'next']) {
+    $('player-history-' + scope + '-' + direction).onclick = action(async () => {
+      const data = playerState?.history?.[scope];
+      playerHistoryOffsets[scope] = Math.max(0, (data?.offset || 0) + (direction === 'next' ? 1 : -1) * (data?.page_size || 50));
+      await refreshPlayers();
+    });
+  }
+}
+$('player-history-search').oninput = () => {
+  clearTimeout(historySearchTimer);
+  playerHistoryOffsets.server = playerHistoryOffsets.world = 0;
+  historySearchTimer = setTimeout(() => refreshPlayers(), 300);
+};
 
 $('players-announce-form').onsubmit = action(async () => {
 
@@ -1158,6 +1276,35 @@ async function applySavedSettings(snapshot) {
 
 $('search-form').onsubmit = action(async () => { page = 1; await search(); });
 
+$('show-current-mods').onclick = action(async () => {
+  const button = $('show-current-mods'); button.disabled = true;
+  try {
+    await loadSettings();
+    const entries = [...new Set((config.running.TMOD_MODS || '').split(',').map(value => value.trim()).filter(Boolean))];
+    tell('Loading the running Workshop selection…');
+    const items = []; let unavailable = 0;
+    // Keep large selections from sending all their Steam requests at once.
+    for (let start = 0; start < entries.length; start += 4) {
+      const batch = entries.slice(start, start + 4);
+      const results = await Promise.allSettled(batch.map(entry => api('/api/workshop/lookup', {value: entry.replace(/^collection:/, '')})));
+      results.forEach((result, index) => {
+        const entry = batch[index], id = entry.replace(/^collection:/, '');
+        if (result.status === 'fulfilled') items.push(result.value);
+        else {
+          unavailable++;
+          items.push({id, collection: entry.startsWith('collection:'), title: 'Workshop item ' + id,
+            url: 'https://steamcommunity.com/sharedfiles/filedetails/?id=' + encodeURIComponent(id),
+            description: 'Workshop details are unavailable. You can still remove this entry from the selection.'});
+        }
+      });
+    }
+    renderMods(items);
+    if (!items.length) $('results').replaceChildren(node('p', 'The running Workshop selection is empty.'));
+    $('page-info').textContent = 'Running selection · ' + items.length + ' entries';
+    $('previous').disabled = true; $('next').disabled = true;
+    tell(unavailable ? unavailable + ' Workshop entries could not load their details; removal controls remain available.' : 'Showing the running Workshop selection. Removals are saved as drafts until applied.');
+  } finally { button.disabled = false; }
+});
 $('lookup-form').onsubmit = action(async () => { tell('Looking up Workshop item…'); renderMods([await api('/api/workshop/lookup', {value: $('lookup').value.trim()})]); $('page-info').textContent = ''; $('previous').disabled = true; $('next').disabled = true; tell(''); });
 $('workshop-key-change').onclick = () => { $('workshop-key-form').hidden = false; $('workshop-key-change').hidden = true; $('workshop-key').focus(); };
 $('workshop-key-form').onsubmit = action(async () => {

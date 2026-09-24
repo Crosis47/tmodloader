@@ -141,7 +141,7 @@ def check():
                   'attempted': time.time(), 'channel': selected_channel, 'error': ''}
     except (OSError, ValueError, TypeError, KeyError) as error:
         result = {**(old if old.get('channel') == selected_channel else {}), 'attempted': time.time(),
-                  'channel': selected_channel, 'error': 'Release check failed; keeping installed files. ' + str(error)[:200]}
+                  'channel': selected_channel, 'error': 'Release check failed. ' + str(error)[:200]}
     settings.atomic_json(ROOT / 'check.json', result)
     return result
 

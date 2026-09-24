@@ -14,14 +14,14 @@ manual_notes_output="$test_root/manual-notes.md"
 current_version="$(tr -d '\r\n' < "$repository_root/VERSION")"
 
 GITHUB_OUTPUT="$metadata_output" \
-    bash "$metadata_script" 1.2.3 v2026.07.3.0 stable
+    bash "$metadata_script" 1.2.3 stable
 
 grep -Fxq 'release_tag=1.2.3' "$metadata_output"
 grep -Fxq 'docker_tag=1.2.3' "$metadata_output"
 grep -Fxq 'prerelease=false' "$metadata_output"
 
 GITHUB_OUTPUT="$preview_metadata_output" \
-    bash "$metadata_script" 1.2.3 v2026.08.2.1 preview
+    bash "$metadata_script" 1.2.3 preview
 grep -Fxq 'release_tag=1.2.3-preview' "$preview_metadata_output"
 grep -Fxq 'docker_tag=1.2.3-preview' "$preview_metadata_output"
 grep -Fxq 'prerelease=true' "$preview_metadata_output"
@@ -32,12 +32,12 @@ if ! [[ "$docker_tag" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-
     exit 1
 fi
 
-if bash "$metadata_script" 01.2.3 v2026.07.3.0 stable; then
+if bash "$metadata_script" 01.2.3 stable; then
     echo 'A container version with a leading zero unexpectedly passed.' >&2
     exit 1
 fi
-if bash "$metadata_script" 1.2.3 2026.07.3.0 stable; then
-    echo 'An invalid tModLoader tag unexpectedly passed.' >&2
+if bash "$metadata_script" 1.2.3 invalid; then
+    echo 'An invalid channel unexpectedly passed.' >&2
     exit 1
 fi
 
@@ -45,7 +45,6 @@ GITHUB_REPOSITORY=Crosis47/tmodloader \
 GITHUB_SHA=0123456789abcdef \
     bash "$notes_script" \
         "$current_version" \
-        v2026.07.3.0 \
         stable \
         ghcr.io/crosis47/tmodloader \
         sha256:abcdef \
@@ -59,14 +58,13 @@ grep -Fxq '<details>' "$notes_output"
 grep -Fxq '</details>' "$notes_output"
 grep -Fq "ghcr.io/crosis47/tmodloader:${current_version}" "$notes_output"
 grep -Fq 'ghcr.io/crosis47/tmodloader@sha256:abcdef' "$notes_output"
-grep -Fq 'tModLoader v2026.07.3.0 release notes' "$notes_output"
+grep -Fq 'no game runtime is bundled.' "$notes_output"
 grep -Fq 'Moving channel tag(s): `latest`' "$notes_output"
 
 GITHUB_REPOSITORY=Crosis47/tmodloader \
 GITHUB_SHA=0123456789abcdef \
     bash "$notes_script" \
         "$current_version" \
-        v2026.07.3.0 \
         stable \
         ghcr.io/crosis47/tmodloader \
         sha256:abcdef \
@@ -75,7 +73,7 @@ GITHUB_SHA=0123456789abcdef \
         > "$manual_notes_output"
 grep -Fq 'Moving channel tag(s): not moved by this manual build' "$manual_notes_output"
 
-bash "$notes_script" "$current_version" v2026.08.2.1 preview \
+bash "$notes_script" "$current_version" preview \
     ghcr.io/crosis47/tmodloader sha256:abcdef "${current_version}-preview" true \
     > "$test_root/preview-notes.md"
 grep -Fq "GitHub Release tag: \`${current_version}-preview\`" "$test_root/preview-notes.md"
@@ -102,7 +100,7 @@ for heading in '[1.2.3]' '1.2.3'; do
 [1.2.3]: https://example.invalid/compare
 EOF
     CONTAINER_CHANGELOG_PATH="$test_root/changelog.md" bash "$notes_script" \
-        1.2.3 v2026.07.3.0 stable example/image sha256:abc 1.2.3 true > "$test_root/selected.md"
+        1.2.3 stable example/image sha256:abc 1.2.3 true > "$test_root/selected.md"
     grep -Fxq -- '- selected-fix' "$test_root/selected.md"
     grep -q '^## .* - 2026-09-16$' "$test_root/selected.md"
     if grep -Eq 'unreleased-only|other-version-only|example.invalid' "$test_root/selected.md"; then
@@ -111,13 +109,13 @@ EOF
     fi
 done
 if CONTAINER_CHANGELOG_PATH="$test_root/changelog.md" bash "$notes_script" \
-    9.9.9 v2026.07.3.0 stable example/image sha256:abc 9.9.9 true; then
+    9.9.9 stable example/image sha256:abc 9.9.9 true; then
     echo 'Missing changelog version unexpectedly passed.' >&2
     exit 1
 fi
 printf '## [1.2.3]\n### Fixed\n- Missing date\n' > "$test_root/changelog.md"
 if CONTAINER_CHANGELOG_PATH="$test_root/changelog.md" bash "$notes_script" \
-    1.2.3 v2026.07.3.0 stable example/image sha256:abc 1.2.3 true; then
+    1.2.3 stable example/image sha256:abc 1.2.3 true; then
     echo 'Missing release date unexpectedly passed.' >&2
     exit 1
 fi
