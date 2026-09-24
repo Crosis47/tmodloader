@@ -20,7 +20,6 @@ installed tModLoader release.
 - Capture character joins and connection addresses through a server-only helper, group history by name, and retain per-address ban controls without requiring character artwork.
 - Persist server-wide and per-world character join history, with searchable player cards, visit counts, and first/last join dates. Track live joins without an open dashboard and keep world history across switches.
 - Retain observed connection identifiers and offer reviewed bans from player history after someone disconnects. Clearly distinguish character names and IP/Steam ban targets from unavailable verified account names.
-
 - Add confirmed per-address unban controls, collapsible multi-address lists, and paging controls that hide when unavailable.
 - Show the running Workshop selection as cards for easier draft removals, including fallback cards when Steam details are unavailable.
 
