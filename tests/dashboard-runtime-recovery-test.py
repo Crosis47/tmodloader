@@ -36,10 +36,11 @@ try:
                   '-e', 'TMOD_AUTOSAVE_INTERVAL=0', image)
     backup.wait_healthy(name, 600)
     backup.docker('stop', '--time', '120', name)
-    # Create the fixture checkpoint cold, just as the production supervisor does.
+    # First startup already installed the persistent runtime. Create the checkpoint
+    # cold from that runtime, just as the production supervisor does.
     backup.docker('run', '--rm', '--volume', volume + ':/data', '--entrypoint', 'python3', image,
                   '-c', 'import runtime_updates as r, admin_updates as u, admin_settings as s; '
-                        'r.boot(); r.cache_bundled(); identity, directory=r.snapshot(); '
+                        'r.boot(); identity, directory=r.snapshot(); '
                         's.atomic_json(u.ROOT / "checkpoint.json", {"id":identity}); '
                         '(s.DATA / "tModLoader/ModConfigs/after-checkpoint.json").parent.mkdir(parents=True, exist_ok=True); '
                         '(s.DATA / "tModLoader/ModConfigs/after-checkpoint.json").write_text("{}")')
