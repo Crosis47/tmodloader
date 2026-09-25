@@ -353,6 +353,65 @@ class AdminTests(unittest.TestCase):
             self.assertTrue(value['label'])
             self.assertGreater(len(value['help']), 30)
 
+    def test_save_now_and_restart_now_guards(self):
+        for endpoint in ('/api/server/save', '/api/server/restart', '/api/restart/control'):
+            self.assertTrue(self.request(endpoint, {}, auth=False)[0].startswith('403'))
+        with patch.object(server, 'health', return_value=True), \
+                patch.object(server, 'operation_busy', return_value=False), \
+                patch.object(server.admin_recovery, 'status', return_value={'interrupted': False}), \
+                patch.object(server.subprocess, 'run') as run, patch.object(server, 'start_job', return_value={}) as start:
+            run.return_value.returncode = 0
+            self.assertTrue(self.request('/api/server/save', {})[0].startswith('200'))
+            self.assertEqual(run.call_args.args[0], ['inject', 'save'])
+            self.assertTrue(self.request('/api/server/restart', {})[0].startswith('400'))
+            start.assert_not_called()
+            self.assertTrue(self.request('/api/server/restart', {'confirm': True})[0].startswith('200'))
+            start.assert_called_once_with('restart')
+        with patch.object(server, 'operation_busy', return_value=True):
+            self.assertTrue(self.request('/api/server/save', {})[0].startswith('400'))
+            self.assertTrue(self.request('/api/server/restart', {'confirm': True})[0].startswith('400'))
+
+    def test_countdown_control_allowed_only_for_restart_jobs(self):
+        with patch.object(server, 'operation_busy', return_value=True), \
+                patch.object(server.admin_restart, 'control', return_value={'state': 'scheduled'}) as control:
+            server.JOB = {'state': 'running', 'kind': 'backup'}
+            self.assertTrue(self.request('/api/restart/control', {'confirm': True, 'action': 'skip'})[0].startswith('400'))
+            control.assert_not_called()
+            server.JOB = {'state': 'running', 'kind': 'restart'}
+            self.assertTrue(self.request('/api/restart/control', {'confirm': True, 'action': 'postpone', 'minutes': 15})[0].startswith('200'))
+            control.assert_called_once_with('postpone', 15)
+
+    def test_scheduled_save_and_shutdown_settings_can_be_staged(self):
+        values = {'TMOD_AUTOSAVE_INTERVAL': '5', 'TMOD_AUTOSAVE_MESSAGE': '',
+                  'TMOD_SHUTDOWN_DELAY': '15', 'TMOD_RESTART_INTERVAL': '1440',
+                  'TMOD_RESTART_DELAY': '60', 'TMOD_RESTART_MESSAGE': '',
+                  'TMOD_RESTART_MODE': 'monthly', 'TMOD_RESTART_MONTHDAY': '31',
+                  'TMOD_RESTART_DAYS': '3', 'TMOD_RESTART_WEEKDAY': 'friday'}
+        response = self.request('/api/settings', {'revision': server.configuration()['revision'],
+                                                   'settings': values})
+        self.assertTrue(response[0].startswith('200'), response)
+        staged = server.configuration()['staged']
+        for key, value in values.items():
+            self.assertEqual(staged[key], value)
+
+    def test_restart_scheduler_waits_for_health_and_operations(self):
+        for due, busy, interrupted, healthy in ((False, False, False, True),
+                                              (True, True, False, True),
+                                              (True, False, True, True),
+                                              (True, False, False, False),
+                                              (True, False, False, True)):
+            with self.subTest(due=due, busy=busy, interrupted=interrupted, healthy=healthy), \
+                    patch.object(server.admin_restart, 'due', return_value=due), \
+                    patch.object(server, 'operation_busy', return_value=busy), \
+                    patch.object(server.admin_recovery, 'status', return_value={'interrupted': interrupted}), \
+                    patch.object(server, 'health', return_value=healthy), \
+                    patch.object(server, 'start_job') as start:
+                server.check_scheduled_restart()
+                if due and not busy and not interrupted and healthy:
+                    start.assert_called_once_with('scheduled-restart')
+                else:
+                    start.assert_not_called()
+
     def test_console_requires_authentication(self):
         self.assertTrue(self.request('/api/console', auth=False)[0].startswith('403'))
         self.assertTrue(self.request('/api/console', {'command': 'help'}, auth=False)[0].startswith('403'))

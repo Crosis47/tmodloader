@@ -5,6 +5,7 @@ services:
   tmodloader:
     image: ghcr.io/crosis47/tmodloader:latest
     restart: unless-stopped
+    # Must exceed TMOD_SHUTDOWN_DELAY + TMOD_SHUTDOWN_TIMEOUT plus overhead.
     stop_grace_period: 2m
     # Settings live in .env; the image handles ownership repair and privilege drop.
     env_file: .env

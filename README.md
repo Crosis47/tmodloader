@@ -383,6 +383,110 @@ If you explicitly set `TMOD_WEB_ORIGIN`, update its port when changing the dashb
 
 ## Data and backups
 
+### Scheduled game restarts
+
+The **Game controls** panel offers **Save now** (command delivery is reported;
+check the console for completion) and **Restart now** (reviewed save-and-restart
+with the configured countdown). Restart now preserves running settings and
+the runtime; it does not apply drafts or check updates.
+
+During the countdown, **Postpone restart** delays this occurrence by 1–1440
+minutes and **Skip once / cancel countdown** skips it without disabling the
+recurring schedule. Controls close once saving and stopping begin. Remaining-time
+chat warnings are configured with `TMOD_RESTART_COUNTDOWN` (default `300,60,10`
+seconds); only warnings within `TMOD_RESTART_DELAY` are used. For a five-minute
+warning period, set the delay to 300. Empty countdown settings disable those
+messages independently of the initial announcement.
+
+Open **Configuration → Scheduled restarts** and choose a schedule:
+
+| Mode | Behavior |
+| --- | --- |
+| Disabled | Default; no automatic restarts. |
+| Every X minutes | Interval in minutes; **0** disables it. |
+| Every X days | **1–3650** periods of exactly 24 hours from game startup. |
+| Daily | Every day at the selected time. |
+| Weekly | On the selected weekday at the selected time. |
+| Monthly | On the selected day (1–31); use the last day in shorter months. |
+
+Daily, weekly, and monthly schedules use a 24-hour time and timezone, such
+as **04:00** in **America/New_York**. Defaults are 04:00 UTC, Sunday for weekly,
+day 1 for monthly, and 7 days for every-X-days mode. The form shows the fields
+for the selected mode.
+Set the warning delay in seconds and chat announcement, then save and apply.
+The warning begins when the schedule is due; the game stops after the delay
+(default **60 seconds**, **0** skips waiting). An empty message omits the announcement.
+
+Environment-managed servers use `TMOD_RESTART_MODE`, `TMOD_RESTART_INTERVAL`,
+`TMOD_RESTART_DAYS`, `TMOD_RESTART_WEEKDAY`, `TMOD_RESTART_MONTHDAY`,
+`TMOD_RESTART_TIME`, `TMOD_RESTART_TIMEZONE`, `TMOD_RESTART_DELAY`, and
+`TMOD_RESTART_MESSAGE` in `.env`. Recreate the container to apply them.
+The schedule works with the dashboard disabled too.
+
+Scheduled restarts save and restart the game, disconnecting players while the
+dashboard stays available. They do not apply saved drafts or check for updates.
+Minute and day intervals reset whenever the game starts, including after a backup
+or settings apply. Calendar modes select the next future occurrence in the chosen timezone;
+a time skipped by daylight saving shifts forward by the clock-change gap, and
+a repeated time uses its first occurrence only. Busy or unhealthy servers defer
+the restart. Configuration shows the
+next planned restart and failures. A failed restart pauses the schedule for
+manual recovery; without the dashboard, the container exits for Docker's
+restart policy to handle it.
+
+### Autosave
+
+Scheduled world saving is controlled by `TMOD_AUTOSAVE_INTERVAL`, in whole
+minutes (default **10**; **0** disables scheduled saves). In the WebUI, open
+**Configuration → Backups & autosave → Autosave interval (minutes)**, save the
+draft, then **Apply & Restart**. Applying disconnects players to restart the
+game; subsequent scheduled saves run without disconnecting them. The timer
+resets whenever the game starts.
+
+For environment-managed settings (`TMOD_CONFIG_SOURCE=env`), set
+`TMOD_AUTOSAVE_INTERVAL=5` in `.env` to save every five minutes, then recreate
+the container with `docker compose up -d`. In web-managed mode, saved WebUI
+values take precedence over `.env` after first boot.
+
+Autosave updates the live world files; it does not create a backup archive.
+Use the separate backup interval to schedule recoverable archives.
+
+### Backup schedules and console retention
+
+**Configuration → Backups & autosave** offers the same disabled, minutes,
+every-X-days, daily, weekly, and monthly modes for cold backups. Set the backup
+time and timezone separately from restarts. Short-month and daylight-saving
+rules match restart scheduling. The next planned backup appears in Configuration
+and Backups & recovery. Backups wait for a healthy, idle game and disconnect
+players while saving, archiving, and restarting. Backups take priority if both
+schedules become due together; the game start recalculates the restart timer.
+
+Environment settings are `TMOD_BACKUP_MODE`, `TMOD_BACKUP_INTERVAL`,
+`TMOD_BACKUP_DAYS`, `TMOD_BACKUP_WEEKDAY`, `TMOD_BACKUP_MONTHDAY`,
+`TMOD_BACKUP_TIME`, and `TMOD_BACKUP_TIMEZONE`. Default mode is interval, with
+interval 0 leaving scheduling disabled. Backup attempts reset the schedule;
+failures remain visible in backup activity rather than retrying every few seconds.
+
+**Configuration → Runtime & logs** controls console archive retention:
+`TMOD_LOG_RETENTION_DAYS=30`, `TMOD_LOG_HISTORY_MAX_MB=512`, and
+`TMOD_LOG_ROTATE_MB=64`. Age or history-size limits set to 0 disable that limit.
+Cleanup removes oldest console archives first and runs at game startup,
+rotation, and periodically while console output arrives. Active and previous
+console logs are outside the history budget; tModLoader's own logs, player
+history, and backup archives are unaffected. New settings take effect after
+saving and applying. Rotating the active log keeps console history available
+without allowing a single game session's console file to grow indefinitely.
+
+The **Autosave chat announcement** field sets the message sent before each
+scheduled save (`TMOD_AUTOSAVE_MESSAGE`). Leave it empty to save silently.
+
+Under **Configuration → Runtime & logs**, **Shutdown warning delay (seconds)**
+(`TMOD_SHUTDOWN_DELAY`, default **3**, **0** skips waiting) controls the pause
+between the shutdown announcement and save-and-exit when Docker stops the
+container. Save and apply changes as above. Dashboard restarts and backups use
+their own stop flow. Keep Compose `stop_grace_period` longer than the warning
+delay plus `TMOD_SHUTDOWN_TIMEOUT` and shutdown overhead.
+
 The supplied Compose file keeps persistent files beside it:
 
 | Host folder | Contents |
@@ -442,3 +546,10 @@ Container code and scripts are distributed under [LICENSE.md](LICENSE.md).
 Terraria, tModLoader, and bundled third-party tools retain their respective licenses.
 
 The update card offers an opt-in **Announce new tModLoader versions in game chat** setting. It saves immediately without a restart, defaults to off, and sends one announcement per newly detected release while the game is healthy. The administration service checks in the background even without an open dashboard, using the existing release-check cache. Disabling and re-enabling the option does not repeat an already announced release.
+
+### Dashboard appearance
+
+Use the Theme selector in the header to choose Slate & Teal, Forest, Ocean,
+Amethyst, Copper, Solarized, Nord, or Rose Pine. The sun/moon button switches
+between light and dark mode. Both choices are remembered in this browser;
+initial light/dark mode follows your system preference.

@@ -13,6 +13,33 @@ installed tModLoader release.
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-09-24
+
+### Added
+
+- Light and dark dashboard themes with a sun/moon switch and eight remembered color palettes: Slate & Teal, Forest, Ocean, Amethyst, Copper, Solarized, Nord, and Rose Pine.
+- Restart countdown warnings with reviewed postpone/skip controls, plus Save now
+  and Restart now actions that preserve running settings and runtime.
+- Calendar-based backup scheduling with next-run status and shared operation guards.
+- Configurable console history age and size limits, plus active console log rotation.
+
+- Optional scheduled game restarts by minutes, every X days, or daily, weekly,
+  and monthly time and timezone, with a warning delay,
+  chat announcement, and visible next restart status. Restarts save the world
+  and preserve running settings without applying drafts or checking updates.
+
+- Configure the scheduled autosave chat message (empty saves silently) and the
+  container shutdown warning delay through the dashboard or environment.
+
+### Changed
+
+- Group backup scheduling and retention, autosave, and scheduled restarts under Scheduling. Keep immediate game controls on Overview and server password controls inside Server Configuration.
+
+### Removed
+
+- Separate legacy mod download and enable environment controls; use `TMOD_MODS`
+  for the combined Workshop selection.
+
 ## [3.5.0] - 2026-09-24
 
 ### Added
@@ -433,7 +460,9 @@ installed tModLoader release.
 - Made generated configuration, shutdown, autosave, and command injection more
   reliable.
 
-[Unreleased]: https://github.com/Crosis47/tmodloader/compare/3.4.1...HEAD
+[Unreleased]: https://github.com/Crosis47/tmodloader/compare/3.6.0...HEAD
+[3.6.0]: https://github.com/Crosis47/tmodloader/compare/3.5.0...3.6.0
+[3.5.0]: https://github.com/Crosis47/tmodloader/compare/3.4.1...3.5.0
 [3.4.1]: https://github.com/Crosis47/tmodloader/compare/3.4.0...3.4.1
 [3.4.0]: https://github.com/Crosis47/tmodloader/compare/3.3.0...3.4.0
 [3.3.0]: https://github.com/Crosis47/tmodloader/compare/3.2.0...3.3.0

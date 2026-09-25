@@ -21,6 +21,8 @@ import admin_settings as settings
 import admin_workshop as workshop
 import admin_schema
 import admin_recovery
+import admin_restart
+import admin_backup_schedule
 import admin_players
 import admin_player_history
 import admin_worlds
@@ -99,7 +101,7 @@ def console_sources():
     directory = CONSOLE_LOG.parent / 'console-history'
     if not directory.is_symlink():
         paths += [(path.name, path) for path in directory.glob('run-*.log')
-                  if re.fullmatch(r'run-\d{8}T\d{6}Z-[A-Za-z0-9]+\.log', path.name)]
+                  if re.fullmatch(r'run-\d{8}T\d{6}Z-[A-Za-z0-9_]+\.log', path.name)]
     result = []
     for identity, path in paths:
         try:
@@ -128,7 +130,7 @@ def console_output(query=None):
     source = query.get('source', ['current'])[0]
     if source in ('current', 'previous'):
         log_path = CONSOLE_LOG if source == 'current' else CONSOLE_LOG.with_name('container-console.previous.log')
-    elif re.fullmatch(r'run-\d{8}T\d{6}Z-[A-Za-z0-9]+\.log', source):
+    elif re.fullmatch(r'run-\d{8}T\d{6}Z-[A-Za-z0-9_]+\.log', source):
         log_path = CONSOLE_LOG.parent / 'console-history' / source
     else:
         raise ValueError('Unknown console log.')
@@ -278,9 +280,9 @@ def job_runner(kind, archive=None, checksum=None):
                 os.kill(int(pid_file.read_text()), 0)
                 time.sleep(1)
         detail = 'Operation completed.'
-        if kind in ('apply', 'restore', 'retry', 'runtime-update'):
+        if kind in ('apply', 'restore', 'retry', 'runtime-update', 'scheduled-restart', 'restart'):
             detail = 'Game server is healthy.'
-            if kind == 'runtime-update':
+            if kind in ('runtime-update', 'scheduled-restart', 'restart'):
                 detail = result.get('detail') or detail
         elif kind == 'preview':
             detail = 'Archive verified; review the preview before restoring.'
@@ -459,7 +461,8 @@ def recovery_request(path, payload):
 def server_status():
     healthy = health()
     return {'healthy': healthy, 'mods': running_mods(healthy), 'backups': admin_metrics.inventory(), 'job': JOB,
-            'updates': admin_updates.status(),
+            'updates': admin_updates.status(), 'restart_schedule': admin_restart.status(),
+            'backup_schedule': admin_backup_schedule.status(), 'busy': operation_busy(),
             'version': Path('/terraria-server/VERSION').read_text().strip()
             if Path('/terraria-server/VERSION').exists() else 'development'}
 
@@ -512,6 +515,24 @@ def api(method, path, query, payload):
     if (method == 'POST' and path != '/api/updates/check'
             and admin_updates.read(admin_updates.ROOT / 'status.json').get('state') in admin_updates.BUSY):
         raise ValueError('Wait for startup update preparation to finish before changing server data.')
+    if path == '/api/server/save' and method == 'POST':
+        return send_console({'command': 'save'})
+    if path == '/api/server/restart' and method == 'POST':
+        with STATE_LOCK:
+            if operation_busy() or not health():
+                raise ValueError('Wait until the game is healthy and no operation is running.')
+            if payload.get('confirm') is not True:
+                raise ValueError('Review and confirm the restart first.')
+            if admin_recovery.status()['interrupted']:
+                raise ValueError('Resolve interrupted recovery before restarting.')
+            return start_job('restart')
+    if path == '/api/restart/control' and method == 'POST':
+        with STATE_LOCK:
+            if operation_busy() and not (JOB.get('state') == 'running' and JOB.get('kind') in ('restart', 'scheduled-restart')):
+                raise ValueError('Wait for the current operation.')
+            if payload.get('confirm') is not True:
+                raise ValueError('Review and confirm the schedule change first.')
+            return admin_restart.control(payload.get('action'), payload.get('minutes', 15))
     if path == '/api/updates' and method == 'GET':
         return admin_updates.status()
     if path == '/api/container-update' and method == 'GET':
@@ -682,6 +703,30 @@ def application(environ, start_response):
     return [body]
 
 
+def check_scheduled_restart():
+    with STATE_LOCK:
+        if (not operation_busy() and admin_restart.due()
+                and not admin_recovery.status()['interrupted'] and health()):
+            start_job('scheduled-restart')
+
+
+def check_scheduled_backup():
+    with STATE_LOCK:
+        if (not operation_busy() and admin_backup_schedule.due()
+                and not admin_recovery.status()['interrupted'] and health()):
+            start_job('backup')
+
+
+def scheduled_restart_worker():
+    while True:
+        try:
+            check_scheduled_backup()
+            check_scheduled_restart()
+        except Exception as error:
+            print('[ADMIN] Scheduled restart check failed: ' + str(error), flush=True)
+        time.sleep(5)
+
+
 def update_announcement_worker():
     while True:
         try:
@@ -710,6 +755,7 @@ def main():
         print('[ADMIN] One-time setup code: ' + SETUP_CODE, flush=True)
     from waitress import serve
     threading.Thread(target=update_announcement_worker, daemon=True).start()
+    threading.Thread(target=scheduled_restart_worker, daemon=True).start()
     print('[ADMIN] Open ' + (os.environ.get('TMOD_WEB_ORIGIN') or 'http://<server-IP>:<dashboard-port> (default 8080)') + ' in your browser.', flush=True)
     print('[ADMIN] Private administration interface listening on port 8080.', flush=True)
     serve(application, host='0.0.0.0', port=8080, threads=4, connection_limit=32,
