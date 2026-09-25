@@ -35,6 +35,12 @@ python3 "$(dirname "${BASH_SOURCE[0]}")/character_bridge.py"
 TMOD_CHARACTER_EVENT_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 export TMOD_CHARACTER_EVENT_KEY
 
+python3 "$(dirname "${BASH_SOURCE[0]}")/character_bridge.py"
+# Only the game process and its console reader share this per-launch token.
+# Player chat that resembles a tracking event must not become history evidence.
+TMOD_CHARACTER_EVENT_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+export TMOD_CHARACTER_EVENT_KEY
+
 set +e
 python3 "$(dirname "${BASH_SOURCE[0]}")/create_world.py" "$config_path" bash "$script_caller" \
     -server \
