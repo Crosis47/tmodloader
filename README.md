@@ -553,3 +553,9 @@ Use the Theme selector in the header to choose Slate & Teal, Forest, Ocean,
 Amethyst, Copper, Solarized, Nord, or Rose Pine. The sun/moon button switches
 between light and dark mode. Both choices are remembered in this browser;
 initial light/dark mode follows your system preference.
+
+For GitHub API rate limits during release discovery, optionally provide
+`TMOD_GITHUB_TOKEN` as a runtime environment variable. Public release metadata
+requires no additional repository permissions. It is used only for GitHub API
+requests, is not a dashboard setting, and is not included in image builds.
+CI smoke tests use their temporary workflow token automatically.

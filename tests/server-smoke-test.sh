@@ -88,6 +88,7 @@ docker run --env TMOD_AUTO_UPDATE=0 --env TMOD_WEB_ENABLED=0 --rm \
     -c 'mkdir -p /data/root-owned/nested && touch /data/root-owned/nested/proof && chmod 0500 /data/root-owned/nested'
 
 docker run --detach \
+    --env TMOD_GITHUB_TOKEN \
     --name "$container_name" \
     --cap-drop ALL \
     --cap-add CHOWN \

@@ -139,6 +139,7 @@ jobs:
 
       - name: Smoke-test candidate server
         env:
+          TMOD_GITHUB_TOKEN: ${{ github.token }}
           DIGEST: ${{ steps.build.outputs.digest }}
           IMAGE: ${{ steps.metadata.outputs.image }}
         run: |

@@ -13,6 +13,10 @@ installed tModLoader release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Authenticate GitHub release discovery during CI smoke tests to avoid shared runner anonymous API rate limits. The temporary token is passed at runtime, never baked into images or attached to asset downloads.
+
 ## [3.6.0] - 2026-09-24
 
 ### Added

@@ -16,6 +16,18 @@ import admin_updates as updates
 import runtime_updates as updater
 
 
+class GitHubAuthenticationTests(unittest.TestCase):
+    def test_optional_credential_is_only_added_to_api_headers(self):
+        with patch.dict(os.environ, {'TMOD_GITHUB_TOKEN': ''}):
+            self.assertNotIn('Authorization', updates.github_headers())
+        with patch.dict(os.environ, {'TMOD_GITHUB_TOKEN': ' test-token '}):
+            self.assertEqual(updates.github_headers()['Authorization'], 'Bearer test-token')
+            with patch.object(updates.urllib.request, 'urlopen', side_effect=OSError('offline')) as request:
+                with tempfile.TemporaryDirectory() as root, patch.object(updates, 'ROOT', Path(root)):
+                    updates.check()
+                self.assertEqual(request.call_args.args[0].get_header('Authorization'), 'Bearer test-token')
+
+
 class UpdateTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
