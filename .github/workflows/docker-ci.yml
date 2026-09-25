@@ -168,6 +168,8 @@ jobs:
 
       - name: Smoke-test the server
         timeout-minutes: 12
+        env:
+          TMOD_GITHUB_TOKEN: ${{ github.token }}
         run: bash tests/server-smoke-test.sh tmodloader:ci
 
       - name: Test real-server backup and restore

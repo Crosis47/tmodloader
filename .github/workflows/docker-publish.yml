@@ -170,6 +170,7 @@ jobs:
       - name: Smoke-test candidate server
         if: steps.publication.outputs.publish == 'true'
         env:
+          TMOD_GITHUB_TOKEN: ${{ github.token }}
           IMAGE: ${{ steps.metadata.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |

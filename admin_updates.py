@@ -21,6 +21,15 @@ RELEASES = 'https://api.github.com/repos/tModLoader/tModLoader/releases?per_page
 TAG = re.compile(r'v[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,3}')
 
 
+def github_headers():
+    """Optional runtime credential for GitHub API requests; never for asset downloads."""
+    headers = {'User-Agent': 'tmodloader-container-updates', 'Accept': 'application/vnd.github+json'}
+    token = os.environ.get('TMOD_GITHUB_TOKEN', '').strip()
+    if token:
+        headers['Authorization'] = 'Bearer ' + token
+    return headers
+
+
 def container_status():
     """Check this container project's published releases, independently of tML."""
     installed = (BASE / 'VERSION').read_text().strip()
@@ -32,7 +41,7 @@ def container_status():
                 time.time() - cached.get('attempted', 0) >= (900 if cached.get('error') else 21600)):
             try:
                 request = urllib.request.Request('https://api.github.com/repos/Crosis47/tmodloader/releases?per_page=100',
-                                                 headers={'User-Agent': 'tmodloader-container-updates', 'Accept': 'application/vnd.github+json'})
+                                                 headers=github_headers())
                 with urllib.request.urlopen(request, timeout=8) as response:
                     raw = response.read(4 * 1024 * 1024 + 1)
                 if len(raw) > 4 * 1024 * 1024:
@@ -128,8 +137,7 @@ def check():
     selected_channel = channel()
     old = read(ROOT / 'check.json')
     try:
-        request = urllib.request.Request(RELEASES, headers={'User-Agent': 'tmodloader-container-updates',
-                                                          'Accept': 'application/vnd.github+json'})
+        request = urllib.request.Request(RELEASES, headers=github_headers())
         with urllib.request.urlopen(request, timeout=15) as response:
             raw = response.read(4 * 1024 * 1024 + 1)
         if len(raw) > 4 * 1024 * 1024:
@@ -149,7 +157,7 @@ def check():
 def pinned_release(tag):
     version(tag)
     request = urllib.request.Request('https://api.github.com/repos/tModLoader/tModLoader/releases/tags/' + tag,
-                                     headers={'User-Agent': 'tmodloader-container-updates'})
+                                     headers=github_headers())
     with urllib.request.urlopen(request, timeout=15) as response:
         raw = response.read(1024 * 1024 + 1)
     if len(raw) > 1024 * 1024:
