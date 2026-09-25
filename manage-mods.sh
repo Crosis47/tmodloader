@@ -29,35 +29,6 @@ warn() {
     printf '[!!] %s\n' "$*" >&2
 }
 
-parse_workshop_ids() {
-    local raw="$1"
-    local variable_name="$2"
-    local result_name="$3"
-    local -n result_ref="$result_name"
-    local -A seen=()
-    local entry mod_id
-    local -a entries
-
-    result_ref=()
-    IFS=',' read -r -a entries <<< "$raw"
-    for entry in "${entries[@]}"; do
-        mod_id="${entry//[[:space:]]/}"
-        if ! [[ "$mod_id" =~ ^[0-9]+$ ]]; then
-            warn "Ignoring invalid Workshop ID in $variable_name: $entry"
-            continue
-        fi
-        if [[ -z "${seen[$mod_id]:-}" ]]; then
-            result_ref+=("$mod_id")
-            seen[$mod_id]=1
-        fi
-    done
-
-    if ((${#result_ref[@]} == 0)); then
-        warn "$variable_name did not contain any valid numeric Workshop IDs."
-        return 1
-    fi
-}
-
 load_cached_collection() {
     local collection_id="$1"
     local result_name="$2"
@@ -538,10 +509,9 @@ write_enabled_mods() {
 
 main() {
     local managed_spec="${TMOD_MODS:-}"
-    local download_spec enable_spec download_label enable_label
-    # shellcheck disable=SC2034 # Populated by parse_workshop_ids through a nameref.
+    # shellcheck disable=SC2034 # Populated through namerefs.
     local -a download_ids=()
-    # shellcheck disable=SC2034 # Populated by parse_workshop_ids through a nameref.
+    # shellcheck disable=SC2034 # Populated through namerefs.
     local -a enable_ids=()
 
     case "${TMOD_MOD_OFFLINE_POLICY:-use-cache}" in
@@ -562,30 +532,8 @@ main() {
         download_required_mods download_ids
         write_enabled_mods enable_ids
         return 0
-    else
-        download_spec="${TMOD_AUTODOWNLOAD:-}"
-        enable_spec="${TMOD_ENABLEDMODS:-}"
-        download_label="TMOD_AUTODOWNLOAD"
-        enable_label="TMOD_ENABLEDMODS"
-        if [[ -n "$download_spec" || -n "$enable_spec" ]]; then
-            warn "TMOD_AUTODOWNLOAD and TMOD_ENABLEDMODS are deprecated; combine the IDs in TMOD_MODS."
-        fi
     fi
-
-    if [[ -z "$download_spec" && -z "$enable_spec" ]]; then
-        log "TMOD_MODS is empty; keeping the existing enabled.json and Workshop cache unchanged."
-        return 0
-    fi
-
-    if [[ -n "$download_spec" ]]; then
-        parse_workshop_ids "$download_spec" "$download_label" download_ids
-        download_required_mods download_ids
-    fi
-
-    if [[ -n "$enable_spec" ]]; then
-        parse_workshop_ids "$enable_spec" "$enable_label" enable_ids
-        write_enabled_mods enable_ids
-    fi
+    log "TMOD_MODS is empty; keeping the existing enabled.json and Workshop cache unchanged."
 }
 
 main "$@"

@@ -7,6 +7,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DATA = Path(os.environ.get('TMOD_DATA_DIR', '/data'))
 RUNTIME = Path(os.environ.get('TMOD_RUNTIME_DIR', '/tmp/tmodloader'))
@@ -20,6 +21,12 @@ RANGES = {
     'TMOD_UPNP': (0, 1), 'TMOD_PRIORITY': (0, 5),
     'TMOD_AUTOSAVE_INTERVAL': (0, 9999999), 'TMOD_BACKUP_INTERVAL': (0, 9999999),
     'TMOD_BACKUP_KEEP': (1, 999999), 'TMOD_BACKUP_MIN_FREE_MB': (0, 999999999),
+    'TMOD_SHUTDOWN_DELAY': (0, 3600),
+    'TMOD_RESTART_INTERVAL': (0, 9999999), 'TMOD_RESTART_DELAY': (0, 3600),
+    'TMOD_RESTART_DAYS': (1, 3650), 'TMOD_RESTART_MONTHDAY': (1, 31),
+    'TMOD_BACKUP_DAYS': (1, 3650), 'TMOD_BACKUP_MONTHDAY': (1, 31),
+    'TMOD_LOG_RETENTION_DAYS': (0, 3650), 'TMOD_LOG_HISTORY_MAX_MB': (0, 999999),
+    'TMOD_LOG_ROTATE_MB': (1, 1024),
     'TMOD_SHUTDOWN_TIMEOUT': (1, 3600), 'TMOD_CRASH_LOG_LINES': (0, 100000),
     'TMOD_DOWNLOAD_RETRIES': (1, 20), 'TMOD_DOWNLOAD_RETRY_DELAY': (0, 600),
     'TMOD_COLLECTION_MAX_ITEMS': (1, 1000),
@@ -29,10 +36,16 @@ JOURNEY = ('SETFROZEN SETDAWN SETNOON SETDUSK SETMIDNIGHT GODMODE WIND_STRENGTH 
            'SET_DIFFICULTY BIOME_SPREAD SPAWN_RATE').split()
 RANGES.update({'TMOD_JOURNEY_' + key: (0, 2) for key in JOURNEY})
 CHOICES = {'TMOD_LOG_LEVEL': ['quiet', 'normal', 'debug'],
+           'TMOD_RESTART_MODE': ['disabled', 'interval', 'days', 'daily', 'weekly', 'monthly'],
+           'TMOD_RESTART_WEEKDAY': ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
            'TMOD_WORLDEVIL': ['random', 'corruption', 'crimson'],
            'TMOD_MOD_OFFLINE_POLICY': ['use-cache', 'strict']}
+CHOICES['TMOD_BACKUP_MODE'] = CHOICES['TMOD_RESTART_MODE']
+CHOICES['TMOD_BACKUP_WEEKDAY'] = CHOICES['TMOD_RESTART_WEEKDAY']
 TEXT = ['TMOD_MOTD', 'TMOD_WORLDNAME', 'TMOD_WORLDSEED', 'TMOD_LANGUAGE',
-        'TMOD_SHUTDOWN_MESSAGE', 'TMOD_MODS']
+        'TMOD_SHUTDOWN_MESSAGE', 'TMOD_AUTOSAVE_MESSAGE', 'TMOD_RESTART_MESSAGE',
+        'TMOD_RESTART_TIME', 'TMOD_RESTART_TIMEZONE', 'TMOD_BACKUP_TIME', 'TMOD_BACKUP_TIMEZONE',
+        'TMOD_RESTART_COUNTDOWN', 'TMOD_MODS']
 KEYS = set(RANGES) | set(CHOICES) | set(TEXT)
 
 
@@ -96,6 +109,18 @@ def validate(values):
             value = str(int(value))
         if key in CHOICES and value not in CHOICES[key]:
             raise ValueError(f'{key}: select a supported value.')
+        if key in ('TMOD_RESTART_TIME', 'TMOD_BACKUP_TIME') and not re.fullmatch(r'(?:[01][0-9]|2[0-3]):[0-5][0-9]', value):
+            raise ValueError('Schedule time must be HH:MM in 24-hour format.')
+        if key in ('TMOD_RESTART_TIMEZONE', 'TMOD_BACKUP_TIMEZONE'):
+            try:
+                ZoneInfo(value)
+            except (ZoneInfoNotFoundError, ValueError):
+                raise ValueError('Use a timezone such as UTC or America/New_York.') from None
+        if key == 'TMOD_RESTART_COUNTDOWN':
+            entries = [part.strip() for part in value.split(',') if part.strip()]
+            if len(entries) > 20 or any(not re.fullmatch(r'[0-9]{1,4}', part) or not 1 <= int(part) <= 3600 for part in entries):
+                raise ValueError('Countdown must contain up to 20 comma-separated seconds from 1 to 3600, or be empty.')
+            value = ','.join(str(number) for number in sorted({int(part) for part in entries}, reverse=True))
         if key == 'TMOD_WORLDNAME' and (not value or value in ('.', '..') or '/' in value or '\\' in value):
             raise ValueError('World name must be a nonempty file name without separators.')
         if key == 'TMOD_LANGUAGE' and not re.fullmatch(r'[A-Za-z]{2,3}(-[A-Za-z0-9]+)*', value):

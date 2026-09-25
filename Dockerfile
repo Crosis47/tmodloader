@@ -34,22 +34,39 @@ ARG TMOD_GID=1000
 
 # The shutdown message is broadcast to the game chat when the container was stopped from the host.
 ENV TMOD_SHUTDOWN_MESSAGE="Server is shutting down NOW!"
+ENV TMOD_SHUTDOWN_DELAY="3"
+ENV TMOD_RESTART_INTERVAL="0"
+ENV TMOD_RESTART_MODE="disabled"
+ENV TMOD_RESTART_DAYS="7"
+ENV TMOD_RESTART_WEEKDAY="sunday"
+ENV TMOD_RESTART_MONTHDAY="1"
+ENV TMOD_RESTART_TIME="04:00"
+ENV TMOD_RESTART_TIMEZONE="UTC"
+ENV TMOD_RESTART_DELAY="60"
+ENV TMOD_RESTART_COUNTDOWN="300,60,10"
+ENV TMOD_RESTART_MESSAGE="Scheduled server restart soon. Please prepare to disconnect."
 ENV TMOD_SHUTDOWN_TIMEOUT="90"
 
 # The autosave feature will save the world periodically. The interval is in minutes.
 ENV TMOD_AUTOSAVE_INTERVAL="10"
+ENV TMOD_AUTOSAVE_MESSAGE="Scheduled world save starting."
 
 # Docker console verbosity. Complete raw output remains in the persistent log.
 ENV TMOD_LOG_LEVEL="normal"
 ENV TMOD_CRASH_LOG_LINES="200"
+ENV TMOD_LOG_RETENTION_DAYS="30"
+ENV TMOD_LOG_HISTORY_MAX_MB="512"
+ENV TMOD_LOG_ROTATE_MB="64"
+ENV TMOD_BACKUP_MODE="interval"
+ENV TMOD_BACKUP_DAYS="7"
+ENV TMOD_BACKUP_WEEKDAY="sunday"
+ENV TMOD_BACKUP_MONTHDAY="1"
+ENV TMOD_BACKUP_TIME="03:00"
+ENV TMOD_BACKUP_TIMEZONE="UTC"
 
 # Workshop mods to keep current and enable when the server starts.
 # Example format: 2824688072,2824688266,2835214226
 ENV TMOD_MODS=""
-
-# Deprecated compatibility variables. TMOD_MODS takes precedence when non-empty.
-ENV TMOD_AUTODOWNLOAD=""
-ENV TMOD_ENABLEDMODS=""
 
 # Retry transient Steam Workshop failures before aborting startup.
 ENV TMOD_DOWNLOAD_RETRIES="3"
@@ -246,7 +263,7 @@ COPY --chown=root:root backup.py admin_backup_details.py ./
 COPY --chown=root:root --chmod=0755 container-backup.py /usr/local/bin/tmod-backup
 COPY --chown=tml:tml VERSION .
 COPY --chown=tml:tml admin_settings.py admin_metrics.py admin_workshop.py admin_server.py ./
-COPY --chown=tml:tml admin_schema.py admin_auth.py admin_access.py ./
+COPY --chown=tml:tml admin_schema.py admin_auth.py admin_access.py admin_restart.py admin_backup_schedule.py admin_logs.py ./
 COPY --chown=tml:tml admin_recovery.py ./
 COPY --chown=tml:tml admin_players.py ./
 COPY --chown=tml:tml admin_player_history.py ./

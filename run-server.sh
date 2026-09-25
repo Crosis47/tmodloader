@@ -27,6 +27,7 @@ fi
 umask 077
 : > "$raw_log"
 rm -f "$raw_log.first"
+python3 "$(dirname "${BASH_SOURCE[0]}")/admin_logs.py" "$log_dir"
 
 python3 "$(dirname "${BASH_SOURCE[0]}")/character_bridge.py"
 # Only the game process and its console reader share this per-launch token.

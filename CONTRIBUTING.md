@@ -86,6 +86,14 @@ The image includes Python 3.12 for container-native backups. Run
 image. This creates disposable data and checks an actual server backup/restore
 cycle with ownership and health verification.
 
+Maintenance controls are covered by `test_admin_operations.py` and
+`test_admin_restart.py`. Run `node tests/admin-maintenance-test.cjs` with
+Playwright and Python available for the action buttons, countdown controls,
+backup schedule form, and log retention settings. Run
+`python tests/maintenance-integration-test.py tmodloader:dev` against local
+Docker for real save/restart, countdown cancellation, and calendar backup
+validation in disposable containers and volumes.
+
 Run the checks relevant to your change. Runtime changes should pass the full
 set:
 

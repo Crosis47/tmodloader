@@ -205,4 +205,13 @@ if TMOD_MODS="111" \
     exit 1
 fi
 
+# Removed legacy variables must not download or change the enabled selection.
+cp "$data_root/tModLoader/Mods/enabled.json" "$test_root/enabled-before.json"
+rm -f "$steamcmd_log"
+TMOD_MODS='' TMOD_AUTODOWNLOAD=999 TMOD_ENABLEDMODS=999 \
+    TMOD_DATA_DIR="$data_root" TMOD_CURL_BIN="$mock_bin/curl" \
+    TMOD_STEAMCMD_BIN="$mock_bin/steamcmd" bash "$script_under_test"
+cmp "$test_root/enabled-before.json" "$data_root/tModLoader/Mods/enabled.json"
+[[ ! -e "$steamcmd_log" ]]
+
 echo "manage-mods tests passed."

@@ -484,7 +484,7 @@ def prepare(config):
         if initial:
             raise RuntimeError('Initial server validation failed; inspect diagnostics and retry.') from error
         # No in-place Workshop refresh here: fallback must retain its working mods.
-        if (os.environ.get('TMOD_MODS') or os.environ.get('TMOD_ENABLEDMODS')) and not any(
+        if os.environ.get('TMOD_MODS') and not any(
                 (settings.DATA / 'tModLoader/Worlds').glob('*.wld')):
             raise RuntimeError('First startup has no existing world to fall back to; refusing to create a world without the requested mods.') from error
 

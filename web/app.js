@@ -11,6 +11,49 @@ let historyIdentity = '';
 
 const $ = id => document.getElementById(id);
 
+const palettes = ['slate', 'forest', 'ocean', 'amethyst', 'copper', 'solarized', 'nord', 'rose-pine'];
+function setPalette(value, remember = false) {
+  const palette = palettes.includes(value) ? value : 'slate';
+  document.documentElement.dataset.palette = palette;
+  $('theme-palette').value = palette;
+  if (remember) { try { localStorage.setItem('tmod-dashboard-palette', palette); } catch {} }
+}
+let savedPalette;
+try { savedPalette = localStorage.getItem('tmod-dashboard-palette'); } catch {}
+setPalette(savedPalette);
+$('theme-palette').onchange = event => setPalette(event.target.value, true);
+
+const themePreference = window.matchMedia('(prefers-color-scheme: light)');
+let savedTheme;
+try { savedTheme = localStorage.getItem('tmod-dashboard-theme'); } catch {}
+function setTheme(theme, remember = false) {
+  document.documentElement.dataset.theme = theme;
+  const next = theme === 'light' ? 'dark' : 'light';
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('viewBox', '0 0 24 24');
+  icon.setAttribute('width', '20'); icon.setAttribute('height', '20');
+  icon.setAttribute('fill', 'none'); icon.setAttribute('stroke', 'currentColor');
+  icon.setAttribute('stroke-width', '1.8'); icon.setAttribute('stroke-linecap', 'round');
+  icon.setAttribute('stroke-linejoin', 'round'); icon.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', next === 'light'
+    ? 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42'
+    : 'M20.9 13.3A9 9 0 0 1 10.7 3.1 9 9 0 1 0 20.9 13.3Z');
+  icon.append(path); $('theme-toggle').replaceChildren(icon);
+  $('theme-toggle').title = 'Switch to ' + next + ' theme';
+  $('theme-toggle').setAttribute('aria-label', 'Switch to ' + next + ' theme');
+  if (remember) {
+    savedTheme = theme;
+    try { localStorage.setItem('tmod-dashboard-theme', theme); } catch {}
+  }
+}
+setTheme(['light', 'dark'].includes(savedTheme) ? savedTheme : themePreference.matches ? 'light' : 'dark');
+$('theme-toggle').onclick = () => setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light', true);
+themePreference.addEventListener('change', event => {
+  if (!['light', 'dark'].includes(savedTheme)) setTheme(event.matches ? 'light' : 'dark');
+});
+
+
 const tell = text => { $('message').textContent = text; };
 
 const bytes = n => {
@@ -268,6 +311,13 @@ historyMore.onclick = () => { historyOffsets.push(historyNext); loadHistory(hist
 async function refresh() {
 
   const data = await api('/api/status');
+  renderRestartSchedule(data.restart_schedule);
+  renderBackupSchedule(data.backup_schedule);
+  $('save-now').disabled = $('restart-now').disabled = !data.healthy || !!data.busy || data.job.state === 'running';
+  const restartJob = data.job.state === 'running' && ['restart', 'scheduled-restart'].includes(data.job.kind);
+  const canControl = ['scheduled', 'countdown'].includes(data.restart_schedule?.state) && (!data.busy || restartJob);
+  $('restart-postpone').disabled = $('restart-skip').disabled = !canControl;
+  if (['restart', 'scheduled-restart'].includes(data.job.kind)) $('server-action-status').textContent = data.job.detail || data.job.state;
   renderUpdates(data.updates);
   showUpdateProgress(data.job, data.updates);
   showContainerReleaseNotice();
@@ -501,6 +551,82 @@ setInterval(async () => {
 
 }, 2000);
 
+let restartSchedule = null, backupSchedule = null;
+function scheduleDescription(value, label) {
+  if (!value) return label + ' schedule status unavailable.';
+  if (value.state === 'countdown') {
+    const remaining = Math.max(0, Math.ceil(value.countdown_end - Date.now() / 1000));
+    return remaining ? 'Restart in ' + remaining + ' seconds. Postpone or skip before saving starts.' : 'Restart countdown finished; waiting for supervisor status.';
+  }
+  const calendarSchedule = value.mode === 'weekly' ? 'Weekly on ' + value.weekday
+    : value.mode === 'monthly' ? 'Monthly on day ' + value.monthday + ' (last day in shorter months)'
+    : value.mode === 'daily' ? 'Daily' : '';
+  const description = calendarSchedule ? ' ' + calendarSchedule + ' at ' + value.time + ' in ' + value.timezone + '.'
+    : value.mode === 'days' ? ' Every ' + value.days + ' day(s).' : '';
+  return value.state === 'scheduled' && value.next_at
+    ? 'Next planned ' + label.toLowerCase() + ': ' + new Date(value.next_at * 1000).toLocaleString() + ' (your local time).' + description + ' Waits for other operations and game health.'
+    : value.detail || label + ' schedule is disabled.';
+}
+function renderRestartSchedule(value = restartSchedule) {
+  restartSchedule = value;
+  for (const id of ['restart-schedule-status', 'restart-control-status']) {
+    const output = $(id); if (!output) continue;
+    output.textContent = scheduleDescription(value, 'Restart warning');
+    output.classList.toggle('notice', value?.state === 'failed');
+  }
+}
+function renderBackupSchedule(value = backupSchedule) {
+  backupSchedule = value;
+  for (const id of ['backup-schedule-status', 'backup-config-status']) {
+    const output = $(id); if (output) output.textContent = scheduleDescription(value, 'Backup');
+  }
+}
+let controlPollBusy = false;
+setInterval(async () => {
+  if (!token || document.hidden) return;
+  renderRestartSchedule();
+  if (!['countdown', 'stopping'].includes(restartSchedule?.state) && !(attentionStatus?.job?.state === 'running' && ['restart', 'scheduled-restart'].includes(attentionStatus?.job?.kind))) return;
+  if (controlPollBusy) return;
+  controlPollBusy = true;
+  try { await refresh(); } catch (error) { $('server-action-status').textContent = 'Status unavailable: ' + error.message; }
+  finally { controlPollBusy = false; }
+}, 1000);
+$('save-now').onclick = action(async () => {
+  await api('/api/server/save', {});
+  $('server-action-status').textContent = 'Save command sent. Check the console for save completion.';
+});
+$('restart-now').onclick = action(async () => {
+  if (!await confirmAction('Restart the game?', 'Players will disconnect after the configured countdown. The world is saved; running settings and runtime are kept. Saved drafts and updates are not applied.')) return;
+  await api('/api/server/restart', {confirm: true}); await refresh();
+});
+for (const [id, change] of [['restart-postpone', 'postpone'], ['restart-skip', 'skip']]) {
+  $(id).onclick = action(async () => {
+    const minutes = Number($('restart-postpone-minutes').value);
+    if (change === 'postpone' && (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440)) throw new Error('Enter 1 through 1440 minutes.');
+    if (!await confirmAction(change === 'postpone' ? 'Postpone this restart?' : 'Skip this restart?', change === 'postpone' ? 'Delay this occurrence by ' + minutes + ' minutes, counted from now if already due.' : 'Skip this occurrence or cancel the manual countdown. The recurring schedule remains configured.')) return;
+    renderRestartSchedule(await api('/api/restart/control', {confirm: true, action: change, minutes})); await refresh();
+  });
+}
+
+function updateRestartFields(section, prefix = "TMOD_RESTART") {
+  const mode = section.querySelector('[name="' + prefix + '_MODE"]');
+  if (!mode) return;
+  const modes = {
+    TMOD_RESTART_INTERVAL: ['interval'], TMOD_RESTART_DAYS: ['days'],
+    TMOD_RESTART_WEEKDAY: ['weekly'], TMOD_RESTART_MONTHDAY: ['monthly'],
+    TMOD_RESTART_TIME: ['daily', 'weekly', 'monthly'],
+    TMOD_RESTART_TIMEZONE: ['daily', 'weekly', 'monthly'],
+  };
+  for (const input of section.querySelectorAll('input, select')) {
+    if (!input.name.startsWith(prefix + '_')) continue;
+    if (prefix === 'TMOD_BACKUP' && ['TMOD_BACKUP_KEEP', 'TMOD_BACKUP_MIN_FREE_MB'].includes(input.name)) continue;
+    const fieldModes = modes[input.name.replace(prefix, 'TMOD_RESTART')];
+    const visible = input === mode || (fieldModes ? fieldModes.includes(mode.value) : mode.value !== 'disabled');
+    input.closest('label').hidden = !visible;
+    input.disabled = config.mode !== 'web' || !visible;
+  }
+}
+
 async function loadSettings() {
 
   config = await api('/api/settings');
@@ -517,11 +643,21 @@ async function loadSettings() {
   $('compose-settings').textContent = Object.entries(config.compose_only).map(([key, value]) => key + ': ' + value).join('\n');
 
   const configurationGroups = config.groups.filter(group => !['world', 'journey'].includes(group.id));
+  const scheduleIds = new Set(['backup', 'autosave', 'restart']);
   const sections = configurationGroups.map(group => {
 
-    const section = node('fieldset', undefined, 'config-section'); section.id = 'config-' + group.id;
+    const nestedCard = scheduleIds.has(group.id);
+    const section = node(nestedCard ? 'section' : 'fieldset', undefined, 'config-section'); section.id = 'config-' + group.id;
+    if (['backup', 'autosave'].includes(group.id)) section.classList.add('unified-settings-card');
 
-    section.append(node('legend', group.title), node('p', group.description, 'muted'));
+    const heading = node(nestedCard ? 'h4' : 'legend', group.title);
+    heading.id = 'config-heading-' + group.id;
+    section.setAttribute('aria-labelledby', heading.id);
+    section.append(heading, node('p', group.description, 'muted'));
+    if (group.id === 'restart' || group.id === 'backup') {
+      const scheduleStatus = node('p', '', 'muted'); scheduleStatus.id = group.id === 'restart' ? 'restart-schedule-status' : 'backup-config-status';
+      scheduleStatus.setAttribute('role', 'status'); section.append(scheduleStatus);
+    }
 
     const grid = node('div', undefined, 'fields');
 
@@ -537,7 +673,8 @@ async function loadSettings() {
 
     const numericChoices = key.startsWith('TMOD_JOURNEY_') ? {'0': 'Locked', '1': 'Host only', '2': 'Everyone'} : ({TMOD_WORLDSIZE: {'1': 'Small', '2': 'Medium', '3': 'Large'}, TMOD_DIFFICULTY: {'0': 'Classic', '1': 'Expert', '2': 'Master', '3': 'Journey'}, TMOD_SECURE: {'0': 'Disabled', '1': 'Enabled'}, TMOD_UPNP: {'0': 'Disabled', '1': 'Enabled'}})[key];
 
-    if (numericChoices || config.choices[key]) { input = node('select'); const choices = numericChoices || Object.fromEntries(config.choices[key].map(choice => [choice, choice])); for (const [choice, title] of Object.entries(choices)) { const option = node('option', title + (numericChoices ? ' (' + choice + ')' : '')); option.value = choice; input.append(option); } }
+    const restartModeLabels = {disabled: 'Disabled', interval: 'Every X minutes', days: 'Every X days', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly'};
+    if (numericChoices || config.choices[key]) { input = node('select'); const choices = numericChoices || Object.fromEntries(config.choices[key].map(choice => [choice, ['TMOD_RESTART_MODE', 'TMOD_BACKUP_MODE'].includes(key) ? restartModeLabels[choice] || choice : ['TMOD_RESTART_WEEKDAY', 'TMOD_BACKUP_WEEKDAY'].includes(key) ? choice[0].toUpperCase() + choice.slice(1) : choice])); for (const [choice, title] of Object.entries(choices)) { const option = node('option', title + (numericChoices ? ' (' + choice + ')' : '')); option.value = choice; input.append(option); } }
 
     else { input = node('input'); input.type = config.ranges[key] ? 'number' : 'text'; if (config.ranges[key]) { [input.min, input.max] = config.ranges[key]; input.step = '1'; } }
 
@@ -560,14 +697,36 @@ async function loadSettings() {
 
     }
 
-    section.append(grid); return section;
+    section.append(grid);
+    if (group.id === 'restart' || group.id === 'backup') {
+      const prefix = group.id === 'restart' ? 'TMOD_RESTART' : 'TMOD_BACKUP';
+      section.querySelector('[name="' + prefix + '_MODE"]')?.addEventListener('change', () => updateRestartFields(section, prefix));
+      updateRestartFields(section, prefix);
+    }
+    return section;
 
   });
 
-  $('fields').replaceChildren(...sections);
+  const serverSection = sections.find(section => section.id === 'config-server');
+  if (serverSection) serverSection.append($('server-password-controls'));
+  const scheduling = node('fieldset', undefined, 'config-section scheduling-group');
+  scheduling.id = 'config-scheduling'; scheduling.setAttribute('aria-labelledby', 'scheduling-heading');
+  const schedulingHeading = node('legend', 'Scheduling'); schedulingHeading.id = 'scheduling-heading';
+  scheduling.append(schedulingHeading, node('p', 'Manage automatic backups, world saves, and game restarts.', 'muted'));
+  const groupedSections = [];
+  for (const section of sections) {
+    if (scheduleIds.has(section.id.replace('config-', ''))) {
+      if (!groupedSections.includes(scheduling)) groupedSections.push(scheduling);
+      scheduling.append(section);
+    } else groupedSections.push(section);
+  }
+  $('fields').replaceChildren(...groupedSections);
+  renderRestartSchedule();
+  renderBackupSchedule();
   renderAttention();
 
-  $('config-jumps').replaceChildren(...configurationGroups.map(group => { const link = node('a', group.title); link.href = '#config-' + group.id; return link; }));
+  const navigationGroups = configurationGroups.flatMap(group => group.id === 'backup' ? [{id: 'scheduling', title: 'Scheduling'}] : scheduleIds.has(group.id) ? [] : [group]);
+  $('config-jumps').replaceChildren(...navigationGroups.map(group => { const link = node('a', group.title); link.href = '#config-' + group.id; return link; }));
 
   $('search-help').textContent = config.workshop_search ? 'Steam API key configured. Browse mods and check their Workshop dependencies before adding them. Steam metadata does not guarantee multiplayer or version compatibility.' : 'Enter a Steam API key below. After Steam validates it, the key field is hidden and search is unlocked.';
   $('workshop-key-form').hidden = !!config.workshop_search;

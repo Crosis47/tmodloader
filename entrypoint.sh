@@ -11,6 +11,7 @@ config_path="$generated_config_path"
 server_runner="${TMOD_SERVER_RUNNER:-/terraria-server/run-server.sh}"
 server_pid=""
 autosave_pid=""
+countdown_pid=""
 admin_pid=""
 admin_failed=0
 shutdown_requested=0
@@ -108,11 +109,16 @@ shutdown() {
     fi
     shutdown_requested=1
     trap '' TERM INT
+    if [[ -n "$countdown_pid" ]]; then
+        kill "$countdown_pid" 2>/dev/null || true
+        wait "$countdown_pid" 2>/dev/null || true
+        countdown_pid=""
+    fi
     stop_autosave
 
     if server_is_running; then
         inject "say $TMOD_SHUTDOWN_MESSAGE" || true
-        sleep 3
+        sleep "$((10#${TMOD_SHUTDOWN_DELAY:-3}))"
         inject "exit" || true
         deadline=$((SECONDS + ${TMOD_SHUTDOWN_TIMEOUT:-90}))
         if ! wait_for_server_exit "$deadline"; then
@@ -128,6 +134,7 @@ shutdown() {
 }
 
 cleanup() {
+    if [[ -n "$countdown_pid" ]]; then kill "$countdown_pid" 2>/dev/null || true; fi
     stop_autosave
     if [[ -n "$admin_pid" ]]; then
         kill "$admin_pid" 2>/dev/null || true
@@ -158,6 +165,11 @@ eval "$admin_exports"
 unset admin_exports
 [[ "${TMOD_WEB_ENABLED:-1}" =~ ^[01]$ ]] || fail "TMOD_WEB_ENABLED must be 0 or 1."
 reject_line_breaks TMOD_SHUTDOWN_MESSAGE "$TMOD_SHUTDOWN_MESSAGE"
+reject_line_breaks TMOD_AUTOSAVE_MESSAGE "${TMOD_AUTOSAVE_MESSAGE-}"
+reject_line_breaks TMOD_RESTART_MESSAGE "${TMOD_RESTART_MESSAGE-}"
+[[ "${TMOD_RESTART_INTERVAL:-0}" =~ ^[0-9]{1,7}$ ]] || fail "TMOD_RESTART_INTERVAL must be an integer from 0 through 9999999."
+[[ "${TMOD_RESTART_DELAY:-60}" =~ ^[0-9]{1,4}$ ]] && ((10#${TMOD_RESTART_DELAY:-60} <= 3600)) || fail "TMOD_RESTART_DELAY must be an integer from 0 through 3600."
+[[ "${TMOD_SHUTDOWN_DELAY:-3}" =~ ^[0-9]{1,4}$ ]] && ((10#${TMOD_SHUTDOWN_DELAY:-3} <= 3600)) || fail "TMOD_SHUTDOWN_DELAY must be an integer from 0 through 3600."
 [[ "${TMOD_AUTOSAVE_INTERVAL:-}" =~ ^[0-9]+$ ]] || fail "TMOD_AUTOSAVE_INTERVAL must be a non-negative integer."
 [[ "${TMOD_SHUTDOWN_TIMEOUT:-90}" =~ ^[1-9][0-9]*$ ]] || fail "TMOD_SHUTDOWN_TIMEOUT must be a positive integer."
 TMOD_LOG_LEVEL="${TMOD_LOG_LEVEL:-normal}"
@@ -173,8 +185,8 @@ export TMOD_LOG_LEVEL TMOD_CRASH_LOG_LINES TMOD_CONTROL_PIPE TMOD_SERVER_PID_FIL
 [[ "${TMOD_BACKUP_INTERVAL:-0}" =~ ^[0-9]{1,7}$ ]] || fail "TMOD_BACKUP_INTERVAL must be a non-negative integer (minutes, maximum 9999999)."
 [[ "${TMOD_BACKUP_KEEP:-7}" =~ ^[1-9][0-9]{0,5}$ ]] || fail "TMOD_BACKUP_KEEP must be a positive integer (maximum 999999)."
 [[ "${TMOD_BACKUP_MIN_FREE_MB:-1024}" =~ ^[0-9]{1,9}$ ]] || fail "TMOD_BACKUP_MIN_FREE_MB must be a non-negative integer (maximum 999999999)."
-backup_interval=$((10#${TMOD_BACKUP_INTERVAL:-0} * 60))
-if ((backup_interval > 0)); then
+python3 /terraria-server/admin_backup_schedule.py reset || fail "Invalid backup schedule."
+if python3 /terraria-server/admin_backup_schedule.py enabled; then
     tmod-backup _preflight || fail "Scheduled backups require a writable /backups mount."
 fi
 ensure_writable_directory /data/steamMods
@@ -245,6 +257,7 @@ start_server() {
 printf '[SYSTEM] Launching tModLoader with %s\n' "$config_path"
 TMOD_SCRIPT_CALLER="$(python3 /terraria-server/runtime_updates.py launcher)" || return 1
 export TMOD_SCRIPT_CALLER
+python3 /terraria-server/admin_restart.py reset || return 1
 setsid --wait "$server_runner" "$config_path" <&3 &
 server_pid=$!
 printf '%s\n' "$server_pid" > "$pid_path"
@@ -259,6 +272,7 @@ fi
 
 perform_backup() {
     local request_id="$1" status=0 deadline archive
+    python3 /terraria-server/admin_backup_schedule.py reset
     python3 /terraria-server/admin_metrics.py running "Preparing cold backup" || true
     if ! healthcheck; then
         python3 /terraria-server/admin_metrics.py failed "Server is not healthy; backup was not started" || true
@@ -385,8 +399,7 @@ perform_admin_apply() {
         python3 /terraria-server/admin_settings.py snapshot
         printf '[ADMIN] Settings applied and game health validated.\n'
     fi
-    backup_interval=$((10#${TMOD_BACKUP_INTERVAL:-0} * 60))
-    next_backup=$((SECONDS + backup_interval))
+    python3 /terraria-server/admin_backup_schedule.py reset
     jq -n --arg id "$request_id" --argjson status "$status" '{id:$id,status:$status}' > "$runtime_dir/admin-result.tmp"
     mv "$runtime_dir/admin-result.tmp" "$runtime_dir/admin-result"
 }
@@ -469,8 +482,7 @@ perform_recovery() {
             fi
         fi
     fi
-    backup_interval=$((10#${TMOD_BACKUP_INTERVAL:-0} * 60))
-    next_backup=$((SECONDS + backup_interval))
+    python3 /terraria-server/admin_backup_schedule.py reset
     jq -n --arg id "$request_id" --argjson status "$status" --arg detail "$detail" '{id:$id,status:$status,detail:$detail}' > "$runtime_dir/admin-result.tmp"
     mv "$runtime_dir/admin-result.tmp" "$runtime_dir/admin-result"
 }
@@ -481,6 +493,73 @@ reload_runtime_settings() {
     # shellcheck disable=SC1091
     source "$runtime_dir/admin.env"
     python3 /terraria-server/admin_settings.py snapshot
+}
+
+perform_scheduled_restart() {
+    local request_id="$1" kind="${2:-scheduled}" status=0 deadline countdown_status=0 detail='Restart completed; game health verified.'
+    admin_progress warning 'Restart countdown in progress; postpone or skip before saving begins.'
+    python3 /terraria-server/admin_restart.py countdown "$kind" &
+    countdown_pid=$!
+    wait "$countdown_pid" || countdown_status=$?
+    countdown_pid=""
+    if ((countdown_status != 0)); then
+        if ((countdown_status == 2)); then
+            detail='Restart postponed or skipped; game was not stopped.'
+        else
+            detail='Restart countdown failed; game was not stopped. Inspect the console.'
+            status=1
+            python3 /terraria-server/admin_restart.py failed "$detail"
+        fi
+        jq -n --arg id "$request_id" --argjson status "$status" --arg detail "$detail" '{id:$id,status:$status,detail:$detail}' > "$runtime_dir/admin-result.tmp"
+        mv "$runtime_dir/admin-result.tmp" "$runtime_dir/admin-result"
+        return
+    fi
+    stop_autosave
+    admin_progress stopping 'Saving the world and stopping the game.'
+    if server_is_running; then
+        inject exit || status=1
+        if ! wait_for_server_exit "$((SECONDS + ${TMOD_SHUTDOWN_TIMEOUT:-90}))"; then
+            signal_server_group TERM
+            wait_for_server_exit "$((SECONDS + 5))" || signal_server_group KILL
+            status=1
+        fi
+        wait "$server_pid" || status=1
+    else
+        status=1
+    fi
+    server_pid=''
+    rm -f "$pid_path"
+    if ((status == 0)); then
+        exec 3>&-
+        rm -f "$control_pipe"
+        mkfifo -m 0600 "$control_pipe"
+        exec 3<> "$control_pipe"
+        admin_progress health 'Starting the game and checking readiness.'
+        start_server || status=1
+        deadline=$((SECONDS + ${TMOD_UPDATE_TEST_TIMEOUT:-600}))
+        while ((status == 0)) && ! healthcheck; do
+            if ! server_is_running || ((SECONDS >= deadline)); then status=1; break; fi
+            sleep 2
+        done
+    fi
+    if ((status != 0)); then
+        stop_autosave
+        signal_server_group TERM
+        wait_for_server_exit "$((SECONDS + 5))" || signal_server_group KILL
+        wait "$server_pid" 2>/dev/null || true
+        server_pid=''
+        rm -f "$pid_path"
+        admin_failed=1
+        detail='Scheduled restart failed. Automatic retries paused; inspect the console and restart or recover from the dashboard.'
+        python3 /terraria-server/admin_restart.py failed "$detail"
+    else
+        admin_failed=0
+    fi
+    printf '[RESTART] %s\n' "$detail"
+    jq -n --arg id "$request_id" --argjson status "$status" --arg detail "$detail" '{id:$id,status:$status,detail:$detail}' > "$runtime_dir/admin-result.tmp"
+    mv "$runtime_dir/admin-result.tmp" "$runtime_dir/admin-result"
+    # Without a dashboard, let Docker's restart policy handle a failed game.
+    if ((status != 0)) && [[ "${TMOD_WEB_ENABLED:-1}" == 0 ]]; then exit 1; fi
 }
 
 perform_runtime_update() {
@@ -550,8 +629,7 @@ perform_runtime_update() {
         # Clear a stale busy marker so the administrator can retry recovery.
         python3 -c 'import runtime_updates as r, admin_updates as u; s=u.read(u.ROOT / "status.json"); r.report("blocked", "Dashboard restart failed; inspect diagnostics and retry.", checkpoint=s.get("checkpoint"))'
     fi
-    backup_interval=$((10#${TMOD_BACKUP_INTERVAL:-0} * 60))
-    next_backup=$((SECONDS + backup_interval))
+    python3 /terraria-server/admin_backup_schedule.py reset
     jq -n --arg id "$request_id" --argjson status "$status" --arg detail "$detail" '{id:$id,status:$status,detail:$detail}' > "$runtime_dir/admin-result.tmp"
     mv "$runtime_dir/admin-result.tmp" "$runtime_dir/admin-result"
 }
@@ -576,7 +654,7 @@ if python3 /terraria-server/runtime_updates.py needs-confirmation; then
     fi
 fi
 fi
-next_backup=$((SECONDS + backup_interval))
+python3 /terraria-server/admin_backup_schedule.py reset
 while server_is_running || ((admin_failed)); do
     if [[ -f /data/.tmod-control/updates/recovery-cleanup.json ]] && healthcheck; then
         python3 /terraria-server/runtime_updates.py finish-recovery || true
@@ -590,7 +668,11 @@ while server_is_running || ((admin_failed)); do
         request_archive="$(jq -r '.archive // ""' "$runtime_dir/admin-request")"
         request_checksum="$(jq -r '.sha256 // ""' "$runtime_dir/admin-request")"
         rm -f "$runtime_dir/admin-request"
-        if [[ "$request_kind" == runtime-update ]]; then
+        if [[ "$request_kind" == restart ]]; then
+            perform_scheduled_restart "$request_id" manual
+        elif [[ "$request_kind" == scheduled-restart ]]; then
+            perform_scheduled_restart "$request_id"
+        elif [[ "$request_kind" == runtime-update ]]; then
             perform_runtime_update "$request_id"
         elif [[ "$request_kind" == restore || "$request_kind" == retry ]]; then
             perform_recovery "$request_id" "$request_kind" "$request_archive" "$request_checksum"
@@ -601,13 +683,13 @@ while server_is_running || ((admin_failed)); do
         request_id="$(<"$runtime_dir/backup-request")"
         rm -f "$runtime_dir/backup-request"
         perform_backup "$request_id"
-        next_backup=$((SECONDS + backup_interval))
-    elif ((backup_interval > 0 && SECONDS >= next_backup)); then
-        if healthcheck; then
+        python3 /terraria-server/admin_backup_schedule.py reset
+    elif [[ "${TMOD_WEB_ENABLED:-1}" == 0 ]] && ((SECONDS % 5 == 0)); then
+        if python3 /terraria-server/admin_backup_schedule.py due && healthcheck; then
             perform_backup scheduled
-            next_backup=$((SECONDS + backup_interval))
-        else
-            next_backup=$((SECONDS + 30))
+            python3 /terraria-server/admin_backup_schedule.py reset
+        elif python3 /terraria-server/admin_restart.py due && healthcheck; then
+            perform_scheduled_restart scheduled
         fi
     fi
     sleep 1
