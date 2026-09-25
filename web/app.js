@@ -653,7 +653,7 @@ async function loadSettings() {
     const heading = node(nestedCard ? 'h4' : 'legend', group.title);
     heading.id = 'config-heading-' + group.id;
     section.setAttribute('aria-labelledby', heading.id);
-    section.append(heading, node('p', group.description, 'muted')); 
+    section.append(heading, node('p', group.description, 'muted'));
     if (group.id === 'restart' || group.id === 'backup') {
       const scheduleStatus = node('p', '', 'muted'); scheduleStatus.id = group.id === 'restart' ? 'restart-schedule-status' : 'backup-config-status';
       scheduleStatus.setAttribute('role', 'status'); section.append(scheduleStatus);
