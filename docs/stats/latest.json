@@ -1,10 +1,10 @@
 {
-  "updated_at": "2026-09-29 15:58 UTC",
+  "updated_at": "2026-09-29 20:53 UTC",
   "repository": "Crosis47/tmodloader",
   "docker_image": "crosis47/tmodloader",
   "ghcr_image": "ghcr.io/crosis47/tmodloader",
   "metrics": {
-    "docker_pulls": 1764,
+    "docker_pulls": 1766,
     "docker_stars": 0,
     "github_stars": 1,
     "github_forks": 0,
