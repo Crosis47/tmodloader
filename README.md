@@ -4,21 +4,21 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/Crosis47/tmodloader/docker-ci.yml?logo=github&label=docker%20CI&style=for-the-badge)](https://github.com/Crosis47/tmodloader/actions/workflows/docker-ci.yml)
 
 <!-- repository-stats:start -->
-[![Docker pulls](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/docker_pulls-dc33c8c7ea5ad2a5.svg)](https://hub.docker.com/r/crosis47/tmodloader)
+[![Docker pulls](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/docker_pulls-69853995d060aa97.svg)](https://hub.docker.com/r/crosis47/tmodloader)
 [![Docker stars](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/docker_stars-24ed5757f6c84e3d.svg)](https://hub.docker.com/r/crosis47/tmodloader)
-[![GHCR pulls](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_pulls-2d8b42519ad71f7b.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
-[![GHCR pulls / 7d](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_week-e7f3ddc294308948.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
+[![GHCR pulls](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_pulls-e198a0c457adb74f.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
+[![GHCR pulls / 7d](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_week-35c56c533cfd59a3.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
 
-[![GHCR pulls today](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_day-79151f8199c1ee84.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
+[![GHCR pulls today](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_day-0479743935bf0bdd.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
 [![GitHub stars](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/github_stars-fd5ca1e35dbd7d59.svg)](https://github.com/Crosis47/tmodloader/stargazers)
 [![GitHub forks](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/github_forks-e70b3cb58c16001c.svg)](https://github.com/Crosis47/tmodloader/forks)
 
 [![Issues open](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/issues_open-f0568da46a219a08.svg)](https://github.com/Crosis47/tmodloader/issues?q=is%3Aissue+is%3Aopen)
 [![Issues closed](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/issues_closed-b2e439a556d248d3.svg)](https://github.com/Crosis47/tmodloader/issues?q=is%3Aissue+is%3Aclosed)
 [![PRs open](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_open-bea1ff39483dae9f.svg)](https://github.com/Crosis47/tmodloader/pulls)
-[![PRs merged](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_merged-50332b517e81b0af.svg)](https://github.com/Crosis47/tmodloader/pulls?q=is%3Apr+is%3Amerged)
+[![PRs merged](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_merged-143e190d6db21ba9.svg)](https://github.com/Crosis47/tmodloader/pulls?q=is%3Apr+is%3Amerged)
 
-Updated **2026-09-30 19:27 UTC** · Refreshed hourly · [Metric definitions](docs/repository-stats.md)
+Updated **2026-09-30 23:56 UTC** · Refreshed hourly · [Metric definitions](docs/repository-stats.md)
 <!-- repository-stats:end -->
 
 Run a modded Terraria server in Docker, with a built-in web dashboard for managing
