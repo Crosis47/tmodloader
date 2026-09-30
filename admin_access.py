@@ -24,7 +24,15 @@ def origin_parts(value):
     return parsed
 
 
+def web_port():
+    value = os.environ.get('TMOD_WEB_PORT', '8080')
+    if not value.isascii() or not value.isdecimal() or not 1 <= int(value) <= 65535:
+        raise ValueError('TMOD_WEB_PORT must be an integer between 1 and 65535.')
+    return int(value)
+
+
 def validate_config():
+    web_port()
     if os.environ.get('TMOD_WEB_ORIGIN'):
         origin_parts(os.environ['TMOD_WEB_ORIGIN'])
     if os.environ.get('TMOD_WEB_TRUSTED_PROXY'):

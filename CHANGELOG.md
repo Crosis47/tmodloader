@@ -13,6 +13,17 @@ installed tModLoader release.
 
 ## [Unreleased]
 
+## [3.7.0] - 2026-09-30
+
+### Added
+
+- Configurable dashboard listening port through `TMOD_WEB_PORT`, including Compose mapping support.
+- Container-local health probe that accepts pending admin setup, then requires both the dashboard and game to be healthy. Headless deployments check the game. The default startup grace period is 60 seconds, with a Compose override for longer headless startup.
+
+### Changed
+
+- The supplied Compose configuration uses the existing `TMOD_HOST_PORT` setting for both game ports and passes it to the container as `TMOD_PORT`. Existing Compose files with separate port mappings remain supported.
+
 ### Fixed
 
 - Authenticate GitHub release discovery during CI smoke tests to avoid shared runner anonymous API rate limits. The temporary token is passed at runtime, never baked into images or attached to asset downloads.

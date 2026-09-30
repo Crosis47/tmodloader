@@ -280,6 +280,7 @@ ENV TMOD_BACKUP_INTERVAL="0"
 ENV TMOD_BACKUP_KEEP="7"
 ENV TMOD_BACKUP_MIN_FREE_MB="1024"
 ENV TMOD_WEB_ENABLED="1"
+ENV TMOD_WEB_PORT="8080"
 ENV TMOD_CONFIG_SOURCE="env"
 ENV TMOD_WEB_ORIGIN=""
 ENV TMOD_WEB_TRUSTED_PROXY=""
@@ -303,8 +304,9 @@ RUN sha256sum VERSION entrypoint.sh run-server.sh create_world.py backup.py admi
 # entrypoint, leaving no root-owned wrapper process behind.
 USER root:root
 
-# Startup may stage downloads and test a copied modded world before live launch.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30m --retries=3 CMD ["healthcheck"]
+# WebUI setup is healthy while waiting for credentials; after setup, require the game.
+# Headless deployments can override the grace period for initial runtime downloads.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD ["healthcheck", "--container"]
 
 STOPSIGNAL SIGTERM
 

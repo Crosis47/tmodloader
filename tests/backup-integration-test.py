@@ -51,7 +51,12 @@ with tempfile.TemporaryDirectory(prefix='tmod-backup-integration-') as temp:
         assert data.stat().st_uid == 1000
         backup.docker('start', name)
         backup.wait_healthy(name, 600)
-        assert json.loads(backup.docker('inspect', name))[0]['State']['Health']['Status'] == 'healthy'
+        # Game readiness can precede Docker's next scheduled health probe.
+        deadline = time.monotonic() + 60
+        while json.loads(backup.docker('inspect', name))[0]['State']['Health']['Status'] != 'healthy':
+            if time.monotonic() > deadline:
+                raise AssertionError('Headless container health did not become healthy')
+            time.sleep(2)
         existing = {p.name for p in bundles.glob('tmod-backup-*')}
         deadline = time.monotonic() + 180
         while not ({p.name for p in bundles.glob('tmod-backup-*')} - existing):
@@ -66,5 +71,8 @@ with tempfile.TemporaryDirectory(prefix='tmod-backup-integration-') as temp:
             time.sleep(2)
         assert len(list(bundles.glob('tmod-backup-*'))) <= 2
         print('Real-server backup, restore, ownership, and health checks passed.')
+    except Exception:
+        subprocess.run(['docker', 'logs', '--tail', '1000', name], check=False)
+        raise
     finally:
         backup.docker('rm', '-f', name)

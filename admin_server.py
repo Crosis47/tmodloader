@@ -667,6 +667,16 @@ def application(environ, start_response):
                ('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://*.steamusercontent.com https://*.steamstatic.com https://*.akamaihd.net; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")]
     path, method = environ.get('PATH_INFO', '/'), environ['REQUEST_METHOD']
     try:
+        if path == '/healthz':
+            # Container-local readiness only; never expose authentication or game state.
+            if (method != 'GET' or not admin_access.address(environ.get('REMOTE_ADDR', '')).is_loopback
+                    or any(key == 'HTTP_FORWARDED' or key.startswith('HTTP_X_FORWARDED_') for key in environ)):
+                raise PermissionError('Local healthcheck only.')
+            ready = not TOKEN_HASH or health()
+            body = b'ok' if ready else b'unavailable'
+            start_response('200 OK' if ready else '503 Service Unavailable',
+                           headers + [('Content-Type', 'text/plain'), ('Content-Length', str(len(body)))])
+            return [body]
         admin_access.check_request(environ)
         if path.startswith('/api/'):
             supplied = environ.get('HTTP_AUTHORIZATION', '')
@@ -756,9 +766,9 @@ def main():
     from waitress import serve
     threading.Thread(target=update_announcement_worker, daemon=True).start()
     threading.Thread(target=scheduled_restart_worker, daemon=True).start()
-    print('[ADMIN] Open ' + (os.environ.get('TMOD_WEB_ORIGIN') or 'http://<server-IP>:<dashboard-port> (default 8080)') + ' in your browser.', flush=True)
-    print('[ADMIN] Private administration interface listening on port 8080.', flush=True)
-    serve(application, host='0.0.0.0', port=8080, threads=4, connection_limit=32,
+    print('[ADMIN] Open ' + (os.environ.get('TMOD_WEB_ORIGIN') or f'http://<server-IP>:<published-dashboard-port> (container port {admin_access.web_port()})') + ' in your browser.', flush=True)
+    print(f'[ADMIN] Private administration interface listening on port {admin_access.web_port()}.', flush=True)
+    serve(application, host='0.0.0.0', port=admin_access.web_port(), threads=4, connection_limit=32,
           # admin_access validates raw headers against the unchanged socket peer.
           channel_timeout=30, max_request_body_size=524288, clear_untrusted_proxy_headers=False)
 

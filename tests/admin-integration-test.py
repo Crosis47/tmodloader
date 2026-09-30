@@ -24,15 +24,16 @@ try:
                   '--cap-add', 'FOWNER', '--cap-add', 'SETGID', '--cap-add', 'SETUID',
                   '--security-opt', 'no-new-privileges:true',
                   '--volume', '/data', '--volume', '/backups',
-                  '-p', '127.0.0.1::8080',
+                  '-p', '127.0.0.1::30504',
+                  '-e', 'TMOD_WEB_PORT=30504', '-e', 'TMOD_PORT=30505',
                   '-e', 'TMOD_CONFIG_SOURCE=web', '-e', 'TMOD_AUTO_UPDATE=0', '-e', 'TMOD_WORLDSIZE=1',
                   '-e', 'TMOD_AUTOSAVE_INTERVAL=0', '-e', 'TMOD_PASS=test-password', image)
     info = json.loads(backup.docker('inspect', name))[0]
-    port = info['NetworkSettings']['Ports']['8080/tcp'][0]['HostPort']
+    port = info['NetworkSettings']['Ports']['30504/tcp'][0]['HostPort']
     base = f'http://127.0.0.1:{port}'
 
     def api(path, data=None, authenticated=True):
-        headers = {'Host': 'localhost:8080', 'Content-Type': 'application/json'}
+        headers = {'Host': 'localhost:30504', 'Content-Type': 'application/json'}
         if authenticated:
             headers['Authorization'] = 'Bearer ' + token
         request = urllib.request.Request(base + path, headers=headers,
@@ -50,9 +51,21 @@ try:
             raise AssertionError('First-run setup did not start')
         time.sleep(1)
     backup.docker('exec', name, 'test', '!', '-e', '/tmp/tmodloader/server.pid')
-    request = urllib.request.Request(base + '/', headers={'Host': 'localhost:8080'})
+    request = urllib.request.Request(base + '/', headers={'Host': 'localhost:30504'})
     with urllib.request.urlopen(request, timeout=15) as response:
         assert b'Create your admin token' in response.read()
+    # Dashboard readiness must not imply a running game or require admin setup.
+    deadline = time.monotonic() + 60
+    while json.loads(backup.docker('inspect', name))[0]['State']['Health']['Status'] != 'healthy':
+        if time.monotonic() >= deadline:
+            raise AssertionError('Dashboard did not become healthy before setup')
+        time.sleep(1)
+    assert subprocess.run(['docker', 'exec', name, 'healthcheck'], capture_output=True).returncode != 0
+    try:
+        api('/healthz', authenticated=False)
+        raise AssertionError('Readiness endpoint must be container-local')
+    except urllib.error.HTTPError as error:
+        assert error.code == 403
     assert api('/api/setup', {'code': match.group(1), 'token': token, 'confirm': token}, authenticated=False)['ready']
     encoded = backup.docker('exec', name, 'cat', '/data/admin/token.argon2')
     assert encoded.startswith('$argon2id$')
@@ -188,6 +201,7 @@ try:
     api('/api/recovery/retry', {'confirm': True})
     job('failed')
     assert not api('/api/status')['healthy']
+    assert subprocess.run(['docker', 'exec', name, 'healthcheck', '--container'], capture_output=True).returncode != 0
     # Explicit evidence fixture: exercise offline moderation without pretending
     # this is an authenticated multiplayer client or a verified account.
     backup.docker('exec', name, 'python3', '-c',
@@ -222,7 +236,7 @@ try:
     backup.wait_healthy(name, 600)
     # Docker may assign a new ephemeral host port when restarting the container.
     info = json.loads(backup.docker('inspect', name))[0]
-    port = info['NetworkSettings']['Ports']['8080/tcp'][0]['HostPort']
+    port = info['NetworkSettings']['Ports']['30504/tcp'][0]['HostPort']
     base = f'http://127.0.0.1:{port}'
     assert api('/api/settings')['running']['TMOD_MAXPLAYERS'] == '5'
     backup.docker('exec', name, 'bash', '-c', 'grep -Fxq "password=dashboard-password" /terraria-server/serverconfig.txt')
