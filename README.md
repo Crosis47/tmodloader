@@ -334,8 +334,9 @@ These are the main values to review for a new server:
 | --- | --- |
 | `TMOD_CONFIG_SOURCE` | `env` for `.env` settings; `web` for dashboard-managed settings. |
 | `TMOD_WEB_ENABLED` | `1` enables the dashboard; `0` disables it and skips admin setup. |
+| `TMOD_WEB_PORT` | Dashboard listening port inside the container (default `8080`). Match the container side of your port mapping. Not editable in the dashboard. |
 | `TMOD_PASS` | Initial game password, separate from the admin token. Empty means no game password. A saved Configuration password overrides it in web-managed mode. |
-| `TMOD_HOST_PORT` | Port players connect to; defaults to `7777`. |
+| `TMOD_HOST_PORT` | Game listening and published port in the supplied Compose configuration; defaults to `7777`. |
 | `TMOD_WORLDNAME` | Selects a saved world or creates it if missing; defaults to `Docker`. |
 | `TMOD_WORLDSIZE` | New world size: `1` small, `2` medium, `3` large (default). |
 | `TMOD_DIFFICULTY` | New world difficulty: `0` Classic, `1` Expert (default), `2` Master, `3` Journey. |
@@ -559,3 +560,34 @@ For GitHub API rate limits during release discovery, optionally provide
 requires no additional repository permissions. It is used only for GitHub API
 requests, is not a dashboard setting, and is not included in image builds.
 CI smoke tests use their temporary workflow token automatically.
+
+### Game port configuration
+
+The supplied Compose configuration uses `TMOD_HOST_PORT` for both the published
+port and game listening port, passing it to the container as `TMOD_PORT`. Existing
+Compose files that map separate host and container ports continue to work; the
+container still supports `TMOD_PORT` (default `7777`). When adopting the supplied
+Compose configuration with a custom server configuration file, set that file's
+listening port to match `TMOD_HOST_PORT`.
+
+### Container and game readiness
+
+With WebUI enabled, Docker health checks the dashboard while first-time admin setup
+is waiting. After admin setup, both the dashboard and game must be healthy. A stopped
+or failed game reports unhealthy after Docker's configured failed checks, while the
+dashboard remains available for recovery. Downloads, world generation, backups, and
+intentional game stops can also temporarily report unhealthy; health status alone
+does not restart the container. The dashboard reports game readiness separately.
+With `TMOD_WEB_ENABLED=0`, Docker health checks game readiness only.
+
+The default startup grace period is 60 seconds, with checks every 30 seconds and three
+failures required to report unhealthy. A successful check ends the startup grace period.
+For headless first-start downloads and world generation, set
+`TMOD_HEALTH_START_PERIOD=30m` in the supplied Compose `.env`, or use Docker's
+`--health-start-period=30m`. This is a deployment setting, not a WebUI setting.
+
+`healthcheck --container` selects the appropriate check; `healthcheck` (or `--game`)
+always checks the game. Internal update and recovery operations use game readiness.
+The dashboard readiness endpoint `/healthz` is accessible only from container loopback
+and returns no credentials or game information. Deployment ports, mounts, and settings
+management mode remain controlled outside the dashboard.

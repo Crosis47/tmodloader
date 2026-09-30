@@ -55,7 +55,9 @@ def wait_healthy(container, timeout):
         state = json.loads(docker('inspect', container))[0]['State']
         if not state['Running']:
             raise RuntimeError('Server exited during startup; inspect docker logs.')
-        if state.get('Health', {}).get('Status') == 'healthy':
+        # Container health may indicate only dashboard readiness during setup/recovery.
+        if subprocess.run(['docker', 'exec', container, 'healthcheck'],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
             return
         time.sleep(2)
     raise RuntimeError('Server did not become healthy before the timeout; inspect docker logs.')

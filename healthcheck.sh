@@ -6,6 +6,19 @@ if [[ "$(id -u)" == "0" ]]; then
     exec /usr/bin/setpriv --reuid=tml --regid=tml --init-groups --no-new-privs -- "$0" "$@"
 fi
 
+mode="${1:---game}"
+[[ "$#" -le 1 && ( "$mode" == --game || "$mode" == --container ) ]] || exit 1
+if [[ "$mode" == --container ]]; then
+    [[ "${TMOD_WEB_ENABLED:-1}" =~ ^[01]$ ]] || exit 1
+    if [[ "${TMOD_WEB_ENABLED:-1}" == 1 ]]; then
+        port="${TMOD_WEB_PORT:-8080}"
+        [[ "$port" =~ ^[0-9]+$ ]] || exit 1
+        ((10#$port >= 1 && 10#$port <= 65535)) || exit 1
+        exec curl --noproxy '*' --fail --silent --show-error --max-time 3 \
+            "http://127.0.0.1:$((10#$port))/healthz"
+    fi
+fi
+
 port="${TMOD_PORT:-7777}"
 log_path="/data/tModLoader/Logs/server.log"
 runtime_dir="${TMOD_RUNTIME_DIR:-/tmp/tmodloader}"
