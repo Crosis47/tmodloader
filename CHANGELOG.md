@@ -13,11 +13,11 @@ installed tModLoader release.
 
 ## [Unreleased]
 
-## [3.7.2] - 2026-10-01
-
 ### Changed
 
 - Use the container settings `TMOD_PORT` and `TMOD_WEB_PORT` directly for both listeners and published ports in Compose. Keep `TMOD_HOST_PORT` and `TMOD_WEB_HOST_PORT` as Compose compatibility fallbacks; the recommended names take precedence.
+
+## [3.7.2] - 2026-10-01
 
 ### Fixed
 
