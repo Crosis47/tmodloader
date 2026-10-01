@@ -567,9 +567,12 @@ Set `TMOD_PORT` for the game (default `7777`) and `TMOD_WEB_PORT` for the dashbo
 (default `8080`). The supplied Compose configuration uses each setting directly
 for both the container listener and published host port.
 
-When adopting this Compose file, rename existing `.env` entries from
-`TMOD_HOST_PORT` to `TMOD_PORT` and `TMOD_WEB_HOST_PORT` to `TMOD_WEB_PORT`, keeping
-your chosen values. If using a custom server configuration file, its game listening
+For compatibility, Compose accepts `TMOD_HOST_PORT` and `TMOD_WEB_HOST_PORT`
+as fallbacks when their corresponding recommended setting is unset or empty.
+`TMOD_PORT` and `TMOD_WEB_PORT` take precedence when both names are supplied.
+Use the recommended names for new configurations.
+
+If using a custom server configuration file, its game listening
 port must match `TMOD_PORT`. Custom Compose files can still map different host and
 container ports using Docker's normal port mapping.
 
