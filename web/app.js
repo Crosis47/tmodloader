@@ -54,7 +54,12 @@ themePreference.addEventListener('change', event => {
 });
 
 
-const tell = text => { $('message').textContent = text; };
+let messageView = '';
+const tell = (text, view = '') => {
+  if (view && $(view).hidden) return;
+  messageView = view;
+  $('message').textContent = text;
+};
 
 const bytes = n => {
   if (n == null) return 'Unavailable';
@@ -224,7 +229,7 @@ function showApplyProgress(job) {
 
   applyClose.textContent = job.state === 'running' ? 'Please wait for the apply to finish' : 'Return to dashboard';
 
-  if (!applyDialog.open && (job.state === 'running' || dismissedApply !== currentApply)) { $('confirmation').close(); applyDialog.showModal(); }
+  if (!applyDialog.open && (job.state === 'running' || (job.state === 'failed' && dismissedApply !== currentApply))) { $('confirmation').close(); applyDialog.showModal(); }
 
   const stages = [['queued', 'Queued'], ['stopping', 'Save & stop'], ['settings', 'Write settings'], ['mods', 'Update mods'], ['starting', 'Start game'], ['health', 'Check health']];
 
@@ -1365,7 +1370,7 @@ $('login-form').onsubmit = action(async () => { token = $('token').value; await 
 
 $('logout').onclick = () => { token = ''; config = null; commandHistory = []; clearInterval(timer); clearInterval(consoleTimer); location.reload(); };
 
-document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => { document.querySelectorAll('.view').forEach(view => { view.hidden = view.id !== button.dataset.view; }); document.querySelectorAll('nav [data-view]').forEach(item => { item.removeAttribute('aria-current'); if (item.dataset.view === button.dataset.view) item.setAttribute('aria-current', 'page'); }); if (button.dataset.view === 'console') { refreshConsole().catch(error => tell(error.message)); $('console-command').focus(); } });
+document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => { if (messageView && messageView !== button.dataset.view) tell(''); document.querySelectorAll('.view').forEach(view => { view.hidden = view.id !== button.dataset.view; }); document.querySelectorAll('nav [data-view]').forEach(item => { item.removeAttribute('aria-current'); if (item.dataset.view === button.dataset.view) item.setAttribute('aria-current', 'page'); }); if (button.dataset.view === 'console') { refreshConsole().catch(error => tell(error.message)); $('console-command').focus(); } });
 
 $('console-form').onsubmit = action(async () => {
 
@@ -1456,9 +1461,10 @@ $('search-form').onsubmit = action(async () => { page = 1; await search(); });
 $('show-current-mods').onclick = action(async () => {
   const button = $('show-current-mods'); button.disabled = true;
   try {
-    await loadSettings();
-    const entries = [...new Set((config.running.TMOD_MODS || '').split(',').map(value => value.trim()).filter(Boolean))];
-    tell('Loading the running Workshop selection…');
+    // Viewing running mods must not reload or alter the configuration editor.
+    const current = await api('/api/settings');
+    const entries = [...new Set((current.running.TMOD_MODS || '').split(',').map(value => value.trim()).filter(Boolean))];
+    tell('Loading the running Workshop selection…', 'workshop');
     const items = []; let unavailable = 0;
     // Keep large selections from sending all their Steam requests at once.
     for (let start = 0; start < entries.length; start += 4) {
@@ -1479,7 +1485,7 @@ $('show-current-mods').onclick = action(async () => {
     if (!items.length) $('results').replaceChildren(node('p', 'The running Workshop selection is empty.'));
     $('page-info').textContent = 'Running selection · ' + items.length + ' entries';
     $('previous').disabled = true; $('next').disabled = true;
-    tell(unavailable ? unavailable + ' Workshop entries could not load their details; removal controls remain available.' : 'Showing the running Workshop selection. Removals are saved as drafts until applied.');
+    tell(unavailable ? unavailable + ' Workshop entries could not load their details; removal controls remain available.' : 'Showing the running Workshop selection. Removals are saved as drafts until applied.', 'workshop');
   } finally { button.disabled = false; }
 });
 $('lookup-form').onsubmit = action(async () => { tell('Looking up Workshop item…'); renderMods([await api('/api/workshop/lookup', {value: $('lookup').value.trim()})]); $('page-info').textContent = ''; $('previous').disabled = true; $('next').disabled = true; tell(''); });

@@ -13,6 +13,15 @@ installed tModLoader release.
 
 ## [Unreleased]
 
+## [3.7.2] - 2026-10-01
+
+### Fixed
+
+- Serialize TCP listener start/stop in the bundled server-only mod so old accept threads cannot stop a replacement listener after anonymous connections fill the server ([upstream issue #5470](https://github.com/tModLoader/tModLoader/issues/5470)).
+- Clear the current-mods status message when leaving Workshop and suppress late Workshop messages on other pages.
+- Keep Show current mods independent of the configuration editor so browsing does not reload its fields.
+- Do not reopen the settings-applied dialog for an already completed operation on login. Active operations still show their progress and completion.
+
 ## [3.7.1] - 2026-09-30
 
 ### Added
