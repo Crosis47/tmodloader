@@ -519,13 +519,13 @@ def api(method, path, query, payload):
         return send_console({'command': 'save'})
     if path == '/api/server/restart' and method == 'POST':
         with STATE_LOCK:
-            if operation_busy() or not health():
-                raise ValueError('Wait until the game is healthy and no operation is running.')
+            if operation_busy():
+                raise ValueError('Wait until the current operation finishes.')
             if payload.get('confirm') is not True:
                 raise ValueError('Review and confirm the restart first.')
             if admin_recovery.status()['interrupted']:
                 raise ValueError('Resolve interrupted recovery before restarting.')
-            return start_job('restart')
+            return start_job('restart' if health() else 'retry')
     if path == '/api/restart/control' and method == 'POST':
         with STATE_LOCK:
             if operation_busy() and not (JOB.get('state') == 'running' and JOB.get('kind') in ('restart', 'scheduled-restart')):

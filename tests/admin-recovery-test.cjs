@@ -31,7 +31,7 @@ const {chromium} = require('playwright');
         assert.equal(route.request().postDataJSON().sha256, preview.sha256);
         restores++; job = {kind: 'restore', state: 'running', stage: 'restoring', detail: 'Staging verified files.'}; healthy = false;
       }
-      if (url.pathname === '/api/recovery/retry') { job = {kind: 'retry', state: 'success', stage: 'health', detail: 'Game server is healthy.'}; healthy = true; }
+      if (url.pathname === '/api/server/restart') { job = {kind: 'retry', state: 'success', stage: 'health', detail: 'Game server is healthy.'}; healthy = true; }
       await route.fulfill({json: data});
     });
     await page.goto('http://recovery.test/');
@@ -67,12 +67,13 @@ const {chromium} = require('playwright');
     job = {kind: 'restore', state: 'failed', stage: 'health', detail: 'Startup failed. Inspect console.'};
     await page.locator('#refresh').evaluate(button => button.click());
     await page.locator('#recovery-status').filter({hasText: 'Startup failed. Inspect console.'}).waitFor();
-    await page.locator('#recovery-retry').click(); await page.locator('#confirm-go').click();
+    await page.locator('#recovery-retry').click(); await page.locator('#restart-now').click(); await page.locator('#confirm-go').click();
+    await page.locator('[data-view="recovery"]').click();
     await page.locator('#recovery-status').filter({hasText: 'Game server is healthy.'}).waitFor();
     interrupted = true;
     await page.locator('#refresh').evaluate(button => button.click());
     await page.locator('#recovery').getByText('Interrupted file replacement: manual recovery required. Do not restart the game.').waitFor();
-    assert.equal(await page.locator('#recovery-retry').isDisabled(), true);
+    assert.equal(await page.locator('#restart-now').isDisabled(), true);
     assert.equal(await page.locator('#recovery-restore').isDisabled(), true);
     await page.setViewportSize({width: 390, height: 844});
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'Recovery page must fit a narrow screen');

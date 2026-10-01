@@ -313,7 +313,8 @@ async function refresh() {
   const data = await api('/api/status');
   renderRestartSchedule(data.restart_schedule);
   renderBackupSchedule(data.backup_schedule);
-  $('save-now').disabled = $('restart-now').disabled = !data.healthy || !!data.busy || data.job.state === 'running';
+  $('save-now').disabled = !data.healthy || !!data.busy || data.job.state === 'running';
+  $('restart-now').disabled = !!data.busy || data.job.state === 'running';
   const restartJob = data.job.state === 'running' && ['restart', 'scheduled-restart'].includes(data.job.kind);
   const canControl = ['scheduled', 'countdown'].includes(data.restart_schedule?.state) && (!data.busy || restartJob);
   $('restart-postpone').disabled = $('restart-skip').disabled = !canControl;
@@ -480,7 +481,7 @@ async function refreshRecovery(data) {
 
   $('recovery-restore').disabled = busy || !preview || recovery.interrupted;
 
-  $('recovery-retry').disabled = busy || data.healthy || recovery.interrupted;
+  $('restart-now').disabled = $('restart-now').disabled || busy || recovery.interrupted;
 
   const current = ['preview', 'restore', 'retry', 'inspect', 'prepare'].includes(job.kind) ? job : recovery.operation;
 
@@ -520,7 +521,7 @@ async function submitRecovery(kind, body) {
 
   recoverySubmitting = true;
 
-  for (const id of ['recovery-restore', 'recovery-retry']) $(id).disabled = true;
+  for (const id of ['recovery-restore', 'restart-now']) $(id).disabled = true;
 
   try { await api('/api/recovery/' + kind, body); }
 
@@ -537,7 +538,7 @@ $('recovery-restore').onclick = action(async () => {
   $('restore-dialog').close();
 });
 
-$('recovery-retry').onclick = action(async () => { if (await confirmAction('Retry game startup?', 'Start the current data again and check game health. This does not replace files.')) await submitRecovery('retry', {confirm: true}); });
+$('recovery-retry').onclick = () => { document.querySelector('[data-view="overview"]').click(); $('restart-now').focus(); };
 
 setInterval(async () => {
 
@@ -596,7 +597,7 @@ $('save-now').onclick = action(async () => {
   $('server-action-status').textContent = 'Save command sent. Check the console for save completion.';
 });
 $('restart-now').onclick = action(async () => {
-  if (!await confirmAction('Restart the game?', 'Players will disconnect after the configured countdown. The world is saved; running settings and runtime are kept. Saved drafts and updates are not applied.')) return;
+  if (!await confirmAction('Restart the game?', 'If the game is healthy, save and restart after the configured countdown. If unhealthy, retry startup with the current data and runtime. Players may disconnect. Saved drafts and updates are not applied.')) return;
   await api('/api/server/restart', {confirm: true}); await refresh();
 });
 for (const [id, change] of [['restart-postpone', 'postpone'], ['restart-skip', 'skip']]) {
@@ -1776,9 +1777,19 @@ function renderAttention() {
     const button = node('button', label); button.type = 'button';
     button.onclick = onClick || (() => document.querySelector('nav [data-view="' + view + '"]').click());
     row.append(copy, button); rows.push(row);
+    return copy;
   };
   const unsavedCount = $('fields').querySelectorAll('.setting-unsaved').length;
-  if (status?.updates?.available) add('New tModLoader version available', status.updates.latest.version + ' is available. Mod compatibility must pass before installation.', 'overview', 'View update status');
+  if (status?.updates?.available) {
+    const release = status.updates.latest;
+    const copy = add('New tModLoader version available', release.version + ' is available. Mod compatibility must pass before installation.', 'overview', 'View update status');
+    if (/^v[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,3}$/.test(release.version)) {
+      const notes = node('a', 'Read release notes');
+      notes.href = 'https://github.com/tModLoader/tModLoader/releases/tag/' + release.version;
+      notes.target = '_blank'; notes.rel = 'noopener noreferrer';
+      copy.append(notes);
+    }
+  }
   if (status?.updates?.operation?.state === 'blocked') add('Startup update blocked', status.updates.operation.detail, 'overview', 'View update status');
   if (unsavedCount) add('Unsaved settings', unsavedCount + ' setting' + (unsavedCount === 1 ? ' has' : 's have') + ' been edited. Save the draft to keep these changes.', 'settings', 'Review unsaved settings');
   if (recovery?.interrupted) add('Recovery requires attention', 'An interrupted restore needs manual recovery. Read the recovery guidance before restarting.', 'recovery', 'View recovery');

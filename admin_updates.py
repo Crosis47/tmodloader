@@ -186,6 +186,26 @@ def request_check(force=False):
     threading.Thread(target=worker, daemon=True).start()
 
 
+def operation_status(cached):
+    operation = read(ROOT / 'status.json')
+    # A later successful discovery resolves only a release-check failure, not a
+    # failed download, compatibility trial, or recovery. Keep the disk record.
+    if (operation.get('state') != 'blocked' or operation.get('checkpoint')
+            or not operation.get('detail', '').startswith('Release check failed. ')
+            or cached.get('channel') != channel() or cached.get('error')
+            or not cached.get('latest')):
+        return operation
+    try:
+        recovered = (datetime.datetime.fromisoformat(cached['checked_at']) >
+                     datetime.datetime.fromisoformat(operation['updated']))
+    except (KeyError, TypeError, ValueError):
+        return operation
+    if recovered:
+        return {**operation, 'state': 'checked',
+                'detail': 'Release check succeeded. Updates will be checked again when applied.'}
+    return operation
+
+
 def status(refresh=True):
     if refresh:
         request_check()
@@ -198,7 +218,7 @@ def status(refresh=True):
     return {'installed': installed, 'channel': channel(), 'latest': latest,
             'announcements': announcements_enabled(),
             'available': newer, 'checked_at': cached.get('checked_at'), 'error': cached.get('error', ''),
-            'checking': CHECK_LOCK.locked(), 'operation': read(ROOT / 'status.json'),
+            'checking': CHECK_LOCK.locked(), 'operation': operation_status(cached),
             'automatic': os.environ.get('TMOD_AUTO_UPDATE', '1') == '1',
             'pin': os.environ.get('TMOD_UPDATE_VERSION', ''),
             'hold': read(ROOT / 'hold.json').get('version', ''),
