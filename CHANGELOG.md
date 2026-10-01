@@ -13,8 +13,15 @@ installed tModLoader release.
 
 ## [Unreleased]
 
+## [3.7.1] - 2026-09-30
+
+### Added
+
+- Link directly to the matching tModLoader release notes from update notifications.
+
 ### Fixed
 
+- Allow Restart now to retry an unhealthy game, retaining operation and interrupted-restore guards. Recovery links to the shared game controls.
 - Clear the displayed startup release-check warning after a newer successful check, while preserving compatibility and recovery failures.
 
 ## [3.7.0] - 2026-09-30

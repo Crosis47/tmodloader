@@ -371,6 +371,20 @@ class AdminTests(unittest.TestCase):
             self.assertTrue(self.request('/api/server/save', {})[0].startswith('400'))
             self.assertTrue(self.request('/api/server/restart', {'confirm': True})[0].startswith('400'))
 
+    def test_unhealthy_restart_uses_recovery_and_preserves_guards(self):
+        with patch.object(server, 'health', return_value=False), \
+                patch.object(server, 'operation_busy', return_value=False), \
+                patch.object(server.admin_recovery, 'status', return_value={'interrupted': False}), \
+                patch.object(server, 'start_job', return_value={}) as start:
+            self.assertTrue(self.request('/api/server/restart', {})[0].startswith('400'))
+            start.assert_not_called()
+            self.assertTrue(self.request('/api/server/restart', {'confirm': True})[0].startswith('200'))
+            start.assert_called_once_with('retry')
+            start.reset_mock()
+            with patch.object(server.admin_recovery, 'status', return_value={'interrupted': True}):
+                self.assertTrue(self.request('/api/server/restart', {'confirm': True})[0].startswith('400'))
+                start.assert_not_called()
+
     def test_countdown_control_allowed_only_for_restart_jobs(self):
         with patch.object(server, 'operation_busy', return_value=True), \
                 patch.object(server.admin_restart, 'control', return_value={'state': 'scheduled'}) as control:
