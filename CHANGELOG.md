@@ -13,6 +13,10 @@ installed tModLoader release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Clear the displayed startup release-check warning after a newer successful check, while preserving compatibility and recovery failures.
+
 ## [3.7.0] - 2026-09-30
 
 ### Added

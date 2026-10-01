@@ -62,6 +62,30 @@ class UpdateTests(unittest.TestCase):
         (self.candidate / 'tModLoader.dll').write_text('candidate')
         self.new = {'tmodloader_version': 'v2026.07.3.0', 'tmodloader_sha256': 'new'}
 
+    def test_successful_discovery_resolves_only_older_release_check_warning(self):
+        failed = {'state': 'blocked', 'detail': 'Release check failed. DNS unavailable',
+                  'updated': '2026-09-30T20:00:00+00:00', 'checkpoint': None}
+        settings.atomic_json(self.control / 'status.json', failed)
+        success = {'channel': 'stable', 'error': '',
+                   'checked_at': '2026-09-30T20:01:00+00:00',
+                   'latest': {'version': 'v2026.07.3.0'}}
+        settings.atomic_json(self.control / 'check.json', success)
+        state = updates.status(refresh=False)
+        self.assertEqual(state['operation']['state'], 'checked')
+        self.assertTrue(state['available'])
+        self.assertEqual(updates.read(self.control / 'status.json'), failed)
+        for changes in ({'error': 'still offline'}, {'channel': 'preview'},
+                        {'checked_at': '2026-09-30T19:59:00+00:00'},
+                        {'checked_at': 'invalid'}):
+            with self.subTest(changes=changes):
+                self.assertEqual(updates.operation_status({**success, **changes}), failed)
+        for changes in ({'detail': 'Compatibility test failed'}, {'checkpoint': 'abc'},
+                        {'state': 'recovering'}):
+            operation = {**failed, **changes}
+            settings.atomic_json(self.control / 'status.json', operation)
+            with self.subTest(changes=changes):
+                self.assertEqual(updates.operation_status(success), operation)
+
     def prepare(self, probe=None):
         def download_mods(*args, **kwargs):
             staged = Path(kwargs['env']['TMOD_DATA_DIR'])
