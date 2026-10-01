@@ -17,6 +17,8 @@ vm.runInContext(source.slice(source.indexOf("const applyDialog ="), source.index
 vm.runInContext(source.slice(source.indexOf('function showApplyProgress('), source.indexOf('async function loadHistory(')), context);
 vm.runInContext(`
 const job = {kind:'apply', state:'running', stage:'mods', started:new Date().toISOString()};
+showApplyProgress({...job, state:'success'});
+assert.equal(applyDialog.open, false, 'A completed operation must not reopen on login');
 showApplyProgress(job);
 assert.equal(applyDialog.open, true); assert.equal(applyClose.disabled, true);
 let cancelled = false; applyDialog.oncancel({preventDefault() { cancelled = true; }});
@@ -25,6 +27,7 @@ progressError(new Error('offline')); assert.equal(applyConnection.hidden, false)
 assert.equal(applyProgress.dataset.running, 'true');
 showApplyProgress({...job, state:'success', finished:new Date().toISOString()});
 assert.equal(applyClose.disabled, false); assert.equal(applyConnection.hidden, true);
+assert.equal(applyDialog.open, true, 'An observed operation still displays its completion');
 applyClose.onclick(); assert.equal(applyDialog.open, false);
 showApplyProgress({...job, state:'success'}); assert.equal(applyDialog.open, false);
 showApplyProgress({...job, started:'2026-09-10T00:00:00Z'}); assert.equal(applyDialog.open, true);

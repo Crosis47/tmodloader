@@ -183,3 +183,9 @@ jobs:
       - name: Test dashboard runtime recovery without container restart
         timeout-minutes: 15
         run: sudo python3 tests/dashboard-runtime-recovery-test.py tmodloader:ci
+
+      - name: Test listener recovery after incomplete connections
+        timeout-minutes: 15
+        env:
+          TMOD_GITHUB_TOKEN: ${{ github.token }}
+        run: sudo --preserve-env=TMOD_GITHUB_TOKEN python3 tests/listener-integration-test.py tmodloader:ci

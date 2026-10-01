@@ -591,3 +591,13 @@ always checks the game. Internal update and recovery operations use game readine
 The dashboard readiness endpoint `/healthz` is accessible only from container loopback
 and returns no credentials or game information. Deployment ports, mounts, and settings
 management mode remain controlled outside the dashboard.
+
+### TCP listener recovery
+
+The bundled server-only mod also manages the TCP listener lifecycle. Each accept
+thread owns its socket, preventing an older thread from closing a replacement
+listener when connection slots fill and reopen. Terraria still handles player
+limits, authentication, and packets. No client mod is required. This addresses
+listener recovery; it is not a substitute for firewall or access controls.
+
+Upstream report: [tModLoader/tModLoader#5470](https://github.com/tModLoader/tModLoader/issues/5470).
