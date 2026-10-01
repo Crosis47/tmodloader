@@ -322,7 +322,7 @@ docker compose ps
 ```
 
 Once the server is healthy, connect from tModLoader to your Docker host's address
-on port **7777** (or your chosen `TMOD_HOST_PORT`). Allow that TCP port through
+on port **7777** (or your chosen `TMOD_PORT`). Allow that TCP port through
 the host firewall and forward it on your router if players connect over the internet.
 
 ## Essential settings
@@ -334,9 +334,9 @@ These are the main values to review for a new server:
 | --- | --- |
 | `TMOD_CONFIG_SOURCE` | `env` for `.env` settings; `web` for dashboard-managed settings. |
 | `TMOD_WEB_ENABLED` | `1` enables the dashboard; `0` disables it and skips admin setup. |
-| `TMOD_WEB_HOST_PORT` | Dashboard listening and published port in the supplied Compose configuration; defaults to `8080`. Not editable in the dashboard. |
+| `TMOD_WEB_PORT` | Dashboard listening and published port in the supplied Compose configuration; defaults to `8080`. Not editable in the dashboard. |
 | `TMOD_PASS` | Initial game password, separate from the admin token. Empty means no game password. A saved Configuration password overrides it in web-managed mode. |
-| `TMOD_HOST_PORT` | Game listening and published port in the supplied Compose configuration; defaults to `7777`. |
+| `TMOD_PORT` | Game listening and published port in the supplied Compose configuration; defaults to `7777`. |
 | `TMOD_WORLDNAME` | Selects a saved world or creates it if missing; defaults to `Docker`. |
 | `TMOD_WORLDSIZE` | New world size: `1` small, `2` medium, `3` large (default). |
 | `TMOD_DIFFICULTY` | New world difficulty: `0` Classic, `1` Expert (default), `2` Master, `3` Journey. |
@@ -561,21 +561,17 @@ requires no additional repository permissions. It is used only for GitHub API
 requests, is not a dashboard setting, and is not included in image builds.
 CI smoke tests use their temporary workflow token automatically.
 
-### Game port configuration
+### Port configuration
 
-The supplied Compose configuration uses `TMOD_HOST_PORT` for both the published
-port and game listening port, passing it to the container as `TMOD_PORT`. Existing
-Compose files that map separate host and container ports continue to work; the
-container still supports `TMOD_PORT` (default `7777`). When adopting the supplied
-Compose configuration with a custom server configuration file, set that file's
-listening port to match `TMOD_HOST_PORT`.
+Set `TMOD_PORT` for the game (default `7777`) and `TMOD_WEB_PORT` for the dashboard
+(default `8080`). The supplied Compose configuration uses each setting directly
+for both the container listener and published host port.
 
-### Dashboard port configuration
-
-The supplied Compose configuration uses `TMOD_WEB_HOST_PORT` for both dashboard
-ports and passes it to the container as `TMOD_WEB_PORT`. Set only
-`TMOD_WEB_HOST_PORT` in `.env`. Custom deployments can still set `TMOD_WEB_PORT`
-directly to control the internal listener.
+When adopting this Compose file, rename existing `.env` entries from
+`TMOD_HOST_PORT` to `TMOD_PORT` and `TMOD_WEB_HOST_PORT` to `TMOD_WEB_PORT`, keeping
+your chosen values. If using a custom server configuration file, its game listening
+port must match `TMOD_PORT`. Custom Compose files can still map different host and
+container ports using Docker's normal port mapping.
 
 ### Container and game readiness
 
