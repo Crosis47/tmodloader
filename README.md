@@ -334,7 +334,7 @@ These are the main values to review for a new server:
 | --- | --- |
 | `TMOD_CONFIG_SOURCE` | `env` for `.env` settings; `web` for dashboard-managed settings. |
 | `TMOD_WEB_ENABLED` | `1` enables the dashboard; `0` disables it and skips admin setup. |
-| `TMOD_WEB_PORT` | Dashboard listening port inside the container (default `8080`). Match the container side of your port mapping. Not editable in the dashboard. |
+| `TMOD_WEB_HOST_PORT` | Dashboard listening and published port in the supplied Compose configuration; defaults to `8080`. Not editable in the dashboard. |
 | `TMOD_PASS` | Initial game password, separate from the admin token. Empty means no game password. A saved Configuration password overrides it in web-managed mode. |
 | `TMOD_HOST_PORT` | Game listening and published port in the supplied Compose configuration; defaults to `7777`. |
 | `TMOD_WORLDNAME` | Selects a saved world or creates it if missing; defaults to `Docker`. |
@@ -569,6 +569,13 @@ Compose files that map separate host and container ports continue to work; the
 container still supports `TMOD_PORT` (default `7777`). When adopting the supplied
 Compose configuration with a custom server configuration file, set that file's
 listening port to match `TMOD_HOST_PORT`.
+
+### Dashboard port configuration
+
+The supplied Compose configuration uses `TMOD_WEB_HOST_PORT` for both dashboard
+ports and passes it to the container as `TMOD_WEB_PORT`. Set only
+`TMOD_WEB_HOST_PORT` in `.env`. Custom deployments can still set `TMOD_WEB_PORT`
+directly to control the internal listener.
 
 ### Container and game readiness
 

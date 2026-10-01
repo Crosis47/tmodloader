@@ -15,6 +15,10 @@ installed tModLoader release.
 
 ## [3.7.2] - 2026-10-01
 
+### Changed
+
+- Use `TMOD_WEB_HOST_PORT` as the single dashboard port setting in the supplied Compose configuration, matching the game-port approach.
+
 ### Fixed
 
 - Serialize TCP listener start/stop in the bundled server-only mod so old accept threads cannot stop a replacement listener after anonymous connections fill the server ([upstream issue #5470](https://github.com/tModLoader/tModLoader/issues/5470)).
