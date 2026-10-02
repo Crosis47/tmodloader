@@ -31,7 +31,7 @@ try:
     backup.docker('volume', 'create', volume)
     backup.docker('run', '--rm', '--volume', volume + ':/data', '--entrypoint', 'python3', image,
                   '-c', 'import admin_auth as a; a.save_token(a.token_path(), ' + repr(token) + ')')
-    backup.docker('run', '-d', '--name', name, '--volume', volume + ':/data',
+    backup.docker('run', '-d', '--name', name, '-e', 'TMOD_GITHUB_TOKEN', '--volume', volume + ':/data',
                   '-p', '127.0.0.1::8080', '-e', 'TMOD_AUTO_UPDATE=0', '-e', 'TMOD_WORLDSIZE=1',
                   '-e', 'TMOD_AUTOSAVE_INTERVAL=0', image)
     backup.wait_healthy(name, 600)

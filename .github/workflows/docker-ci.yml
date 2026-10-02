@@ -113,10 +113,12 @@ jobs:
           cache-from: type=gha,scope=ci-${{ matrix.arch }}
 
       - name: Verify native runtime architecture
+        env:
+          TMOD_GITHUB_TOKEN: ${{ github.token }}
         run: >-
           docker run --rm --user tml:tml --entrypoint bash
           --mount type=bind,source="$PWD",target=/repo,readonly
-          tmodloader:ci /repo/tests/architecture-test.sh
+          --env TMOD_GITHUB_TOKEN tmodloader:ci /repo/tests/architecture-test.sh
 
       - name: Test administration with container dependencies
         run: >-
@@ -174,15 +176,21 @@ jobs:
 
       - name: Test real-server backup and restore
         timeout-minutes: 15
-        run: sudo python3 tests/backup-integration-test.py tmodloader:ci
+        env:
+          TMOD_GITHUB_TOKEN: ${{ github.token }}
+        run: sudo --preserve-env=TMOD_GITHUB_TOKEN python3 tests/backup-integration-test.py tmodloader:ci
 
       - name: Test real-server administration controls
         timeout-minutes: 15
-        run: sudo python3 tests/admin-integration-test.py tmodloader:ci
+        env:
+          TMOD_GITHUB_TOKEN: ${{ github.token }}
+        run: sudo --preserve-env=TMOD_GITHUB_TOKEN python3 tests/admin-integration-test.py tmodloader:ci
 
       - name: Test dashboard runtime recovery without container restart
         timeout-minutes: 15
-        run: sudo python3 tests/dashboard-runtime-recovery-test.py tmodloader:ci
+        env:
+          TMOD_GITHUB_TOKEN: ${{ github.token }}
+        run: sudo --preserve-env=TMOD_GITHUB_TOKEN python3 tests/dashboard-runtime-recovery-test.py tmodloader:ci
 
       - name: Test listener recovery after incomplete connections
         timeout-minutes: 15
