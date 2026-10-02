@@ -257,7 +257,7 @@ On Windows PowerShell, use `Copy-Item .env.example .env` instead.
 Open `.env`. For browser-based configuration, set:
 
 ```dotenv
-TMOD_CONFIG_SOURCE=web
+TMOD_WEB_ENABLED=1
 ```
 
 This enables settings edits, world selection, and loading profiles and playthroughs
@@ -265,9 +265,10 @@ in the dashboard. Environment values seed the initial settings; afterward, saved
 web values take precedence. Save changes in the dashboard, then use **Review &
 apply** to apply them and restart the game.
 
-Leave `TMOD_CONFIG_SOURCE=env` to manage settings through `.env` instead. The
-dashboard still provides monitoring, console, and backup controls. Set
-`TMOD_WEB_ENABLED=0` if you want to run without the dashboard or its setup step.
+Set `TMOD_WEB_ENABLED=0` to manage settings through `.env` and run without
+the dashboard or its setup step. Existing installations can explicitly retain
+`TMOD_CONFIG_SOURCE=env` to keep environment-managed settings with dashboard
+monitoring, console, and backup controls.
 
 Review the [essential settings](#essential-settings) below before starting,
 particularly the game password, world name, and mods.
@@ -332,7 +333,6 @@ These are the main values to review for a new server:
 
 | Setting | Purpose / default |
 | --- | --- |
-| `TMOD_CONFIG_SOURCE` | `env` for `.env` settings; `web` for dashboard-managed settings. |
 | `TMOD_WEB_ENABLED` | `1` enables the dashboard; `0` disables it and skips admin setup. |
 | `TMOD_WEB_PORT` | Dashboard listening and published port in the supplied Compose configuration; defaults to `8080`. Not editable in the dashboard. |
 | `TMOD_PASS` | Initial game password, separate from the admin token. Empty means no game password. A saved Configuration password overrides it in web-managed mode. |
@@ -444,7 +444,7 @@ draft, then **Apply & Restart**. Applying disconnects players to restart the
 game; subsequent scheduled saves run without disconnecting them. The timer
 resets whenever the game starts.
 
-For environment-managed settings (`TMOD_CONFIG_SOURCE=env`), set
+With the WebUI disabled, set
 `TMOD_AUTOSAVE_INTERVAL=5` in `.env` to save every five minutes, then recreate
 the container with `docker compose up -d`. In web-managed mode, saved WebUI
 values take precedence over `.env` after first boot.
@@ -560,6 +560,10 @@ For GitHub API rate limits during release discovery, optionally provide
 requires no additional repository permissions. It is used only for GitHub API
 requests, is not a dashboard setting, and is not included in image builds.
 CI smoke tests use their temporary workflow token automatically.
+
+With `TMOD_WEB_ENABLED=0`, settings are environment-managed even if
+`TMOD_CONFIG_SOURCE=web` remains set. Saved WebUI settings and game passwords
+are ignored but retained for when WebUI management is enabled again.
 
 ### Port configuration
 

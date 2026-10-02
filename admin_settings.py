@@ -135,7 +135,8 @@ def validate(values):
 
 
 def web_mode():
-    return os.environ.get('TMOD_CONFIG_SOURCE', 'env') == 'web'
+    return (os.environ.get('TMOD_WEB_ENABLED', '1') != '0' and
+            os.environ.get('TMOD_CONFIG_SOURCE', 'web') == 'web')
 
 
 def effective():
@@ -206,7 +207,7 @@ def main(command):
             print('export TMOD_PASS=' + shlex.quote(value))
         return
     if command == 'boot':
-        mode = os.environ.get('TMOD_CONFIG_SOURCE', 'env')
+        mode = os.environ.get('TMOD_CONFIG_SOURCE', 'web')
         if mode not in ('env', 'web'):
             raise ValueError('TMOD_CONFIG_SOURCE must be env or web.')
         if web_mode() and os.environ.get('TMOD_USECONFIGFILE', 'No').lower() in ('yes', 'true', '1'):
