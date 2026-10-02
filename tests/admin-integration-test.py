@@ -17,7 +17,7 @@ image = sys.argv[1]
 name = 'tmod-admin-test-' + uuid.uuid4().hex[:12]
 token = uuid.uuid4().hex + uuid.uuid4().hex
 try:
-    backup.docker('run', '-d', '--name', name,
+    backup.docker('run', '-d', '--name', name, '-e', 'TMOD_GITHUB_TOKEN',
                   '--tmpfs', '/tmp:rw,exec,nosuid,nodev,size=64m,mode=1777',
                   '--cap-drop', 'ALL',
                   '--cap-add', 'CHOWN', '--cap-add', 'DAC_OVERRIDE',

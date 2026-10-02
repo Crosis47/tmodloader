@@ -10,13 +10,14 @@ services:
     # Settings live in .env; the image handles ownership repair and privilege drop.
     env_file: .env
     environment:
-      TMOD_PORT: ${TMOD_HOST_PORT:-7777}
+      TMOD_PORT: ${TMOD_PORT:-${TMOD_HOST_PORT:-7777}}
+      TMOD_WEB_PORT: ${TMOD_WEB_PORT:-${TMOD_WEB_HOST_PORT:-8080}}
     healthcheck:
       start_period: ${TMOD_HEALTH_START_PERIOD:-60s}
     ports:
-      - "${TMOD_HOST_PORT:-7777}:${TMOD_HOST_PORT:-7777}/tcp"
+      - "${TMOD_PORT:-${TMOD_HOST_PORT:-7777}}:${TMOD_PORT:-${TMOD_HOST_PORT:-7777}}/tcp"
       # HTTP for RFC 1918 clients; use an HTTPS proxy for public clients.
-      - "${TMOD_WEB_HOST_PORT:-8080}:${TMOD_WEB_PORT:-8080}/tcp"
+      - "${TMOD_WEB_PORT:-${TMOD_WEB_HOST_PORT:-8080}}:${TMOD_WEB_PORT:-${TMOD_WEB_HOST_PORT:-8080}}/tcp"
     volumes:
       - "./data:/data"
       - "./backups:/backups"

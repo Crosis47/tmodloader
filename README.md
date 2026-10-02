@@ -257,7 +257,7 @@ On Windows PowerShell, use `Copy-Item .env.example .env` instead.
 Open `.env`. For browser-based configuration, set:
 
 ```dotenv
-TMOD_CONFIG_SOURCE=web
+TMOD_WEB_ENABLED=1
 ```
 
 This enables settings edits, world selection, and loading profiles and playthroughs
@@ -265,9 +265,10 @@ in the dashboard. Environment values seed the initial settings; afterward, saved
 web values take precedence. Save changes in the dashboard, then use **Review &
 apply** to apply them and restart the game.
 
-Leave `TMOD_CONFIG_SOURCE=env` to manage settings through `.env` instead. The
-dashboard still provides monitoring, console, and backup controls. Set
-`TMOD_WEB_ENABLED=0` if you want to run without the dashboard or its setup step.
+Set `TMOD_WEB_ENABLED=0` to manage settings through `.env` and run without
+the dashboard or its setup step. Existing installations can explicitly retain
+`TMOD_CONFIG_SOURCE=env` to keep environment-managed settings with dashboard
+monitoring, console, and backup controls.
 
 Review the [essential settings](#essential-settings) below before starting,
 particularly the game password, world name, and mods.
@@ -322,7 +323,7 @@ docker compose ps
 ```
 
 Once the server is healthy, connect from tModLoader to your Docker host's address
-on port **7777** (or your chosen `TMOD_HOST_PORT`). Allow that TCP port through
+on port **7777** (or your chosen `TMOD_PORT`). Allow that TCP port through
 the host firewall and forward it on your router if players connect over the internet.
 
 ## Essential settings
@@ -332,11 +333,10 @@ These are the main values to review for a new server:
 
 | Setting | Purpose / default |
 | --- | --- |
-| `TMOD_CONFIG_SOURCE` | `env` for `.env` settings; `web` for dashboard-managed settings. |
 | `TMOD_WEB_ENABLED` | `1` enables the dashboard; `0` disables it and skips admin setup. |
-| `TMOD_WEB_PORT` | Dashboard listening port inside the container (default `8080`). Match the container side of your port mapping. Not editable in the dashboard. |
+| `TMOD_WEB_PORT` | Dashboard listening and published port in the supplied Compose configuration; defaults to `8080`. Not editable in the dashboard. |
 | `TMOD_PASS` | Initial game password, separate from the admin token. Empty means no game password. A saved Configuration password overrides it in web-managed mode. |
-| `TMOD_HOST_PORT` | Game listening and published port in the supplied Compose configuration; defaults to `7777`. |
+| `TMOD_PORT` | Game listening and published port in the supplied Compose configuration; defaults to `7777`. |
 | `TMOD_WORLDNAME` | Selects a saved world or creates it if missing; defaults to `Docker`. |
 | `TMOD_WORLDSIZE` | New world size: `1` small, `2` medium, `3` large (default). |
 | `TMOD_DIFFICULTY` | New world difficulty: `0` Classic, `1` Expert (default), `2` Master, `3` Journey. |
@@ -444,7 +444,7 @@ draft, then **Apply & Restart**. Applying disconnects players to restart the
 game; subsequent scheduled saves run without disconnecting them. The timer
 resets whenever the game starts.
 
-For environment-managed settings (`TMOD_CONFIG_SOURCE=env`), set
+With the WebUI disabled, set
 `TMOD_AUTOSAVE_INTERVAL=5` in `.env` to save every five minutes, then recreate
 the container with `docker compose up -d`. In web-managed mode, saved WebUI
 values take precedence over `.env` after first boot.
@@ -561,14 +561,24 @@ requires no additional repository permissions. It is used only for GitHub API
 requests, is not a dashboard setting, and is not included in image builds.
 CI smoke tests use their temporary workflow token automatically.
 
-### Game port configuration
+With `TMOD_WEB_ENABLED=0`, settings are environment-managed even if
+`TMOD_CONFIG_SOURCE=web` remains set. Saved WebUI settings and game passwords
+are ignored but retained for when WebUI management is enabled again.
 
-The supplied Compose configuration uses `TMOD_HOST_PORT` for both the published
-port and game listening port, passing it to the container as `TMOD_PORT`. Existing
-Compose files that map separate host and container ports continue to work; the
-container still supports `TMOD_PORT` (default `7777`). When adopting the supplied
-Compose configuration with a custom server configuration file, set that file's
-listening port to match `TMOD_HOST_PORT`.
+### Port configuration
+
+Set `TMOD_PORT` for the game (default `7777`) and `TMOD_WEB_PORT` for the dashboard
+(default `8080`). The supplied Compose configuration uses each setting directly
+for both the container listener and published host port.
+
+For compatibility, Compose accepts `TMOD_HOST_PORT` and `TMOD_WEB_HOST_PORT`
+as fallbacks when their corresponding recommended setting is unset or empty.
+`TMOD_PORT` and `TMOD_WEB_PORT` take precedence when both names are supplied.
+Use the recommended names for new configurations.
+
+If using a custom server configuration file, its game listening
+port must match `TMOD_PORT`. Custom Compose files can still map different host and
+container ports using Docker's normal port mapping.
 
 ### Container and game readiness
 
@@ -582,9 +592,11 @@ With `TMOD_WEB_ENABLED=0`, Docker health checks game readiness only.
 
 The default startup grace period is 60 seconds, with checks every 30 seconds and three
 failures required to report unhealthy. A successful check ends the startup grace period.
-For headless first-start downloads and world generation, set
-`TMOD_HEALTH_START_PERIOD=30m` in the supplied Compose `.env`, or use Docker's
-`--health-start-period=30m`. This is a deployment setting, not a WebUI setting.
+Keep the default unless measured startup time requires a longer grace period, such
+as initial downloads or world generation in headless mode. Adjust
+`TMOD_HEALTH_START_PERIOD` in the supplied Compose `.env`, or Docker's
+`--health-start-period`, to suit that startup time. This is a deployment setting,
+not a WebUI setting.
 
 `healthcheck --container` selects the appropriate check; `healthcheck` (or `--game`)
 always checks the game. Internal update and recovery operations use game readiness.

@@ -13,6 +13,18 @@ installed tModLoader release.
 
 ## [Unreleased]
 
+## [3.7.3] - 2026-10-02
+
+### Fixed
+
+- Ignore saved WebUI settings and passwords when the WebUI is disabled, even if `TMOD_CONFIG_SOURCE=web` remains set.
+
+### Changed
+
+- Choose settings management from WebUI enablement by default; retain explicit `TMOD_CONFIG_SOURCE=env` for existing monitoring-only deployments.
+- Use the container settings `TMOD_PORT` and `TMOD_WEB_PORT` directly for both listeners and published ports in Compose. Keep `TMOD_HOST_PORT` and `TMOD_WEB_HOST_PORT` as Compose compatibility fallbacks; the recommended names take precedence.
+- Keep the 60-second startup grace default and recommend longer periods only when measured startup time requires them.
+
 ## [3.7.2] - 2026-10-01
 
 ### Fixed
