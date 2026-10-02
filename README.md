@@ -304,7 +304,7 @@ only on a trusted network. The server checks the client source IP, not the URL.
 
 Leave `TMOD_WEB_ORIGIN` empty when opening the server IP. For a hostname, set it
 to the exact browser origin. For HTTPS through a reverse proxy, also set
-`TMOD_WEB_TRUSTED_PROXY` to that proxy's single IP as seen by the container.
+`TMOD_WEB_TRUSTED_PROXY` to that proxy's IP as seen by the container, or its service name/network alias (for example, `reverse-proxy`) on a shared Docker network. Hostnames are resolved for each request; failed lookups do not trust forwarded headers. Use a name controlled by you on a trusted network. URLs, ports, wildcards, and subnets are not accepted.
 The proxy must preserve `Host` and overwrite `X-Forwarded-For` with the actual
 single client IP and `X-Forwarded-Proto` with `http` or `https`. Multi-proxy header
 chains are rejected. Restrict backend access to the proxy when publishing it.

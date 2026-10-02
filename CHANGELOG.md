@@ -15,6 +15,10 @@ installed tModLoader release.
 
 ## [3.7.4] - 2026-10-02
 
+### Added
+
+- Allow a reverse proxy service name or network alias in `TMOD_WEB_TRUSTED_PROXY`, with fresh DNS resolution and rejection of forwarded headers when resolution fails.
+
 ### Fixed
 
 - Request overview data sequentially to avoid dashboard polling bursts that fill the WebUI worker queue.
