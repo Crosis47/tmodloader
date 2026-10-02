@@ -259,7 +259,9 @@ class VisitTracker:
             detail = '' if self.world else detail
         self.saved = {'id': self.world, 'name': metadata.get('title') or (path.stem if path else None),
                       'detail': detail, 'active': True, 'owner_pid': os.getpid(),
-                      'owner_identity': process_identity(os.getpid())}
+                      'owner_identity': process_identity(os.getpid()),
+                      'bridge': self.bridge, 'characters': [],
+                      'server_pid': (settings.RUNTIME / 'server.pid').read_text() if (settings.RUNTIME / 'server.pid').exists() else None}
         settings.atomic_json(session_path(), self.saved)
         self.started = True
         self.thread = threading.Thread(target=self.watch_identities, daemon=True)

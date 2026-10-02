@@ -13,6 +13,13 @@ installed tModLoader release.
 
 ## [Unreleased]
 
+## [3.7.4] - 2026-10-02
+
+### Fixed
+
+- Request overview data sequentially to avoid dashboard polling bursts that fill the WebUI worker queue.
+- Read authenticated player-tracking state for routine dashboard refreshes instead of repeatedly printing server version and player-list responses. Preserve fresh console queries for moderation and when tracking is unavailable.
+
 ## [3.7.3] - 2026-10-02
 
 ### Fixed

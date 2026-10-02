@@ -80,12 +80,42 @@ def session(log):
             log.with_name(log.name + '.first').read_text())
 
 
+def tracked_roster(current):
+    """Use authenticated character events for display; moderation still queries the game."""
+    import admin_player_history as history
+    try:
+        saved = history.read_session()
+        if (not saved.get('active') or not saved.get('bridge')
+                or saved.get('server_pid') != current[0]
+                or not saved.get('owner_identity')
+                or history.process_identity(saved.get('owner_pid')) != saved['owner_identity']):
+            return None
+        entries = saved.get('characters')
+        if not isinstance(entries, list) or len(entries) > 255:
+            return None
+        players = []
+        for entry in entries:
+            name = line_text(entry['name'], 100)
+            address = entry['address']
+            players.append({'name': name, 'address': address, 'identifier': identifier(address),
+                            'key': hashlib.sha256(json.dumps([current, name, address]).encode()).hexdigest()})
+        for player in players:
+            player['can_moderate'] = sum(p['name'].casefold() == player['name'].casefold() for p in players) == 1
+        return {'players': players, 'updated': admin_metrics.timestamp(), '_session': current}
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def snapshot(log, force=False):
     global CACHE, CACHE_AT
     running = settings.read_json(settings.RUNTIME / 'admin-effective.json', settings.effective())
     if running.get('TMOD_LANGUAGE', 'en-US') != 'en-US':
         raise ValueError('Player management currently requires English console output (TMOD_LANGUAGE=en-US). Use the console for this server language.')
     current = session(log)
+    if not force:
+        tracked = tracked_roster(current)
+        if tracked is not None:
+            return tracked
     if not force and CACHE and CACHE.get('_session') == current and time.monotonic() - CACHE_AT < 8:
         return CACHE
     CACHE = None
