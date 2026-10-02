@@ -21,6 +21,24 @@ class ConfigTests(unittest.TestCase):
         self.file = configs.directory() / 'Example_Server.json'
         self.file.write_text('{"Enabled": true}')
 
+    def test_large_config_round_trip_and_byte_limit(self):
+        import json
+        content = json.dumps({'large': 'x' * (1024 * 1024)})
+        self.file.write_bytes(content.encode())
+        current = configs.read(self.file.name)
+        updated = content.replace('xxx', 'yyy', 1)
+        self.assertEqual(configs.save({**current, 'content': updated})['content'], updated)
+        exact = configs.directory() / 'large.txt'
+        exact.write_bytes(b'x' * configs.LIMIT)
+        self.assertEqual(len(configs.read(exact.name)['content']), configs.LIMIT)
+        with self.assertRaisesRegex(ValueError, '4 MiB'):
+            configs.validate_content(exact.name, 'x' * (configs.LIMIT + 1))
+        with exact.open('ab') as stream:
+            stream.write(b'x')
+        with self.assertRaisesRegex(ValueError, 'mounted data storage'):
+            configs.read(exact.name)
+        self.assertEqual(exact.stat().st_size, configs.LIMIT + 1)
+
     def test_save_and_stale_revision(self):
         original = configs.read(self.file.name)
         result = configs.save({**original, 'content': '{"Enabled": false}'})

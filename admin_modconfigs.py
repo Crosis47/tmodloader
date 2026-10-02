@@ -11,7 +11,9 @@ import json
 
 import admin_settings as settings
 
-LIMIT = 48 * 1024
+LIMIT = 4 * 1024 * 1024
+# JSON can escape each input byte as six ASCII characters, plus request metadata.
+REQUEST_LIMIT = 6 * LIMIT + 65536
 FORMATS = {'.json': 'JSON', '.yaml': 'YAML', '.yml': 'YAML', '.toml': 'TOML', '.ini': 'INI', '.xml': 'XML'}
 
 
@@ -21,7 +23,7 @@ def file_format(name):
 
 def validate_content(name, content):
     if not isinstance(content, str) or len(content.encode('utf-8')) > LIMIT:
-        raise ValueError('Provide UTF-8 text up to 48 KiB.')
+        raise ValueError('Provide UTF-8 text up to 4 MiB.')
     if any(ord(char) < 32 and char not in '\t\r\n' for char in content):
         raise ValueError('Binary/control characters cannot be edited.')
     kind = file_format(name)
@@ -73,9 +75,10 @@ def path_for(name):
 
 def read(name):
     path = path_for(name)
-    if path.stat().st_size > LIMIT:
-        raise ValueError('Configuration exceeds the 48 KiB editor limit.')
-    data = path.read_bytes()
+    with path.open('rb') as stream:
+        data = stream.read(LIMIT + 1)
+    if len(data) > LIMIT:
+        raise ValueError(f'Configuration exceeds the 4 MiB editor limit. Edit {path} directly in the mounted data storage while the game is stopped, then restart the game.')
     try:
         content = data.decode('utf-8-sig')
     except UnicodeError as error:

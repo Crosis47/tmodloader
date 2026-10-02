@@ -13,6 +13,12 @@ installed tModLoader release.
 
 ## [Unreleased]
 
+## [3.7.5] - 2026-10-02
+
+### Changed
+
+- Support mod configuration files up to 4 MiB, increase the matching save-request limit, and use plain-text display for large files to avoid excessive syntax-highlighting overhead. Files above the limit include direct-edit guidance.
+
 ## [3.7.4] - 2026-10-02
 
 ### Added
