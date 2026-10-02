@@ -18,6 +18,15 @@ import filter_client_mods
 
 
 class AdminTests(unittest.TestCase):
+    def test_large_mod_config_request_uses_editor_budget_only(self):
+        content = 'x' * (1024 * 1024)
+        with patch.object(server, 'api', return_value={'checked': True}) as dispatch:
+            for endpoint in ('/api/mod-configs', '/api/mod-configs/validate'):
+                self.assertTrue(self.request(endpoint, {'name': 'large.txt', 'content': content})[0].startswith('200'))
+            self.assertEqual(dispatch.call_count, 2)
+            self.assertTrue(self.request('/api/settings', {'content': content})[0].startswith('400'))
+            self.assertEqual(dispatch.call_count, 2)
+
     def test_historical_bans_require_auth_and_idle_state_but_not_live_game(self):
         endpoint = '/api/players/history/ban'
         payload = {'key': 'a' * 64, 'confirm': True}

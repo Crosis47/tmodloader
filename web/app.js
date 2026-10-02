@@ -1888,7 +1888,8 @@ function highlightModConfig() {
     XML: /(<!--[\s\S]*?-->)|("[^"]*"|'[^']*')|(<\/?[\w:.-]+|[\w:.-]+(?=\s*=))|(\btrue\b|\bfalse\b)|(&[\w#]+;)|([<>/=])/g
   };
   const fragment = document.createDocumentFragment();
-  const pattern = patterns[format];
+  // Large files stay editable without creating thousands of syntax-token elements.
+  const pattern = text.length <= 256 * 1024 ? patterns[format] : null;
   let end = 0;
   if (pattern) for (const match of text.matchAll(pattern)) {
     fragment.append(document.createTextNode(text.slice(end, match.index)));
