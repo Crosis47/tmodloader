@@ -592,9 +592,11 @@ With `TMOD_WEB_ENABLED=0`, Docker health checks game readiness only.
 
 The default startup grace period is 60 seconds, with checks every 30 seconds and three
 failures required to report unhealthy. A successful check ends the startup grace period.
-For headless first-start downloads and world generation, set
-`TMOD_HEALTH_START_PERIOD=30m` in the supplied Compose `.env`, or use Docker's
-`--health-start-period=30m`. This is a deployment setting, not a WebUI setting.
+Keep the default unless measured startup time requires a longer grace period, such
+as initial downloads or world generation in headless mode. Adjust
+`TMOD_HEALTH_START_PERIOD` in the supplied Compose `.env`, or Docker's
+`--health-start-period`, to suit that startup time. This is a deployment setting,
+not a WebUI setting.
 
 `healthcheck --container` selects the appropriate check; `healthcheck` (or `--game`)
 always checks the game. Internal update and recovery operations use game readiness.
