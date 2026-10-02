@@ -1,6 +1,8 @@
 """Dashboard transport and browser-origin checks using the actual socket peer."""
 import ipaddress
 import os
+import re
+import socket
 import urllib.parse
 
 HTTP_NETWORKS = tuple(map(ipaddress.ip_network, (
@@ -31,12 +33,37 @@ def web_port():
     return int(value)
 
 
+def proxy_target(value):
+    try:
+        return address(value)
+    except ValueError:
+        pass
+    # Docker service names and network aliases may contain underscores.
+    if (len(value) > 253 or not re.fullmatch(
+            r'[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?(?:\.[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?)*', value)
+            or re.fullmatch(r'[0-9.]+', value)):
+        raise ValueError('TMOD_WEB_TRUSTED_PROXY must be one IP address or hostname, without a port, URL, wildcard, or subnet.')
+    return value
+
+
+def proxy_addresses(value):
+    target = proxy_target(value)
+    if not isinstance(target, str):
+        return {target}
+    try:
+        # Resolve the configured name again for each request: never retain stale
+        # trust after a proxy is recreated or DNS becomes unavailable.
+        return {address(item[4][0]) for item in socket.getaddrinfo(target, None, type=socket.SOCK_STREAM)}
+    except (OSError, ValueError):
+        return set()
+
+
 def validate_config():
     web_port()
     if os.environ.get('TMOD_WEB_ORIGIN'):
         origin_parts(os.environ['TMOD_WEB_ORIGIN'])
     if os.environ.get('TMOD_WEB_TRUSTED_PROXY'):
-        address(os.environ['TMOD_WEB_TRUSTED_PROXY'])
+        proxy_target(os.environ['TMOD_WEB_TRUSTED_PROXY'])
 
 
 def check_request(environ):
@@ -46,7 +73,7 @@ def check_request(environ):
         raise PermissionError('Cannot determine client address; access denied.') from None
     scheme = environ.get('wsgi.url_scheme', 'http')
     proxy = os.environ.get('TMOD_WEB_TRUSTED_PROXY', '')
-    if proxy and source == address(proxy):
+    if proxy and source in proxy_addresses(proxy):
         # A single explicitly trusted proxy must overwrite these headers.
         # Missing headers and multi-hop chains fail closed.
         try:

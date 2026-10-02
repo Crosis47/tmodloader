@@ -13,6 +13,17 @@ installed tModLoader release.
 
 ## [Unreleased]
 
+## [3.7.4] - 2026-10-02
+
+### Added
+
+- Allow a reverse proxy service name or network alias in `TMOD_WEB_TRUSTED_PROXY`, with fresh DNS resolution and rejection of forwarded headers when resolution fails.
+
+### Fixed
+
+- Request overview data sequentially to avoid dashboard polling bursts that fill the WebUI worker queue.
+- Read authenticated player-tracking state for routine dashboard refreshes instead of repeatedly printing server version and player-list responses. Preserve fresh console queries for moderation and when tracking is unavailable.
+
 ## [3.7.3] - 2026-10-02
 
 ### Fixed

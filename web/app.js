@@ -1749,7 +1749,12 @@ async function refreshOverview() {
   overviewBusy = true;
   try {
     const paths = ['/api/worlds', '/api/players', '/api/settings', '/api/playthroughs', '/api/profiles'];
-    const results = await Promise.allSettled(paths.map(path => api(path)));
+    // These handlers share the server state lock; parallel requests only occupy workers waiting for it.
+    const results = [];
+    for (const path of paths) {
+      try { results.push({status: 'fulfilled', value: await api(path)}); }
+      catch (reason) { results.push({status: 'rejected', reason}); }
+    }
     const [world, players, settings, playthroughs, profiles] = results.map(result => result.status === 'fulfilled' ? result.value : null);
     $('overview-world').textContent = world?.configured ? (world.healthy ? 'Active: ' : 'Configured: ') + world.configured : 'World information unavailable or custom configuration in use.';
     $('overview-world-storage').textContent = world?.worlds ? world.worlds.length + ' saved worlds · ' + bytes(world.free_bytes) + ' free data storage' : 'World storage unavailable.';

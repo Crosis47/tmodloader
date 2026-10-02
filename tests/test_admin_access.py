@@ -89,13 +89,33 @@ class AccessTests(unittest.TestCase):
                 api.assert_not_called()
 
     def test_proxy_configuration_rejects_wildcards_and_networks(self):
-        for value in ('*', '172.18.0.0/16', 'proxy.local'):
+        for value in ('*', '172.18.0.0/16', 'http://proxy', 'proxy:8080', 'proxy,other', '999.999.999.999'):
             with patch.dict(os.environ, {'TMOD_WEB_TRUSTED_PROXY': value}), self.assertRaises(ValueError):
                 access.validate_config()
 
+    def test_proxy_hostname_refreshes_addresses_and_fails_closed(self):
+        import socket
+        headers = {'HTTP_X_FORWARDED_FOR': '8.8.8.8', 'HTTP_X_FORWARDED_PROTO': 'https'}
+        answer = lambda ip: [(socket.AF_INET, socket.SOCK_STREAM, 6, '', (ip, 0))]
+        with patch.dict(os.environ, {'TMOD_WEB_TRUSTED_PROXY': 'reverse-proxy'}), \
+                patch.object(access.socket, 'getaddrinfo', return_value=answer('172.18.0.2')) as resolve:
+            access.validate_config()
+            resolve.assert_not_called()
+            access.check_request(self.env('172.18.0.2', **headers))
+            with self.assertRaises(PermissionError):
+                access.check_request(self.env('172.18.0.3', **headers))
+            resolve.return_value = answer('172.18.0.3')
+            access.check_request(self.env('172.18.0.3', **headers))
+            with self.assertRaises(PermissionError):
+                access.check_request(self.env('172.18.0.2', **headers))
+            resolve.side_effect = socket.gaierror('unavailable')
+            with self.assertRaises(PermissionError):
+                access.check_request(self.env('172.18.0.3', **headers))
+            access.check_request(self.env())
+
     def test_live_waitress_preserves_peer_and_validates_proxy_headers(self):
         from waitress import create_server
-        with patch.object(server, 'TOKEN_HASH', ''), patch.dict(os.environ, {'TMOD_WEB_TRUSTED_PROXY': '127.0.0.1'}):
+        with patch.object(server, 'TOKEN_HASH', ''), patch.dict(os.environ, {'TMOD_WEB_TRUSTED_PROXY': 'localhost'}):
             http = create_server(server.application, host='127.0.0.1', port=0,
                                  clear_untrusted_proxy_headers=False)
             worker = threading.Thread(target=http.run, daemon=True)

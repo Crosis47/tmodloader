@@ -58,6 +58,37 @@ class PlayerTests(unittest.TestCase):
             log.with_name('console.log.first').write_text('next-run')
             players.snapshot(log)
             self.assertEqual(deliver.call_count, 6)
+            with patch.object(players, 'tracked_roster', side_effect=AssertionError('Must query game')):
+                players.snapshot(log, force=True)
+            self.assertEqual(deliver.call_count, 9)
+
+    def test_live_tracker_avoids_console_queries_and_preserves_moderation_keys(self):
+        import admin_player_history as history
+        current = ('123', 42, 'started')
+        saved = {'active': True, 'bridge': True, 'server_pid': '123',
+                 'owner_pid': 99, 'owner_identity': 'owner', 'characters': []}
+        with patch.object(players, 'session', return_value=current), \
+                patch.object(history, 'read_session', return_value=saved), \
+                patch.object(history, 'process_identity', return_value='owner'), \
+                patch.object(players, 'deliver') as send:
+            self.assertEqual(players.snapshot(None)['players'], [])
+            saved['characters'] = [{'name': 'Alice', 'address': '127.0.0.1:4321'}]
+            row = players.snapshot(None)['players'][0]
+            self.assertEqual(row['identifier'], '127.0.0.1')
+            self.assertTrue(row['can_moderate'])
+            self.assertEqual(row['key'], players.hashlib.sha256(
+                json.dumps([current, 'Alice', '127.0.0.1:4321']).encode()).hexdigest())
+            saved['characters'] = []
+            self.assertEqual(players.snapshot(None)['players'], [])
+            send.assert_not_called()
+            saved['server_pid'] = 'old'
+            self.assertIsNone(players.tracked_roster(current))
+            saved['server_pid'] = '123'
+            saved['owner_identity'] = 'dead'
+            self.assertIsNone(players.tracked_roster(current))
+            saved['owner_identity'] = 'owner'
+            saved['bridge'] = False
+            self.assertIsNone(players.tracked_roster(current))
 
     def test_changed_connection_is_not_targeted(self):
         with patch.object(players, 'snapshot', return_value={'players': []}), patch.object(players, 'deliver') as send:
