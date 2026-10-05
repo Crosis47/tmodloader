@@ -9,6 +9,7 @@ its features, fixes, and releases are managed in this repository.
 
 ## Before starting
 
+- Read and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 - Search existing issues and pull requests for related work.
 - Use a normal issue for bugs and feature requests.
 - Use the private process in [SECURITY.md](SECURITY.md) for vulnerabilities.
