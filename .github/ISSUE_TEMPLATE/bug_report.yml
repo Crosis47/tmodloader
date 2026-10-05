@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a problem with the tModLoader container or web dashboard.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve the container! Search existing issues before submitting.
+        Describe problems with this container or its web dashboard here. For gameplay or mod issues, include any evidence that the container is involved.
+        Remove passwords, Steam API keys, tokens, and private player details from logs, configuration, and screenshots.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the problem and any error messages.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the actions and settings needed to reproduce the problem. If it is intermittent, describe when it occurs.
+      placeholder: |
+        1. Start the container with...
+        2. Open or run...
+        3. Observe...
+    validations:
+      required: true
+  - type: input
+    id: image
+    attributes:
+      label: Container image and version
+      description: Include the full image name and tag. For latest or preview, include the container release version or image digest if available.
+      placeholder: "ghcr.io/crosis47/tmodloader:<tag> or crosis47/tmodloader:<tag>"
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Installed tModLoader version
+      description: Copy the version from the dashboard or startup logs, if available. The runtime can update independently of the container image.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the host OS, CPU architecture (AMD64 or ARM64), and deployment method. For dashboard problems, include your browser and version.
+      placeholder: |
+        Host OS / NAS platform and version:
+        CPU architecture:
+        Deployment method (Docker Compose, Docker CLI, Portainer, TrueNAS, etc.):
+        Docker / container platform version:
+        Browser and version (if applicable):
+    validations:
+      required: true
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Relevant configuration
+      description: Paste relevant Compose settings, Docker arguments, or app settings with secrets removed. Include whether the WebUI is enabled and whether settings are managed through the dashboard or environment variables.
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Include startup output and logs around the failure, with secrets and private player details removed. For Docker, use docker logs <container-name>.
+      render: text
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add screenshots, relevant mod names or Workshop IDs, recent changes, and any workaround. If already tested, mention whether this happens without mods or outside the container.
