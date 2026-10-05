@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest an improvement to the tModLoader container or web dashboard.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing your idea! Search existing issues before submitting and link any related requests.
+        This project maintains the container and its web dashboard; Terraria, tModLoader, and individual mods are maintained separately.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe your use case, who would benefit, and what is difficult today.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe how you would like the feature to work and what a successful result would look like.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe any workarounds or other approaches you have considered.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add related issues, examples, or mockups. Include your deployment method and whether you use the dashboard or headless mode if relevant.
