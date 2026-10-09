@@ -22,6 +22,7 @@ Updated **2026-10-08 22:18 UTC** · Refreshed hourly · [Metric definitions](doc
 <!-- repository-stats:end -->
 
 [![Available on TrueNAS Community Apps](https://img.shields.io/badge/TrueNAS-Community%20Apps-0095D5?style=for-the-badge&logo=truenas&logoColor=white)](https://apps.truenas.com/catalog/tmodloader_community/)
+[![Available on Unraid Community Apps](https://img.shields.io/badge/Unraid-Community%20Apps-F15A2C?style=for-the-badge&logo=unraid&logoColor=white)](https://ca.unraid.net/)
 
 Run a modded Terraria server in Docker, with a built-in web dashboard for managing
 worlds, Workshop mods, players, and backups. Keep your server's data across
