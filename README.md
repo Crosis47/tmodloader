@@ -533,7 +533,7 @@ information first.
 - [Release history](CHANGELOG.md)
 - [Contributing and development](CONTRIBUTING.md)
 - [Security reporting](SECURITY.md)
-- [License](LICENSE.md)
+- [License](LICENSE)
 
 ## Credits
 
@@ -545,7 +545,7 @@ Thanks also to [ldericher](https://github.com/ldericher/tmodloader-docker),
 [guillheu](https://github.com/guillheu/tmodloader-docker), and
 [FlorentLM](https://github.com/FlorentLM/tmodloader1.4) for their earlier work.
 
-Container code and scripts are distributed under [LICENSE.md](LICENSE.md).
+Container code and scripts are distributed under [LICENSE](LICENSE).
 Terraria, tModLoader, and bundled third-party tools retain their respective licenses.
 
 The update card offers an opt-in **Announce new tModLoader versions in game chat** setting. It saves immediately without a restart, defaults to off, and sends one announcement per newly detected release while the game is healthy. The administration service checks in the background even without an open dashboard, using the existing release-check cache. Disabling and re-enabling the option does not repeat an already announced release.

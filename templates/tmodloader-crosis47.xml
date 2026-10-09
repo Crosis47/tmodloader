@@ -28,7 +28,7 @@ Troubleshooting: https://github.com/Crosis47/tmodloader/wiki/Troubleshooting</Ov
   <Icon>https://media.sys.truenas.net/apps/tmodloader/icons/icon.png</Icon>
   <WebUI>http://[IP]:[PORT:8080]</WebUI>
   <ExtraParams>--stop-timeout=120</ExtraParams>
-  <License>https://github.com/Crosis47/tmodloader/blob/master/LICENSE.md</License>
+  <License>https://github.com/Crosis47/tmodloader/blob/master/LICENSE</License>
   <Screenshot>https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/images/dashboard-overview.png</Screenshot>
   <!-- Required ports and storage -->
   <Config Name="Game port" Target="7777" Default="7777" Mode="tcp" Description="Host TCP port players connect to. Keep the container port at 7777.&#160;&#160;&#160;&#160;||&#160;&#160;&#160;&#160;Wiki: https://github.com/Crosis47/tmodloader/wiki/Networking-and-Access#game-connections" Type="Port" Display="always" Required="true" Mask="false">7777</Config>
