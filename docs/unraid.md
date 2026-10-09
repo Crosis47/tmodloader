@@ -134,9 +134,9 @@ to be checked separately.
 
 ## Community Applications submission
 
-The root `ca_profile.xml` describes this project's repository. The existing
-`LICENSE.md` contains the MIT license; confirm the portal recognizes that filename
-(the official starter uses `LICENSE`). The template reuses the same hosted PNG
+The root `ca_profile.xml` describes this project's repository. The root
+`LICENSE` contains the standard MIT license with both copyright notices.
+Third-party component attribution is documented in `THIRD_PARTY_NOTICES.md`. The template reuses the same hosted PNG
 icon as the TrueNAS submission:
 https://media.sys.truenas.net/apps/tmodloader/icons/icon.png
 Canonical raw URLs point to master and become available only after merging.
