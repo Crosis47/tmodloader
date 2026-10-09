@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <Container version="2">
-  <Name>tModLoader-Crosis47</Name>
+  <Name>tModLoader-Server-Dashboard</Name>
   <Repository>ghcr.io/crosis47/tmodloader:latest</Repository>
   <Registry>https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader</Registry>
   <Network>bridge</Network>
