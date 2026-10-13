@@ -4,12 +4,12 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/Crosis47/tmodloader/docker-ci.yml?logo=github&label=docker%20CI&style=for-the-badge)](https://github.com/Crosis47/tmodloader/actions/workflows/docker-ci.yml)
 
 <!-- repository-stats:start -->
-[![Docker pulls](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/docker_pulls-7b69f4845804c5f6.svg)](https://hub.docker.com/r/crosis47/tmodloader)
+[![Docker pulls](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/docker_pulls-9cfc97100267a1a7.svg)](https://hub.docker.com/r/crosis47/tmodloader)
 [![Docker stars](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/docker_stars-24ed5757f6c84e3d.svg)](https://hub.docker.com/r/crosis47/tmodloader)
-[![GHCR pulls](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_pulls-66fc84fe37777b83.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
-[![GHCR pulls / 7d](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_week-02d7848f34315a80.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
+[![GHCR pulls](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_pulls-5824e310438112f0.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
+[![GHCR pulls / 7d](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_week-a123b268ef6c7cc8.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
 
-[![GHCR pulls today](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_day-0c5a8535baab884b.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
+[![GHCR pulls today](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_day-8af0c922e53f4f90.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
 [![GitHub stars](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/github_stars-e7968792476c154d.svg)](https://github.com/Crosis47/tmodloader/stargazers)
 [![GitHub forks](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/github_forks-49845a00a10bcd1d.svg)](https://github.com/Crosis47/tmodloader/forks)
 
@@ -18,7 +18,7 @@
 [![PRs open](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_open-bea1ff39483dae9f.svg)](https://github.com/Crosis47/tmodloader/pulls)
 [![PRs merged](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_merged-54d9655d1b77ad81.svg)](https://github.com/Crosis47/tmodloader/pulls?q=is%3Apr+is%3Amerged)
 
-Updated **2026-10-12 23:03 UTC** · Refreshed hourly · [Metric definitions](docs/repository-stats.md)
+Updated **2026-10-13 03:38 UTC** · Refreshed hourly · [Metric definitions](docs/repository-stats.md)
 <!-- repository-stats:end -->
 
 [![Available on TrueNAS Community Apps](https://img.shields.io/badge/TrueNAS-Community%20Apps-0095D5?style=for-the-badge&logo=truenas&logoColor=white)](https://apps.truenas.com/catalog/tmodloader_community/)
