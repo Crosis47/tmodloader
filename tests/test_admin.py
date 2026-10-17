@@ -21,11 +21,44 @@ class AdminTests(unittest.TestCase):
     def test_large_mod_config_request_uses_editor_budget_only(self):
         content = 'x' * (1024 * 1024)
         with patch.object(server, 'api', return_value={'checked': True}) as dispatch:
-            for endpoint in ('/api/mod-configs', '/api/mod-configs/validate'):
+            for endpoint in ('/api/mod-configs', '/api/mod-configs/validate', '/api/mod-configs/preview', '/api/mod-configs/restore', '/api/mod-configs/merge'):
                 self.assertTrue(self.request(endpoint, {'name': 'large.txt', 'content': content})[0].startswith('200'))
-            self.assertEqual(dispatch.call_count, 2)
+            self.assertEqual(dispatch.call_count, 5)
             self.assertTrue(self.request('/api/settings', {'content': content})[0].startswith('400'))
-            self.assertEqual(dispatch.call_count, 2)
+            self.assertEqual(dispatch.call_count, 5)
+
+    def test_mod_config_conflict_response_preserves_current_file_and_draft(self):
+        with patch.object(settings, 'DATA', self.root):
+            path = self.root / 'tModLoader/Example.json'
+            path.parent.mkdir(parents=True)
+            path.write_text('{"original": true}')
+            current = server.admin_modconfigs.read('Example.json')
+            path.write_text('{"external": true}')
+            payload = {**current, 'content': '{"mine": true}'}
+            invalid_status, invalid_body = self.request('/api/mod-configs/preview', {**payload,'content':'{broken'})
+            self.assertTrue(invalid_status.startswith('400'))
+            self.assertIn('Invalid JSON', json.loads(invalid_body)['error'])
+            self.assertNotIn('conflict', json.loads(invalid_body))
+            self.assertTrue(self.request('/api/mod-configs/preview', payload, auth=False)[0].startswith('403'))
+            status, body = self.request('/api/mod-configs/preview', payload)
+            self.assertTrue(status.startswith('200'))
+            preview = json.loads(body)
+            self.assertTrue(preview['conflict'])
+            self.assertEqual(preview['content'], '{"mine": true}')
+            status, body = self.request('/api/mod-configs', payload)
+            self.assertTrue(status.startswith('409'))
+            self.assertEqual(json.loads(body)['conflict']['content'], '{"external": true}')
+            self.assertEqual(path.read_text(), '{"external": true}')
+            merge_payload = {'name': current['name'], 'revision': preview['current']['revision'],
+                             'base_content': current['content'], 'content': payload['content']}
+            self.assertTrue(self.request('/api/mod-configs/merge', merge_payload, auth=False)[0].startswith('403'))
+            status, body = self.request('/api/mod-configs/merge', merge_payload)
+            self.assertTrue(status.startswith('200'))
+            self.assertEqual(json.loads(body)['conflicts'], 0)
+            self.assertEqual(json.loads(json.loads(body)['content']), {'mine': True, 'external': True})
+            self.assertEqual(path.read_text(), '{"external": true}')
+            status, _ = self.request('/api/mod-configs/merge', {**merge_payload, 'revision': current['revision']})
+            self.assertTrue(status.startswith('409'))
 
     def test_historical_bans_require_auth_and_idle_state_but_not_live_game(self):
         endpoint = '/api/players/history/ban'
@@ -56,7 +89,7 @@ class AdminTests(unittest.TestCase):
             self.assertFalse(settings.PENDING.with_name(name).exists())
 
     def test_new_mutations_require_auth_and_respect_busy_state(self):
-        for endpoint in ('/api/settings/discard', '/api/worlds/delete', '/api/mod-configs'):
+        for endpoint in ('/api/settings/discard', '/api/worlds/delete', '/api/mod-configs', '/api/mod-configs/restore'):
             self.assertTrue(self.request(endpoint, {}, auth=False)[0].startswith('403'))
             server.JOB = {'state': 'running'}
             self.assertTrue(self.request(endpoint, {})[0].startswith('400'))

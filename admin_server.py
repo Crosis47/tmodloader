@@ -581,6 +581,17 @@ def api(method, path, query, payload):
             else:
                 (admin_updates.ROOT / 'rollback-request.json').unlink(missing_ok=True)
             return admin_updates.status(refresh=False)
+    if path == '/api/mod-configs/merge' and method == 'POST':
+        with STATE_LOCK:
+            return admin_modconfigs.merge(payload)
+    if path == '/api/mod-configs/preview' and method == 'POST':
+        with STATE_LOCK:
+            return admin_modconfigs.preview(payload)
+    if path == '/api/mod-configs/restore' and method == 'POST':
+        with STATE_LOCK:
+            if operation_busy():
+                raise ValueError('Wait for the current server operation before restoring mod configuration.')
+            return admin_modconfigs.restore(payload)
     if path == '/api/mod-configs/validate' and method == 'POST':
         admin_modconfigs.path_for(payload.get('name'))
         return admin_modconfigs.validate_content(payload['name'], payload.get('content'))
@@ -685,7 +696,9 @@ def application(environ, start_response):
             payload = {}
             if method == 'POST':
                 length = int(environ.get('CONTENT_LENGTH') or '0')
-                body_limit = admin_modconfigs.REQUEST_LIMIT if path in ('/api/mod-configs', '/api/mod-configs/validate') else 65536
+                body_limit = admin_modconfigs.REQUEST_LIMIT if path in ('/api/mod-configs', '/api/mod-configs/validate', '/api/mod-configs/preview', '/api/mod-configs/restore') else 65536
+                if path == '/api/mod-configs/merge':
+                    body_limit = admin_modconfigs.MERGE_REQUEST_LIMIT
                 if not 0 < length <= body_limit or environ.get('CONTENT_TYPE', '').split(';')[0] != 'application/json':
                     raise ValueError(f'Expected a JSON body of at most {body_limit // 1024} KiB.')
                 payload = json.loads(environ['wsgi.input'].read(length))
@@ -701,6 +714,8 @@ def application(environ, start_response):
             body = (STATIC / name).read_bytes()
         else:
             raise LookupError('Not found.')
+    except admin_modconfigs.ConflictError as error:
+        status, body = '409 Conflict', json.dumps({'error': str(error), 'conflict': error.current}).encode()
     except PermissionError as error:
         status, body = '403 Forbidden', json.dumps({'error': str(error)}).encode()
     except (ValueError, TypeError) as error:
@@ -770,7 +785,7 @@ def main():
     print(f'[ADMIN] Private administration interface listening on port {admin_access.web_port()}.', flush=True)
     serve(application, host='0.0.0.0', port=admin_access.web_port(), threads=4, connection_limit=32,
           # admin_access validates raw headers against the unchanged socket peer.
-          channel_timeout=30, max_request_body_size=admin_modconfigs.REQUEST_LIMIT, clear_untrusted_proxy_headers=False)
+          channel_timeout=30, max_request_body_size=admin_modconfigs.MERGE_REQUEST_LIMIT, clear_untrusted_proxy_headers=False)
 
 
 if __name__ == '__main__':
