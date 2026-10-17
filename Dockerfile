@@ -272,7 +272,7 @@ COPY --chown=tml:tml server-mod ./server-mod
 COPY --chown=tml:tml admin_worlds.py admin_world_metadata.py admin_world_time.py admin_journey.py ./
 COPY --chown=tml:tml admin_modconfigs.py ./
 COPY --chown=tml:tml admin_updates.py runtime_updates.py ./
-COPY --chown=tml:tml admin_profiles.py admin_playthroughs.py ./
+COPY --chown=tml:tml admin_profiles.py admin_profile_configs.py admin_support.py admin_playthroughs.py ./
 COPY --chown=tml:tml web ./web
 COPY --chown=root:root --chmod=0755 container-init.sh /usr/local/bin/tmod-init
 

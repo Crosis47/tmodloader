@@ -1396,6 +1396,27 @@ $('console-command').onkeydown = event => { if (!['ArrowUp', 'ArrowDown'].includ
 
 $('refresh').onclick = action(refresh);
 
+$('support-report-open').onclick = action(async () => {
+  const button = $('support-report-open'); button.disabled = true;
+  $('support-report-content').value = ''; $('support-report-status').textContent = '';
+  try {
+    const result = await api('/api/support-report');
+    $('support-report-content').value = result.report;
+    $('support-report-dialog').showModal();
+  } finally { button.disabled = false; }
+});
+$('support-report-copy').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($('support-report-content').value);
+    $('support-report-status').textContent = 'Report copied. Paste it into the issue after reviewing the template.';
+  } catch {
+    $('support-report-content').focus(); $('support-report-content').select();
+    $('support-report-status').textContent = 'Clipboard access is unavailable. The report is selected; use your device’s Copy command.';
+  }
+};
+$('support-report-close').onclick = () => $('support-report-dialog').close();
+$('support-report-dialog').addEventListener('close', () => { $('support-report-content').value = ''; $('support-report-status').textContent = ''; });
+
 $('backup').onclick = action(async () => { if (await confirmAction('Back up now?', 'Players will be disconnected while the world is saved, archived, and restarted.')) { await api('/api/backup', {confirm: true}); await refresh(); } });
 
 $('server-password-action').onchange = () => {
@@ -1532,6 +1553,11 @@ if (document.modelContext?.registerTool) {
 
 
 let profileState = null, profileBusy = false;
+const profileRestoreConfigs = new Map();
+function selectedProfileConfigs() {
+  return $('profile-include-configs').checked ? [...$('profile-config-files').querySelectorAll('input:checked')].map(input => input.value) : [];
+}
+$('profile-include-configs').onchange = () => { $('profile-config-picker').hidden = !$('profile-include-configs').checked; };
 
 function renderProfiles() {
 
@@ -1546,6 +1572,19 @@ function renderProfiles() {
   $('profile-save').disabled = locked;
 
   $('profiles-refresh').disabled = profileBusy;
+  $('profile-include-configs').disabled = locked;
+  const configFiles = state?.config_files || [];
+  const picker = $('profile-config-files');
+  if (picker.dataset.files !== JSON.stringify(configFiles)) {
+    const selected = new Set([...picker.querySelectorAll('input:checked')].map(input => input.value));
+    picker.replaceChildren(...configFiles.map(filename => {
+      const label = node('label'), input = node('input'); input.type = 'checkbox'; input.value = filename; input.checked = selected.has(filename);
+      label.append(input, document.createTextNode('/' + filename)); return label;
+    }));
+    if (!configFiles.length) picker.append(node('p', 'No configuration files found. Mods must generate their files first.', 'muted'));
+    picker.dataset.files = JSON.stringify(configFiles);
+  }
+  picker.querySelectorAll('input').forEach(input => { input.disabled = locked; });
 
   $('profiles-apply').disabled = locked || !state.editable || !state.pending;
 
@@ -1562,6 +1601,12 @@ function renderProfiles() {
     if (profile.mods === state.staged) card.append(node('p', 'Matches saved draft', 'muted'));
 
     card.append(name);
+    if (profile.configs?.length) {
+      card.append(node('p', profile.configs.length + ' saved configuration files'), node('p', profile.configs.map(item => '/' + item.name).join(', '), 'profile-entries'));
+      const label = node('label'), checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.checked = profileRestoreConfigs.get(profile.id) !== false; checkbox.disabled = locked;
+      checkbox.onchange = () => profileRestoreConfigs.set(profile.id, checkbox.checked);
+      label.className = 'profile-config-toggle'; label.append(checkbox, document.createTextNode('Restore saved configs when loading ' + profile.name)); card.append(label);
+    }
 
     const buttons = node('div', undefined, 'button-row');
 
@@ -1573,9 +1618,9 @@ function renderProfiles() {
 
         if (kind === 'delete' && !await confirmAction('Delete ' + profile.name + '?', 'This removes the saved profile. Your running selection and downloaded mods stay available.')) return;
 
-        if (kind === 'save' && !await confirmAction('Replace ' + profile.name + '?', 'Replace this profile using the selection chosen in the save form.', state[$('profile-source').value] || '(no Workshop entries)')) return;
+        if (kind === 'save' && !await confirmAction('Replace ' + profile.name + '?', 'Replace the Workshop selection and config snapshots using the save form. Unselected snapshots will be removed from this profile.', (state[$('profile-source').value] || '(no Workshop entries)') + '\nConfig files: ' + (selectedProfileConfigs().join(', ') || 'None'))) return;
 
-        await changeProfile({action: kind, id: profile.id, name: kind === 'rename' ? name.value : profile.name, source: $('profile-source').value, confirm: true});
+        await changeProfile({action: kind, id: profile.id, name: kind === 'rename' ? name.value : profile.name, source: $('profile-source').value, configs: selectedProfileConfigs(), include_configs: profileRestoreConfigs.get(profile.id) !== false, confirm: true});
 
         if (kind === 'stage') { await loadSettings(); await $('apply').onclick(); await refreshProfiles(); }
 
@@ -1625,7 +1670,7 @@ async function changeProfile(values) {
 
 }
 
-$('profile-save-form').onsubmit = action(async () => { await changeProfile({action: 'save', name: $('profile-name').value, source: $('profile-source').value}); $('profile-name').value = ''; });
+$('profile-save-form').onsubmit = action(async () => { await changeProfile({action: 'save', name: $('profile-name').value, source: $('profile-source').value, configs: selectedProfileConfigs()}); $('profile-name').value = ''; });
 
 $('profiles-refresh').onclick = action(refreshProfiles);
 

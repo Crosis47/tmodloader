@@ -8,7 +8,7 @@ const {chromium} = require('playwright');
     const page = await browser.newPage({viewport: {width: 1280, height: 1000}});
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     let running = {TMOD_WORLDNAME: 'Original', TMOD_MODS: ''}, staged = {...running};
-    let profiles = [], sequence = 0;
+    let profiles = [], sequence = 0, stagedConfigs = [];
     let pending = false, editable = true, applies = 0, job = {state: 'idle'}, lastStage;
     await page.route('http://worlds.test/**', async route => {
       const url = new URL(route.request().url());
@@ -17,19 +17,19 @@ const {chromium} = require('playwright');
         return route.fulfill({body: fs.readFileSync(path.join(__dirname, '../web', name)), contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html'});
       }
       let data = {};
-      const config = () => ({mode: editable ? 'web' : 'env', pending, running, staged, revision: 'revision', compose_only: {}, fields: {}, groups: [], choices: {}, ranges: {}});
+      const config = () => ({mode: editable ? 'web' : 'env', pending, running, staged, revision: 'revision', compose_only: {}, fields: {}, groups: [], choices: {}, ranges: {}, ...(stagedConfigs.length ? {changes: stagedConfigs.map(item => ({key: 'Mod config: ' + item.name, label: 'Mod config: ' + item.name, running: 'Current disk file', staged: 'Restore profile snapshot'}))} : {})});
       if (url.pathname === '/api/settings') data = config();
       if (url.pathname === '/api/status') data = {healthy: true, version: 'test', job, backups: {operation: {}, archives: [], count: 0, bytes: 0, free_bytes: 0, warnings: []}};
       if (url.pathname === '/api/recovery') data = {operation: {}, interrupted: false, originals: [], guidance: ''};
       if (url.pathname === '/api/profiles') {
         if (route.request().method() === 'POST') {
           const body = route.request().postDataJSON();
-          if (body.action === 'save') profiles.push({id: String(++sequence), name: body.name, mods: body.source === 'running' ? running.TMOD_MODS : staged.TMOD_MODS});
+          if (body.action === 'save') profiles.push({id: String(++sequence), name: body.name, mods: body.source === 'running' ? running.TMOD_MODS : staged.TMOD_MODS, configs: body.configs.map(name => ({name}))});
           if (body.action === 'rename') profiles.find(p => p.id === body.id).name = body.name;
           if (body.action === 'delete') { assert.equal(body.confirm, true); profiles = profiles.filter(p => p.id !== body.id); }
-          if (body.action === 'stage') { staged.TMOD_MODS = profiles.find(p => p.id === body.id).mods; pending = true; }
+          if (body.action === 'stage') { lastStage = body; const profile = profiles.find(p => p.id === body.id); staged.TMOD_MODS = profile.mods; stagedConfigs = body.include_configs ? profile.configs : []; pending = true; }
         }
-        data = {profiles, revision: 'revision', catalog_revision: 'catalog', running: running.TMOD_MODS, staged: staged.TMOD_MODS, editable, pending, busy: false};
+        data = {profiles, config_files: ['ModConfigs/Example.json', 'HEROsModDatabase.json'], revision: 'revision', catalog_revision: 'catalog', running: running.TMOD_MODS, staged: staged.TMOD_MODS, editable, pending, busy: false};
       }
       if (url.pathname === '/api/apply') { assert.equal(route.request().postDataJSON().confirm, true); applies++; running = {...staged}; pending = false; job = {kind: 'apply', state: 'success', stage: 'health', started: new Date().toISOString(), detail: 'Healthy'}; data = job; }
       await route.fulfill({json: data});
@@ -57,12 +57,34 @@ const {chromium} = require('playwright');
     await page.getByRole('heading', {name: 'Renamed', exact: true}).waitFor();
     await page.getByRole('button', {name: 'Delete', exact: true}).click(); await page.locator('#confirm-cancel').click();
     assert.equal(profiles.length, 1);
+    await page.locator('#profile-include-configs').check();
+    await page.getByLabel('/ModConfigs/Example.json', {exact: true}).check();
+    await page.locator('#profile-name').fill('Pack with settings');
+    await page.locator('#profile-save').click();
+    const pack = page.locator('#profiles-list article').filter({has: page.getByRole('heading', {name: 'Pack with settings', exact: true})});
+    await pack.waitFor();
+    assert.deepEqual(profiles[1].configs, [{name: 'ModConfigs/Example.json'}]);
+    await pack.getByRole('button', {name: 'Load profile', exact: true}).click();
+    await page.locator('#confirmation').waitFor();
+    assert.match(await page.locator('#confirmation').innerText(), /Mod config: ModConfigs\/Example.json/);
+    assert.equal(lastStage.include_configs, true);
+    await page.locator('#confirm-cancel').click();
+    assert.equal(applies, 1);
+    await pack.getByRole('checkbox', {name: 'Restore saved configs when loading Pack with settings'}).uncheck();
+    await page.locator('#profiles-refresh').click();
+    assert.equal(await pack.getByRole('checkbox').isChecked(), false);
+    assert.equal(await page.getByLabel('/ModConfigs/Example.json', {exact: true}).isChecked(), true);
+    await pack.getByRole('button', {name: 'Load profile', exact: true}).click();
+    await page.locator('#confirmation').waitFor();
+    assert.equal(lastStage.include_configs, false);
+    assert.equal(stagedConfigs.length, 0);
+    await page.locator('#confirm-cancel').click();
     editable = false; await page.locator('#profiles-refresh').click();
     await page.locator('#profiles-status').filter({hasText: 'Enable web-managed'}).waitFor();
-    assert.equal(await page.getByRole('button', {name: 'Load profile', exact: true}).isDisabled(), true);
+    for (const button of await page.getByRole('button', {name: 'Load profile', exact: true}).all()) assert.equal(await button.isDisabled(), true);
     await page.setViewportSize({width: 390, height: 844});
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     assert.deepEqual(errors, []);
-    console.log('Profiles save, load, cancel, apply, rename, delete cancellation and read-only/mobile checks passed.');
+    console.log('Profiles save, config selection, optional config restore, review, cancel, apply, rename and read-only/mobile checks passed.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

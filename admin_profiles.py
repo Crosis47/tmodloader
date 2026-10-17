@@ -1,16 +1,24 @@
-"""Bounded, persistent Workshop selections; profiles never contain world settings."""
+"""Bounded Workshop selections and optional config snapshots; no world settings."""
 import hashlib
 import json
 import uuid
 
 import admin_settings as settings
+import admin_profile_configs as profile_configs
 
 
 def catalog():
-    rows = settings.read_json(settings.PENDING.with_name('mod-profiles.json'), [])
+    rows = profile_configs.read_json(settings.PENDING.with_name('mod-profiles.json'), [])
     if not isinstance(rows, list):
         raise ValueError('Invalid mod profile catalog.')
     return {'profiles': rows, 'catalog_revision': hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()}
+
+
+def public_catalog():
+    state = catalog()
+    return {**state, 'profiles': [{**{key: value for key, value in row.items() if key != 'configs'},
+                                 'configs': [{'name': item['name']} for item in row.get('configs', [])]}
+                                for row in state['profiles']]}
 
 
 def change(payload, current):
@@ -31,7 +39,10 @@ def change(payload, current):
             raise ValueError('Enable web-managed settings to load a profile.')
         removed = []
         values = settings.clean_mod_selection(settings.validate({'TMOD_MODS': selected['mods']}), removed)
-        settings.atomic_json(settings.PENDING, {**current['staged'], **values})
+        if not isinstance(payload.get('include_configs', True), bool):
+            raise ValueError('Choose whether to restore configuration files.')
+        records = profile_configs.stage(selected.get('configs', [])) if payload.get('include_configs', True) else []
+        profile_configs.stage_draft(records, {**current['staged'], **values})
         settings.record_pending_removals(removed)
         return
     if kind == 'delete' or (kind == 'save' and selected):
@@ -49,13 +60,15 @@ def change(payload, current):
             if source not in ('running', 'staged'):
                 raise ValueError('Choose the running or saved draft selection.')
             mods = settings.validate({'TMOD_MODS': current[source].get('TMOD_MODS', '')})['TMOD_MODS']
+            snapshots = profile_configs.capture(payload.get('configs', []))
             if selected is None:
                 selected = {'id': uuid.uuid4().hex}
                 rows.append(selected)
             selected['mods'] = mods
+            selected['configs'] = snapshots
         selected['name'] = name
     else:
         rows.remove(selected)
-    if len(rows) > 50 or len((json.dumps(rows, indent=2) + '\n').encode()) > 60000:
-        raise ValueError('Profile storage is full (50 profiles or 60 KB). Remove an unused profile first.')
+    if len(rows) > 50 or len((json.dumps(rows, indent=2) + '\n').encode()) > profile_configs.STORAGE_LIMIT:
+        raise ValueError('Profile storage is full (50 profiles or 32 MiB). Remove an unused profile first.')
     settings.atomic_json(settings.PENDING.with_name('mod-profiles.json'), rows)

@@ -40,13 +40,15 @@ It is not affiliated with Re-Logic or the tModLoader team.
 
 - **Web dashboard:** see server health, loaded mods, connected players, and recent
   activity; send commands through an interactive console and cancel saved drafts.
+  Preview and copy a support report with sensitive values removed before review.
 - **Mod configuration editor:** edit existing UTF-8 configuration files with syntax
   checks for JSON, YAML, TOML, INI, and XML. Other text formats can be edited without
   syntax validation. Restart the server to load saved changes.
 - **World cleanup:** delete unused worlds after confirmation; running and
   draft-selected worlds are protected. Deletion includes their local backup files.
 - **Worlds and playthroughs:** create or switch worlds, save mod profiles, and pair
-  a world with its settings and mod selection for later use.
+  a world with its settings and mod selection for later use. Profiles can also
+  snapshot selected mod config files for restoration during review and restart.
 - **Steam Workshop management:** download mods and collections, look up Workshop
   URLs or IDs without an API key, and reuse cached content when Steam is unavailable.
   Workshop search requires a Steam API key.

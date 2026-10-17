@@ -395,7 +395,7 @@ perform_admin_apply() {
         printf '[ADMIN] Apply failed. Game stopped; correct settings in the dashboard and apply again.\n' >&2
     else
         admin_failed=0
-        rm -f /data/admin/pending.json /data/admin/pending-world.json
+        rm -f /data/admin/pending.json /data/admin/pending-world.json /data/admin/pending-profile-configs.json
         python3 /terraria-server/admin_settings.py snapshot
         printf '[ADMIN] Settings applied and game health validated.\n'
     fi

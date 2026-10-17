@@ -29,6 +29,8 @@ import admin_worlds
 import admin_modconfigs
 import admin_journey
 import admin_profiles
+import admin_profile_configs
+import admin_support
 import admin_playthroughs
 import admin_updates
 
@@ -213,9 +215,14 @@ def configuration():
     if password is not None and settings.PENDING.exists():
         changes.append({'key': 'Server password', 'label': 'Server password', 'running': 'Hidden',
                         'staged': 'Password changed' if password else 'Password removed'})
+    profile_configs = admin_profile_configs.pending() if settings.PENDING.exists() else []
+    for record in profile_configs:
+        if record['disk_revision'] != record['revision']:
+            changes.append({'key': 'Mod config: ' + record['name'], 'label': 'Mod config: ' + record['name'],
+                            'running': 'Current disk file', 'staged': 'Restore profile snapshot'})
     return {'password_pending': password is not None and settings.PENDING.exists(),
             'mode': 'web' if settings.web_mode() else 'env', 'running': running,
-            'staged': staged, 'revision': revision({'settings': staged, 'password': hashlib.sha256(PASSWORD_REVISION_KEY + json.dumps(password).encode()).hexdigest()}),
+            'staged': staged, 'revision': revision({'settings': staged, 'profile_configs': profile_configs, 'password': hashlib.sha256(PASSWORD_REVISION_KEY + json.dumps(password).encode()).hexdigest()}),
             'pending': settings.PENDING.exists() and bool(changes),
             'changes': changes if settings.PENDING.exists() else [],
             'draft_exists': settings.PENDING.exists(),
@@ -340,7 +347,8 @@ def profiles_request(method, payload):
                 raise ValueError('Wait for the current operation before changing profiles.')
             admin_profiles.change(payload, current)
             current = configuration()
-        return {**admin_profiles.catalog(), 'revision': current['revision'],
+        return {**admin_profiles.public_catalog(), 'revision': current['revision'],
+                'config_files': admin_modconfigs.inventory()['files'],
                 'running': current['running'].get('TMOD_MODS', ''),
                 'staged': current['staged'].get('TMOD_MODS', ''),
                 'editable': settings.web_mode(), 'pending': current['pending'], 'busy': busy}
@@ -499,6 +507,7 @@ def operation_request(path, payload):
             raise ValueError('The staged draft changed. Reload and review it before applying.')
         if kind == 'apply':
             admin_worlds.validate_pending()
+            admin_profile_configs.check_pending()
         archive = None
         if kind == 'verify':
             name = payload.get('archive', '')
@@ -512,6 +521,8 @@ def operation_request(path, payload):
 
 def api(method, path, query, payload):
     """Dispatch authenticated requests; feature handlers own validation and locking."""
+    if path == '/api/support-report' and method == 'GET':
+        return admin_support.report(CONSOLE_LOG, running_mods(health()), workshop.CREDENTIAL.get())
     if (method == 'POST' and path != '/api/updates/check'
             and admin_updates.read(admin_updates.ROOT / 'status.json').get('state') in admin_updates.BUSY):
         raise ValueError('Wait for startup update preparation to finish before changing server data.')
@@ -610,7 +621,7 @@ def api(method, path, query, payload):
             if payload.get('revision') != current['revision']:
                 raise ValueError('Settings changed. Refresh and review again.')
             if path == '/api/settings/discard':
-                for name in ('pending.json', 'pending-world.json', 'pending-removed.json', 'pending-password.json'):
+                for name in ('pending.json', 'pending-world.json', 'pending-removed.json', 'pending-password.json', 'pending-profile-configs.json'):
                     settings.PENDING.with_name(name).unlink(missing_ok=True)
                 return configuration()
             if payload.get('confirm') is not True:

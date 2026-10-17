@@ -12,6 +12,8 @@
 | API routing | `admin_server.api` | Named feature handlers; handlers retain their validation and locks |
 | Settings | `admin_settings.py` | Validation, Compose defaults, saved settings and pending draft |
 | Feature rules | `admin_worlds`, `admin_profiles`, `admin_playthroughs`, `admin_journey`, `admin_players` | Filesystem state or native game commands |
+| Profile config snapshots | `admin_profile_configs` | Selected files stored in the profile catalog; deferred restores in `pending-profile-configs.json`; supervisor applies after stopping the game |
+| Support reports | `admin_support` | Local metadata and bounded log tails; server-side redaction before the preview response |
 | Player history | `admin_player_history.py`, `console_tee.py` | Live join announcements → persistent SQLite visits by character name and world GUID; `/api/players` reads paged history |
 | Browser | `web/app.js` | `api()` requests, feature render/refresh functions, event handlers |
 | Container backup CLI | `container-backup.py` (`tmod-backup`) | Backup coordination plus archive primitives in `backup.py` |

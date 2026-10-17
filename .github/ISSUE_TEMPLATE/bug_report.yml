@@ -60,6 +60,14 @@ body:
     validations:
       required: true
   - type: textarea
+    id: support-report
+    attributes:
+      label: Dashboard support report
+      description: In the dashboard, open Overview → Preview support report. Review the report, remove any remaining private details, then choose Copy report and paste it here. It includes container and tModLoader versions, enabled mods, and recent errors. If the dashboard is unavailable or your version does not offer support reports, leave this blank and provide logs below.
+      placeholder: Paste your reviewed support report here.
+    validations:
+      required: false
+  - type: textarea
     id: configuration
     attributes:
       label: Relevant configuration
@@ -69,7 +77,7 @@ body:
     id: logs
     attributes:
       label: Relevant logs
-      description: Include startup output and logs around the failure, with secrets and private player details removed. For Docker, use docker logs <container-name>.
+      description: Include startup output and logs around the failure that are missing from the support report, or provide logs here if a report is unavailable. Remove secrets and private player details. For Docker, use docker logs <container-name>.
       render: text
   - type: textarea
     id: context
