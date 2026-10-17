@@ -18,6 +18,56 @@ import filter_client_mods
 
 
 class AdminTests(unittest.TestCase):
+    def test_upgrade_notice_auth_and_dismissal(self):
+        self.assertTrue(self.request('/api/whats-new', auth=False)[0].startswith('403'))
+        self.assertTrue(self.request('/api/whats-new', {'version': '3.8.0'}, auth=False)[0].startswith('403'))
+        server.admin_whatsnew.initialize(True)
+        status, body = self.request('/api/whats-new')
+        self.assertTrue(status.startswith('200'))
+        self.assertTrue(json.loads(body)['pending'])
+        self.assertTrue(self.request('/api/whats-new', {'version': 'old'})[0].startswith('400'))
+        status, body = self.request('/api/whats-new', {'version': '3.8.0'})
+        self.assertTrue(status.startswith('200'))
+        self.assertFalse(json.loads(body)['pending'])
+
+    def test_support_report_auth_and_request_token_redaction(self):
+        self.assertTrue(self.request('/api/support-report', auth=False)[0].startswith('403'))
+        log = self.root / 'container-console.log'
+        log.write_text('ERROR failed with ' + self.token + '\nERROR password=do-not-leak')
+        with patch.object(server, 'CONSOLE_LOG', log), patch.object(server, 'health', return_value=False):
+            status, body = self.request('/api/support-report')
+        self.assertTrue(status.startswith('200'))
+        report = json.loads(body)['report']
+        self.assertNotIn(self.token, report)
+        self.assertNotIn('do-not-leak', report)
+        self.assertIn('REDACTED', report)
+
+    def test_profile_configs_review_revision_discard_and_apply_guard(self):
+        with patch.object(settings, 'DATA', self.root):
+            path = self.root / 'tModLoader/Example.json'; path.parent.mkdir(); path.write_text('{"saved":true}')
+            initial = server.configuration()
+            status, body = self.request('/api/profiles', {'action': 'save', 'source': 'running', 'name': 'With configs',
+                'configs': ['Example.json'], 'revision': initial['revision'], 'catalog_revision': server.admin_profiles.catalog()['catalog_revision']})
+            self.assertTrue(status.startswith('200'))
+            profile = json.loads(body)['profiles'][0]
+            self.assertEqual(profile['configs'], [{'name': 'Example.json'}])
+            self.assertNotIn('saved', json.dumps(profile))
+            path.write_text('{"disk":true}')
+            status, _ = self.request('/api/profiles', {'action': 'stage', 'id': profile['id'], 'revision': initial['revision'],
+                'catalog_revision': server.admin_profiles.catalog()['catalog_revision']})
+            self.assertTrue(status.startswith('200'))
+            current = server.configuration()
+            self.assertTrue(current['pending'])
+            self.assertNotEqual(current['revision'], initial['revision'])
+            self.assertIn('Mod config: Example.json', [row['key'] for row in current['changes']])
+            path.write_text('{"newer":true}')
+            with patch.object(server, 'start_job') as start:
+                status, _ = self.request('/api/apply', {'confirm': True, 'revision': current['revision']})
+                self.assertTrue(status.startswith('400'))
+                start.assert_not_called()
+            self.assertTrue(self.request('/api/settings/discard', {'revision': current['revision']})[0].startswith('200'))
+            self.assertFalse(server.admin_profile_configs.pending_path().exists())
+
     def test_large_mod_config_request_uses_editor_budget_only(self):
         content = 'x' * (1024 * 1024)
         with patch.object(server, 'api', return_value={'checked': True}) as dispatch:

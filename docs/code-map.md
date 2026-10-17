@@ -12,6 +12,9 @@
 | API routing | `admin_server.api` | Named feature handlers; handlers retain their validation and locks |
 | Settings | `admin_settings.py` | Validation, Compose defaults, saved settings and pending draft |
 | Feature rules | `admin_worlds`, `admin_profiles`, `admin_playthroughs`, `admin_journey`, `admin_players` | Filesystem state or native game commands |
+| Profile config snapshots | `admin_profile_configs` | Selected files stored in the profile catalog; deferred restores in `pending-profile-configs.json`; supervisor applies after stopping the game |
+| Support reports | `admin_support` | Local metadata and bounded log tails; server-side redaction before the preview response |
+| Upgrade highlights | `admin_whatsnew`, `release-highlights.json` | Startup records container upgrades in `admin/release-notice.json`; authenticated dashboard shows highlights until dismissed |
 | Player history | `admin_player_history.py`, `console_tee.py` | Live join announcements → persistent SQLite visits by character name and world GUID; `/api/players` reads paged history |
 | Browser | `web/app.js` | `api()` requests, feature render/refresh functions, event handlers |
 | Container backup CLI | `container-backup.py` (`tmod-backup`) | Backup coordination plus archive primitives in `backup.py` |
@@ -20,6 +23,11 @@
 Python names above refer to the same-named files at the repository root.
 `Dockerfile` explicitly copies runtime files; adding a module also requires
 updating that copy list. Static asset paths are allowlisted in `application`.
+When bumping `VERSION`, update `release-highlights.json` to the same version with
+brief user-facing highlights. Fresh installs establish a baseline; upgrades
+queue a notice. Existing installations from before this tracking was introduced
+are recognized by their saved admin credential. Dismissal is shared by dashboard
+users and survives browser changes and container replacement with the same data.
 
 ## Trace a settings change
 

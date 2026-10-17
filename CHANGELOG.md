@@ -13,11 +13,17 @@ installed tModLoader release.
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-10-17
+
 ### Added
 
+- Optionally save selected mod config files in a mod profile and restore their snapshots during the reviewed restart, with disk-change checks and per-file undo history.
+- Preview and copy a local support report containing versions, enabled mods, and recent errors, with sensitive details removed before preview.
+- Add an optional dashboard support report field to the bug report template, with manual log collection as a fallback.
 - Discover mod configuration files outside ModConfigs, filter by folder, and search filenames in the dashboard editor.
 - Review changes before saving, restore the previous saved version, and recover from concurrent disk edits with setting-level JSON merge choices and a syntax-repair step.
 - Add dashboard links to the wiki, bug report template, and feature request template.
+- Show release highlights after dashboard sign-in following a container upgrade, remember dismissal in persistent storage, and let administrators reopen them from the overview.
 
 ### Fixed
 

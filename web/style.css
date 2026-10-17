@@ -97,3 +97,7 @@
 
 .mod-merge-choice{min-width:0;border:1px solid var(--line);border-radius:.5rem;padding:1rem;margin:1rem 0}.mod-merge-choice legend{font-weight:700;overflow-wrap:anywhere}.mod-merge-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.mod-merge-options label{min-width:0;border:1px solid var(--line);border-radius:.3rem;padding:.75rem;cursor:pointer}.mod-merge-options label:has(input:checked){border-color:var(--accent);background:var(--bg)}.mod-merge-choice pre{max-height:14rem;overflow:auto;background:var(--bg);padding:.75rem;margin:.5rem 0;white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:700px){.mod-merge-options{grid-template-columns:1fr}}
 #mod-config-disk-repair{max-width:1000px;width:94%}#mod-config-disk-repair textarea{width:100%;box-sizing:border-box;background:var(--bg);color:var(--text);border:1px solid var(--line);padding:.75rem;font:13px/1.5 Consolas,monospace;white-space:pre}
+.profile-config-files {max-height:18rem; overflow:auto; margin:1rem 0;}
+.profile-config-files label, .profile-config-toggle {display:flex; flex-direction:row; align-items:center; gap:.6rem; overflow-wrap:anywhere;}
+.profile-config-files input, .profile-config-toggle input {width:auto; flex:0 0 auto;}
+#support-report-content {width:100%; min-height:22rem; font-family:monospace;}

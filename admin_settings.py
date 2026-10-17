@@ -7,6 +7,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+from contextlib import nullcontext
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DATA = Path(os.environ.get('TMOD_DATA_DIR', '/data'))
@@ -249,16 +250,17 @@ def main(command):
         # destination filesystem rather than staging in the runtime directory.
         environment['TMOD_CONFIG_PATH'] = str(config.with_name('.admin-serverconfig.txt'))
         subprocess.run(['/terraria-server/prepare-config.sh'], env=environment, check=True)
-        os.replace(environment['TMOD_CONFIG_PATH'], config)
-        if saved_password is not None:
-            atomic_json(password_file(), {'value': saved_password})
-        if command == 'apply':
-            password_file(True).unlink(missing_ok=True)
-        if command == 'apply':
-            import admin_journey
-            admin_journey.remember_applied(values)
-        atomic_json(ACTIVE, values)
-        (RUNTIME / 'admin.env').write_text(exports(values))
+        import admin_profile_configs
+        with admin_profile_configs.applying() if command == 'apply' else nullcontext():
+            os.replace(environment['TMOD_CONFIG_PATH'], config)
+            if saved_password is not None:
+                atomic_json(password_file(), {'value': saved_password})
+            if command == 'apply':
+                password_file(True).unlink(missing_ok=True)
+                import admin_journey
+                admin_journey.remember_applied(values)
+            atomic_json(ACTIVE, values)
+            (RUNTIME / 'admin.env').write_text(exports(values))
     else:
         raise ValueError('Unknown admin settings command.')
 
