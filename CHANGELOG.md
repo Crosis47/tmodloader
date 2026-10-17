@@ -13,6 +13,17 @@ installed tModLoader release.
 
 ## [Unreleased]
 
+### Added
+
+- Discover mod configuration files outside ModConfigs, filter by folder, and search filenames in the dashboard editor.
+- Review changes before saving, restore the previous saved version, and recover from concurrent disk edits with setting-level JSON merge choices and a syntax-repair step.
+- Add dashboard links to the wiki, bug report template, and feature request template.
+
+### Fixed
+
+- Normalize editor line endings when detecting unsaved changes so files with identical content can be opened reliably.
+- Validate edited and on-disk JSON before comparison, reject duplicate settings, and enable Review & Save only when the editor has changes.
+
 ## [3.7.5] - 2026-10-02
 
 ### Changed

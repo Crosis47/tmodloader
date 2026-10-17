@@ -83,7 +83,11 @@ async function api(path, body) {
 
   const data = await response.json();
 
-  if (!response.ok) throw new Error(data.error || 'Request failed');
+  if (!response.ok) {
+    const error = new Error(data.error || 'Request failed');
+    error.conflict = data.conflict;
+    throw error;
+  }
 
   return data;
 
@@ -1815,62 +1819,388 @@ function renderAttention() {
   $('attention-banner').hidden = !rows.length;
 }
 let modConfig = null;
-function modConfigDirty() { return modConfig && $('mod-config-content').value !== modConfig.content; }
+let modConfigFiles = [], modConfigBusy = false, modConfigLoad = 0, modConfigReview = null;
+// Textareas normalize CRLF and CR to LF when a file is opened.
+function modConfigEditorText(content) { return content.replace(/\r\n?/g, '\n'); }
+function modConfigDirty() { return modConfig && $('mod-config-content').value !== modConfigEditorText(modConfig.content); }
+function modConfigButtons() {
+  $('mod-config-open').disabled = modConfigBusy || !$('mod-config-file').value;
+  $('mod-config-refresh').disabled = modConfigBusy;
+  $('mod-config-save').disabled = modConfigBusy || !modConfigDirty();
+  $('mod-config-check').disabled = modConfigBusy || !modConfig;
+  $('mod-config-undo').disabled = modConfigBusy || !modConfig?.can_restore;
+}
+function modConfigFolder(name) { const slash = name.lastIndexOf('/'); return slash < 0 ? '.' : name.slice(0, slash); }
+function modConfigFolderLabel(folder) { return folder === '.' ? '/ (tModLoader root)' : '/' + folder; }
+function modConfigFolders() { return [...new Set(modConfigFiles.map(modConfigFolder))].sort((a, b) => a.localeCompare(b)); }
+function filterModConfigs() {
+  const selected = $('mod-config-file').value, search = $('mod-config-search').value.trim().toLowerCase();
+  const location = $('mod-config-location').value;
+  const files = modConfigFiles.filter(name => name.toLowerCase().includes(search)
+    && (!location || modConfigFolder(name) === location));
+  const groups = modConfigFolders().map(folder => {
+    const group = document.createElement('optgroup'); group.label = modConfigFolderLabel(folder);
+    group.append(...files.filter(name => modConfigFolder(name) === folder).map(name => {
+      const option = node('option', '/' + name); option.value = name; return option;
+    }));
+    return group;
+  }).filter(group => group.children.length);
+  $('mod-config-file').replaceChildren(...groups);
+  if (files.includes(selected)) $('mod-config-file').value = selected;
+  $('mod-config-count').textContent = files.length + ' of ' + modConfigFiles.length + ' configuration files shown.'
+    + (!files.length ? ' Try another search or location.' : '');
+  modConfigButtons();
+}
+$('mod-config-search').addEventListener('input', filterModConfigs);
+$('mod-config-location').addEventListener('change', filterModConfigs);
+function showModConfig(current, content = current.content, diskDraft) {
+  modConfig = diskDraft === undefined ? current : {...current, diskRepair: {revision: current.revision, content: diskDraft}};
+  modValidationSequence++;
+  $('mod-config-content').value = content;
+  $('mod-config-content').disabled = false;
+  $('mod-config-current').textContent = 'Opened: /' + current.name + ' · ' + (current.format || 'JSON');
+  highlightModConfig(); modConfigButtons();
+}
 async function refreshModConfigs() {
   const result = await api('/api/mod-configs');
-  const selected = $('mod-config-file').value;
-  $('mod-config-file').replaceChildren(...result.files.map(name => { const option = node('option', '/' + name); option.value = name; return option; }));
-  if (result.files.includes(selected)) $('mod-config-file').value = selected;
-  $('mod-config-open').disabled = !result.files.length;
-  $('mod-config-status').textContent = result.files.length ? result.files.length + ' configuration files available.' : 'No generated mod configuration files found.';
+  modConfigFiles = result.files;
+  const selectedLocation = $('mod-config-location').value;
+  const allLocations = node('option', 'All locations'); allLocations.value = '';
+  const folders = modConfigFolders();
+  $('mod-config-location').replaceChildren(allLocations, ...folders.map(folder => {
+    const option = node('option', modConfigFolderLabel(folder)); option.value = folder; return option;
+  }));
+  if (folders.includes(selectedLocation)) $('mod-config-location').value = selectedLocation;
+  filterModConfigs();
+}
+function modConfigValidation(text, error = false) {
+  const banner = $('mod-config-validation');
+  banner.textContent = text;
+  banner.classList.toggle('notice', error);
+  banner.dataset.error = String(error);
+  if (error) banner.scrollIntoView({block: 'nearest'});
 }
 $('mod-config-refresh').onclick = action(refreshModConfigs);
 $('mod-config-open').onclick = action(async () => {
+  const name = $('mod-config-file').value;
+  if (!name || modConfigBusy) return;
   if (modConfigDirty() && !await confirmAction('Discard unsaved file edits?', 'Reloading replaces your unsaved file edits.', modConfig.name, 'Discard edits')) return;
-  modConfig = await api('/api/mod-configs?name=' + encodeURIComponent($('mod-config-file').value));
-  modValidationSequence++;
-  $('mod-config-content').value = modConfig.content;
-  highlightModConfig();
-  $('mod-config-content').disabled = false; $('mod-config-save').disabled = false;
-  $('mod-config-check').disabled = false;
-  $('mod-config-status').textContent = 'Editing ' + modConfig.name + ' · ' + (modConfig.format || 'JSON');
-  $('mod-config-validation').textContent = modConfig.format === 'Text' ? 'Text mode: no format-specific syntax validation.' : 'Use Check syntax or Save file to validate.';
+  const sequence = ++modConfigLoad;
+  const current = await api('/api/mod-configs?name=' + encodeURIComponent(name));
+  if (sequence !== modConfigLoad) return;
+  showModConfig(current);
+  $('mod-config-status').textContent = 'Editing ' + current.name + ' · ' + (current.format || 'JSON');
+  modConfigValidation(current.format === 'Text' ? 'Text mode: no format-specific syntax validation.' : 'Use Check syntax or Review & save to validate.');
 });
 let modValidationSequence = 0;
 $('mod-config-content').addEventListener('input', () => {
   modValidationSequence++;
-  $('mod-config-validation').textContent = 'Unsaved edits. Syntax has not been checked for these edits.';
+  modConfigValidation(modConfigDirty() ? 'Unsaved edits. Syntax has not been checked for these edits.' : 'No unsaved changes.');
+  modConfigButtons();
 });
 $('mod-config-check').onclick = action(async () => {
   if (!modConfig) return;
   const sequence = ++modValidationSequence, name = modConfig.name, content = $('mod-config-content').value;
-  $('mod-config-validation').textContent = 'Checking syntax…';
+  modConfigValidation('Checking syntax…');
   try {
     const result = await api('/api/mod-configs/validate', {name, content});
     if (sequence !== modValidationSequence || name !== modConfig?.name) return;
-    $('mod-config-validation').textContent = result.checked ? result.format + ' syntax is valid. Mod-specific values are not checked.' : 'Text mode: no format-specific syntax validation.';
+    modConfigValidation(result.checked ? result.format + ' syntax is valid. Mod-specific values are not checked.' : 'Text mode: no format-specific syntax validation.');
   } catch (error) {
-    if (sequence === modValidationSequence && name === modConfig?.name) $('mod-config-validation').textContent = error.message;
+    if (sequence === modValidationSequence && name === modConfig?.name) modConfigValidation(error.message, true);
   }
 });
-$('mod-config-form').onsubmit = action(async () => {
-  if (!modConfig) return;
-  const content = $('mod-config-content').value;
-  if (!modConfig.format || modConfig.format === 'JSON') {
-    try { const value = JSON.parse(content); if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('Expected a JSON object.'); }
-    catch (error) { throw new Error('Invalid JSON: ' + error.message); }
+function modConfigMergeReady() {
+  const review = modConfigReview;
+  if (review?.merging && review.choices?.length) {
+    const remaining = review.choices.filter(choice => !review.mergeSelections[choice.id]).length;
+    $('mod-config-review-confirm').disabled = modConfigBusy || remaining > 0;
+    $('mod-config-review-summary').textContent = (review.skipped ? review.skipped + ' matching change(s) already on disk skipped. ' : '')
+      + (remaining ? remaining + ' difference(s) need your choice. Other compatible edits are included automatically.'
+        : 'All differences have a choice. Use the combined draft to review the result before saving.');
   }
-  const name = modConfig.name;
-  const saved = await api('/api/mod-configs', {name, revision: modConfig.revision, content});
-  if (modConfig?.name !== name) return;
-  modConfig = saved;
-  if ($('mod-config-content').value === content) {
-    $('mod-config-content').value = saved.content;
-    highlightModConfig();
-    modValidationSequence++;
-    $('mod-config-validation').textContent = saved.format === 'Text' ? 'Saved as text without format-specific validation.' : 'Syntax validated before saving.';
+}
+function adoptModConfigMerge(review, content) {
+  showModConfig(review.current, content, review.diskDraft);
+  closeModConfigReview();
+  $('mod-config-status').textContent = modConfigDirty()
+    ? 'Combined draft ready. Changes already on disk were skipped. Review & save when ready.'
+    : 'Your changes already match the disk version. No save is needed.';
+  modConfigValidation(modConfigDirty() ? 'Compatible edits have been combined. Nothing has been saved.' : 'No unsaved changes.');
+}
+function renderModConfigReview(review) {
+  if (review.disk_error) {renderModConfigDiskRepair(review); return;}
+  if ($('mod-config-disk-repair').open) $('mod-config-disk-repair').close();
+  const conflict = review.conflict, restoring = review.action === 'restore', merging = review.merging;
+  $('mod-config-review-summary').classList.remove('notice');
+  $('mod-config-review-title').textContent = merging ? 'Combine edits with disk changes' : conflict ? 'This file changed on disk' : restoring ? 'Restore previous version' : 'Review configuration changes';
+  $('mod-config-review-name').textContent = '/' + review.current.name;
+  $('mod-config-review-summary').textContent = merging ? (review.manual
+    ? 'This file is large. Combine the disk changes into your draft manually in the editable pane, then use it as a draft for review.'
+    : 'Choose your edit or the disk value only for the differences below. Matching changes are skipped automatically.') : conflict
+    ? 'Your edits are preserved. Compare them with the latest disk version before deciding how to continue.'
+    : restoring ? 'Restoring replaces the current file and keeps it as the next undo version. Previous version saved: ' + new Date(review.saved_at).toLocaleString()
+    : 'Nothing has been written yet. Saving keeps one previous version of this file.';
+  $('mod-config-review-help').textContent = merging ? 'Nothing is saved here. The combined result returns to the editor for review before saving.' : review.diff_limited ? 'Use the complete file comparison below. A line diff is omitted for this comparison.'
+    : '- removed from disk version; + added in proposed version. Line endings are shown consistently in the editor.';
+  $('mod-config-disk').value = review.diskDraft ?? review.current.content;
+  $('mod-config-disk').readOnly = true;
+  $('mod-config-disk-heading').textContent = review.diskDraft === undefined ? 'Latest version on disk' : 'Corrected disk copy — not saved yet';
+  $('mod-config-earlier-disk-panel').hidden = review.staleDiskDraft === undefined;
+  $('mod-config-earlier-disk').value = review.staleDiskDraft ?? '';
+  $('mod-config-proposed').value = review.content;
+  $('mod-config-proposed').readOnly = !merging || !review.manual;
+  $('mod-config-proposed-heading').textContent = merging ? 'Combined draft' : 'Your proposed version';
+  $('mod-config-base').value = review.base.content;
+  $('mod-config-base-panel').hidden = !conflict && !merging;
+  $('mod-config-comparison').open = conflict || merging || review.diff_limited;
+  $('mod-config-comparison').hidden = !!(merging && review.choices?.length);
+  $('mod-config-merge-choices').hidden = !(merging && review.choices?.length);
+  $('mod-config-merge-choices').replaceChildren();
+  if (merging) for (const choice of review.choices || []) {
+    const fieldset = node('fieldset', undefined, 'mod-merge-choice');
+    fieldset.append(node('legend', choice.label));
+    const versions = node('div', undefined, 'mod-merge-options');
+    for (const [value, title, content] of [['mine', 'Use my edit', choice.mine], ['disk', 'Use disk value', choice.disk]]) {
+      const label = node('label');
+      const heading = node('span', undefined, 'inline-label');
+      const input = document.createElement('input'); input.type = 'radio'; input.name = 'mod-merge-' + choice.id; input.value = value;
+      input.checked = review.mergeSelections[choice.id] === value;
+      input.onchange = () => {review.mergeSelections[choice.id] = value; modConfigMergeReady();};
+      heading.append(input, node('span', title)); label.append(heading, node('pre', content)); versions.append(label);
+    }
+    const original = document.createElement('details');
+    original.append(node('summary', 'Originally loaded value'), node('pre', choice.original));
+    fieldset.append(versions, original); $('mod-config-merge-choices').append(fieldset);
   }
-  $('mod-config-status').textContent = 'Saved ' + name + '. Restart the server to load these values.';
+  $('mod-config-diff').hidden = merging || review.diff_limited;
+  const lines = (review.diff || 'No text changes.').split('\n').map(line => {
+    const span = node('span', line + '\n');
+    if (line.startsWith('+')) span.className = 'diff-added';
+    if (line.startsWith('-')) span.className = 'diff-removed';
+    return span;
+  });
+  $('mod-config-diff').replaceChildren(...lines);
+  $('mod-config-review-confirm').hidden = conflict && !merging;
+  $('mod-config-review-confirm').textContent = merging ? 'Use combined draft' : restoring ? 'Restore this version' : 'Save file';
+  $('mod-config-review-cancel').textContent = merging ? 'Cancel merge' : 'Continue editing';
+  $('mod-config-use-disk').hidden = !conflict || merging;
+  $('mod-config-keep-draft').hidden = !conflict || merging;
+  $('mod-config-combine').hidden = !conflict || merging;
+  modConfigMergeReady();
+  if (!$('mod-config-review').open) $('mod-config-review').showModal();
+}
+function renderModConfigDiskRepair(review) {
+  if ($('mod-config-review').open) $('mod-config-review').close();
+  $('mod-config-disk-repair-name').textContent = '/' + review.current.name;
+  $('mod-config-disk-error').textContent = 'The disk version has invalid syntax: ' + review.disk_error;
+  $('mod-config-disk-repair-content').value = review.diskDraft ?? review.current.content;
+  $('mod-config-disk-repair-earlier').hidden = review.staleDiskDraft === undefined;
+  $('mod-config-disk-repair-earlier-content').value = review.staleDiskDraft ?? '';
+  if (!$('mod-config-disk-repair').open) $('mod-config-disk-repair').showModal();
+}
+$('mod-config-disk-repair-content').addEventListener('input', () => {
+  const review = modConfigReview;
+  if (!review) return;
+  review.diskDraft = $('mod-config-disk-repair-content').value;
+});
+async function recheckModConfigReview(review) {
+  try {
+    const result = await api('/api/mod-configs/preview', {name: review.current.name, revision: review.base.revision,
+      content: review.draft, action: review.action === 'restore' ? 'restore' : 'save'});
+    modConfigReview = {...review, ...result};
+    renderModConfigReview(modConfigReview);
+  } catch (error) {
+    closeModConfigReview(); modConfigValidation(error.message, true);
+  }
+}
+$('mod-config-disk-repair-continue').onclick = action(async () => {
+  const review = modConfigReview;
+  if (!review || modConfigBusy) return;
+  const content = $('mod-config-disk-repair-content').value;
+  const status = $('mod-config-disk-error');
+  modConfigBusy = true; modConfigButtons();
+  document.querySelectorAll('#mod-config-disk-repair button').forEach(button => button.disabled = true);
+  status.textContent = 'Validating disk corrections…';
+  try {
+    const result = await api('/api/mod-configs/preview', {name: review.current.name, revision: review.base.revision,
+      content: review.draft, disk_content: content, disk_revision: review.current.revision, action: review.action});
+    if (modConfigReview !== review) return;
+    if ($('mod-config-disk-repair-content').value !== content) {status.textContent = 'Corrections changed while validating. Validate again to continue.'; return;}
+    modConfigReview = {...review, ...result, diskDraft: content};
+    renderModConfigReview(modConfigReview);
+  } catch (error) {
+    if (error.conflict) {
+      await recheckModConfigReview(modConfigDiskChanged(review, error.conflict));
+    } else if (modConfigReview === review) {
+      status.textContent = error.message; status.scrollIntoView({block: 'nearest'});
+    }
+  } finally {
+    modConfigBusy = false; modConfigButtons();
+    document.querySelectorAll('#mod-config-disk-repair button').forEach(button => button.disabled = false);
+  }
+});
+function modConfigMergePayload(review) {
+  return {name: review.current.name, revision: review.current.revision,
+    base_content: review.base.content, content: review.draft,
+    ...(review.diskDraft === undefined ? {} : {disk_content: review.diskDraft})};
+}
+function modConfigDiskChanged(review, current) {
+  return {...review, current, diskDraft: undefined, staleDiskDraft: review.diskDraft ?? review.staleDiskDraft,
+    merging: false, conflict: true, diff: null, diff_limited: true};
+}
+async function previewModConfig(restoring = false) {
+  if (!modConfig || modConfigBusy) return;
+  if (!restoring && !modConfigDirty()) return;
+  const base = modConfig, draft = $('mod-config-content').value;
+  const diskDraft = base.diskRepair?.revision === base.revision ? base.diskRepair.content : undefined;
+  if (restoring && modConfigDirty() && !await confirmAction('Review a restore?', 'Your unsaved edits remain in the editor until you confirm a restore. Restoring will replace them.', base.name, 'Review previous version')) return;
+  modConfigBusy = true; modConfigButtons();
+  try {
+    const review = await api('/api/mod-configs/preview', {name: base.name, revision: base.revision, content: draft, action: restoring ? 'restore' : 'save',
+      ...(diskDraft === undefined ? {} : {disk_content: diskDraft, disk_revision: base.revision})});
+    if (modConfig !== base) return;
+    if (!restoring && $('mod-config-content').value === draft && modConfigEditorText(review.current.content) === draft) {
+      showModConfig(review.current);
+      $('mod-config-status').textContent = 'Your changes already match the disk version. No save is needed.';
+      modConfigValidation('No unsaved changes.');
+      return;
+    }
+    // A restore conflict compares the user's draft with disk, not an old undo snapshot.
+    if (review.conflict && restoring) {
+      review.content = draft; review.diff = null; review.diff_limited = true; review.action = 'save';
+    }
+    modConfigReview = {...review, base, draft, diskDraft};
+    renderModConfigReview(modConfigReview);
+  } catch (error) {
+    if (error.conflict) await recheckModConfigReview(modConfigDiskChanged({base, draft, diskDraft, action: restoring ? 'restore' : 'save'}, error.conflict));
+    else modConfigValidation(error.message, true);
+  } finally {modConfigBusy = false; modConfigButtons();}
+}
+$('mod-config-form').onsubmit = action(() => previewModConfig());
+$('mod-config-undo').onclick = action(() => previewModConfig(true));
+function closeModConfigReview() { $('mod-config-review').close(); $('mod-config-disk-repair').close(); modConfigReview = null; }
+async function cancelModConfigReview() {
+  if (modConfigBusy) return;
+  const review = modConfigReview;
+  if ((review?.staleDiskDraft !== undefined || (review?.diskDraft !== undefined && review.diskDraft !== modConfigEditorText(review.current.content)))
+      && !await confirmAction('Discard disk-copy corrections?', 'Your main editor draft stays intact. The unsaved corrections to the disk copy will be discarded.', review.current.name, 'Discard corrections')) return;
+  closeModConfigReview();
+}
+$('mod-config-review-cancel').onclick = action(cancelModConfigReview);
+$('mod-config-disk-repair-cancel').onclick = action(cancelModConfigReview);
+$('mod-config-disk-repair').addEventListener('cancel', event => {
+  event.preventDefault();
+  if (!modConfigBusy) action(cancelModConfigReview)();
+});
+$('mod-config-review').addEventListener('cancel', event => {
+  event.preventDefault();
+  if (!modConfigBusy) action(cancelModConfigReview)();
+});
+function reviewStillCurrent(review) {
+  return modConfig === review.base && $('mod-config-content').value === review.draft;
+}
+$('mod-config-use-disk').onclick = action(async () => {
+  const review = modConfigReview;
+  if (!review || !reviewStillCurrent(review)) throw new Error('The editor changed. Close this comparison and review again.');
+  showModConfig(review.current, review.diskDraft ?? review.current.content, review.diskDraft);
+  closeModConfigReview();
+  $('mod-config-status').textContent = modConfigDirty() ? 'Disk corrections loaded as a draft. Review & save to write them.' : 'Loaded the disk version of ' + modConfig.name + '.';
+  modConfigValidation('Your previous draft was discarded. No file was saved.');
+});
+$('mod-config-keep-draft').onclick = action(async () => {
+  const review = modConfigReview;
+  if (!review || !reviewStillCurrent(review)) throw new Error('The editor changed. Close this comparison and review again.');
+  showModConfig(review.current, review.draft, review.diskDraft);
+  closeModConfigReview();
+  $('mod-config-status').textContent = 'Your draft is preserved against the latest disk version. Edit it as needed, then Review & save.';
+  modConfigValidation('Nothing has been saved. Review the disk changes before saving your draft.');
+});
+$('mod-config-combine').onclick = action(async () => {
+  const review = modConfigReview;
+  if (!review || modConfigBusy || !reviewStillCurrent(review)) return;
+  modConfigBusy = true; modConfigButtons();
+  document.querySelectorAll('#mod-config-review button').forEach(button => button.disabled = true);
+  try {
+    const diskDraft = review.diskDraft;
+    const result = await api('/api/mod-configs/merge', modConfigMergePayload(review));
+    if (review.diskDraft !== diskDraft) {
+      $('mod-config-review-summary').textContent = 'The disk corrections changed while combining. Review them and combine again.';
+      return;
+    }
+    modConfigReview = {...review, ...result, merging: true, mergeSelections: {}};
+    if (!result.choices?.length && !result.manual) adoptModConfigMerge(modConfigReview, result.content);
+    else renderModConfigReview(modConfigReview);
+  } catch (error) {
+    if (error.conflict) {
+      modConfigReview = modConfigDiskChanged(review, error.conflict);
+      await recheckModConfigReview(modConfigReview);
+      $('mod-config-review-summary').textContent = 'The file changed again. Compare the latest disk version before combining. Earlier disk corrections, if any, are preserved below.';
+    } else {
+      $('mod-config-review-summary').textContent = error.message;
+      $('mod-config-review-summary').classList.add('notice');
+      $('mod-config-review-summary').scrollIntoView({block: 'nearest'});
+    }
+  } finally {
+    modConfigBusy = false; modConfigButtons();
+    document.querySelectorAll('#mod-config-review button').forEach(button => button.disabled = false);
+    modConfigMergeReady();
+  }
+});
+$('mod-config-review-confirm').onclick = action(async () => {
+  const review = modConfigReview;
+  if (!review || (review.conflict && !review.merging) || modConfigBusy) return;
+  if (!reviewStillCurrent(review)) throw new Error('The editor changed. Close this preview and review again.');
+  if (review.merging) {
+    if (review.choices?.some(choice => !review.mergeSelections[choice.id])) return;
+    modConfigBusy = true; modConfigButtons();
+    document.querySelectorAll('#mod-config-review button').forEach(button => button.disabled = true);
+    try {
+      const result = review.manual ? {current: review.current, content: $('mod-config-proposed').value} : await api('/api/mod-configs/merge', {
+        ...modConfigMergePayload(review), choices: review.mergeSelections, resolve: true
+      });
+      adoptModConfigMerge({...review, current: result.current}, result.content);
+    } catch (error) {
+      if (error.conflict) {
+        modConfigReview = modConfigDiskChanged(review, error.conflict);
+        await recheckModConfigReview(modConfigReview);
+        $('mod-config-review-summary').textContent = 'The file changed again. Your draft is preserved; combine it with the latest disk version again.';
+      } else $('mod-config-review-summary').textContent = error.message;
+    } finally {
+      modConfigBusy = false; modConfigButtons();
+      document.querySelectorAll('#mod-config-review button').forEach(button => button.disabled = false);
+      modConfigMergeReady();
+    }
+    return;
+  }
+  modConfigBusy = true; modConfigButtons();
+  document.querySelectorAll('#mod-config-review button').forEach(button => button.disabled = true);
+  try {
+    const restoring = review.action === 'restore';
+    const saved = await api(restoring ? '/api/mod-configs/restore' : '/api/mod-configs', {
+      name: review.current.name, revision: review.current.revision, content: review.content,
+      history_revision: review.history_revision, confirm: true
+    });
+    if (modConfig !== review.base) return;
+    const editedDuringSave = $('mod-config-content').value !== review.draft;
+    showModConfig(saved, editedDuringSave ? $('mod-config-content').value : saved.content);
+    closeModConfigReview();
+    $('mod-config-status').textContent = (restoring ? 'Restored ' : 'Saved ') + saved.name + '. Restart the server to load these values.';
+    modConfigValidation(editedDuringSave ? 'Newer edits remain unsaved.' : saved.can_restore
+      ? 'The replaced version is available through Restore previous version.'
+      : 'No file contents changed. Undo becomes available after a save that changes this file.');
+  } catch (error) {
+    if (error.conflict && modConfig === review.base) {
+      modConfigReview = {...review, current: error.conflict, content: $('mod-config-content').value,
+        draft: $('mod-config-content').value, action: 'save', conflict: true, diff: null, diff_limited: true};
+      await recheckModConfigReview(modConfigReview);
+    } else {
+      $('mod-config-review-summary').textContent = error.message + ' Your editor contents are preserved.';
+    }
+  } finally {
+    modConfigBusy = false; modConfigButtons();
+    document.querySelectorAll('#mod-config-review button').forEach(button => button.disabled = false);
+  }
 });
 document.querySelectorAll('[data-view="mod-configs"]').forEach(button => button.addEventListener('click', action(refreshModConfigs)));
 window.addEventListener('beforeunload', event => { if (modConfigDirty()) { event.preventDefault(); event.returnValue = ''; } });
