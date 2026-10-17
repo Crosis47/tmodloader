@@ -1,0 +1,9 @@
+{
+  "version": "3.8.0",
+  "highlights": [
+    {"title": "A more capable config editor", "description": "Find configs outside ModConfigs, search by folder, review changes before saving, undo the last save, and recover from conflicting disk edits."},
+    {"title": "Mod profiles with their settings", "description": "Optionally save selected config files with a mod profile and restore them during a reviewed restart."},
+    {"title": "Support reports you can review", "description": "Preview versions, enabled mods, and recent errors with sensitive values removed before copying the report into a bug report."},
+    {"title": "Help is easier to find", "description": "Open the wiki, report an issue, or request a feature directly from the dashboard."}
+  ]
+}

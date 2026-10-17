@@ -31,6 +31,7 @@ import admin_journey
 import admin_profiles
 import admin_profile_configs
 import admin_support
+import admin_whatsnew
 import admin_playthroughs
 import admin_updates
 
@@ -521,6 +522,9 @@ def operation_request(path, payload):
 
 def api(method, path, query, payload):
     """Dispatch authenticated requests; feature handlers own validation and locking."""
+    if path == '/api/whats-new' and method in ('GET', 'POST'):
+        with STATE_LOCK:
+            return admin_whatsnew.dismiss(payload) if method == 'POST' else admin_whatsnew.status()
     if path == '/api/support-report' and method == 'GET':
         return admin_support.report(CONSOLE_LOG, running_mods(health()), workshop.CREDENTIAL.get())
     if (method == 'POST' and path != '/api/updates/check'
@@ -776,6 +780,10 @@ def update_announcement_worker():
 
 def main():
     global TOKEN_HASH, SETUP_CODE
+    try:
+        admin_whatsnew.initialize(admin_auth.token_path().exists())
+    except (OSError, ValueError, TypeError):
+        print('[ADMIN] Release highlights unavailable; dashboard remains available.', flush=True)
     previous = admin_recovery.status()['operation']
     if previous.get('state') == 'running':
         admin_recovery.record({**previous, 'state': 'interrupted', 'detail': 'Container restarted before recovery completion was recorded. Inspect game health and retained originals before retrying.'})

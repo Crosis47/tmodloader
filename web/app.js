@@ -1370,7 +1370,7 @@ document.querySelectorAll('[data-view="players"]').forEach(button => button.addE
 
 setInterval(() => { if (!document.hidden) refreshPlayers(true); }, 10000);
 
-$('login-form').onsubmit = action(async () => { token = $('token').value; await loadSettings(); await refresh(); checkContainerRelease(); $('token').value = ''; $('login').hidden = true; $('dashboard').hidden = false; $('logout').hidden = false; tell(''); clearInterval(timer); timer = setInterval(() => refresh().catch(error => tell(error.message)), 15000); clearInterval(consoleTimer); consoleTimer = setInterval(() => refreshConsole().catch(error => { $('console-status').textContent = error.message; }), 2000); });
+$('login-form').onsubmit = action(async () => { token = $('token').value; await loadSettings(); await refresh(); checkContainerRelease(); $('token').value = ''; $('login').hidden = true; $('dashboard').hidden = false; $('logout').hidden = false; tell(''); clearInterval(timer); timer = setInterval(() => refresh().catch(error => tell(error.message)), 15000); clearInterval(consoleTimer); consoleTimer = setInterval(() => refreshConsole().catch(error => { $('console-status').textContent = error.message; }), 2000); showWhatsNew().catch(() => {}); });
 
 $('logout').onclick = () => { token = ''; config = null; commandHistory = []; clearInterval(timer); clearInterval(consoleTimer); location.reload(); };
 
@@ -1395,6 +1395,41 @@ $('console-form').onsubmit = action(async () => {
 $('console-command').onkeydown = event => { if (!['ArrowUp', 'ArrowDown'].includes(event.key) || !commandHistory.length) return; event.preventDefault(); historyPosition = Math.max(0, Math.min(commandHistory.length, historyPosition + (event.key === 'ArrowUp' ? -1 : 1))); $('console-command').value = commandHistory[historyPosition] || ''; };
 
 $('refresh').onclick = action(refresh);
+
+let whatsNewNotice = null;
+async function showWhatsNew(manual = false) {
+  const signedIn = token;
+  const notice = await api('/api/whats-new');
+  if (!signedIn || token !== signedIn) return;
+  if (!notice.available) { if (manual) tell('Release highlights are unavailable for this version.'); return; }
+  whatsNewNotice = notice;
+  if (!manual && !notice.pending) return;
+  function openWhenReady() {
+    if (token !== signedIn || (!manual && !whatsNewNotice?.pending)) return;
+    if (document.querySelector('dialog[open]')) { setTimeout(openWhenReady, 1000); return; }
+    $('whats-new-title').textContent = 'What’s new in ' + notice.version;
+    $('whats-new-highlights').replaceChildren(...notice.highlights.map(item => {
+      const section = node('section'); section.append(node('h3', item.title), node('p', item.description)); return section;
+    }));
+    $('whats-new-notes').href = notice.url;
+    $('whats-new-status').textContent = '';
+    $('whats-new-dialog').showModal();
+  }
+  openWhenReady();
+}
+async function dismissWhatsNew() {
+  const button = $('whats-new-dismiss');
+  if (button.disabled || !whatsNewNotice) return;
+  button.disabled = true;
+  try {
+    whatsNewNotice = await api('/api/whats-new', {version: whatsNewNotice.version});
+    $('whats-new-dialog').close();
+  } catch (error) { $('whats-new-status').textContent = 'Could not save dismissal: ' + error.message; }
+  finally { button.disabled = false; }
+}
+$('whats-new-open').onclick = action(() => showWhatsNew(true));
+$('whats-new-dismiss').onclick = dismissWhatsNew;
+$('whats-new-dialog').addEventListener('cancel', event => { event.preventDefault(); dismissWhatsNew(); });
 
 $('support-report-open').onclick = action(async () => {
   const button = $('support-report-open'); button.disabled = true;

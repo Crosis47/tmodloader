@@ -18,6 +18,18 @@ import filter_client_mods
 
 
 class AdminTests(unittest.TestCase):
+    def test_upgrade_notice_auth_and_dismissal(self):
+        self.assertTrue(self.request('/api/whats-new', auth=False)[0].startswith('403'))
+        self.assertTrue(self.request('/api/whats-new', {'version': '3.8.0'}, auth=False)[0].startswith('403'))
+        server.admin_whatsnew.initialize(True)
+        status, body = self.request('/api/whats-new')
+        self.assertTrue(status.startswith('200'))
+        self.assertTrue(json.loads(body)['pending'])
+        self.assertTrue(self.request('/api/whats-new', {'version': 'old'})[0].startswith('400'))
+        status, body = self.request('/api/whats-new', {'version': '3.8.0'})
+        self.assertTrue(status.startswith('200'))
+        self.assertFalse(json.loads(body)['pending'])
+
     def test_support_report_auth_and_request_token_redaction(self):
         self.assertTrue(self.request('/api/support-report', auth=False)[0].startswith('403'))
         log = self.root / 'container-console.log'
