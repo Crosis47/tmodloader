@@ -1,10 +1,10 @@
 {
-  "updated_at": "2026-10-30 02:42 UTC",
+  "updated_at": "2026-10-30 10:12 UTC",
   "repository": "Crosis47/tmodloader",
   "docker_image": "crosis47/tmodloader",
   "ghcr_image": "ghcr.io/crosis47/tmodloader",
   "metrics": {
-    "docker_pulls": 3998,
+    "docker_pulls": 4006,
     "docker_stars": 0,
     "github_stars": 3,
     "github_forks": 1,
@@ -12,10 +12,10 @@
     "issues_closed": 0,
     "prs_open": 0,
     "prs_merged": 52,
-    "ghcr_pulls": 4250,
-    "ghcr_day": 1,
-    "ghcr_week": 140,
-    "ghcr_week_start": "2026-10-23",
-    "ghcr_week_end": "2026-10-29"
+    "ghcr_pulls": 4257,
+    "ghcr_day": 8,
+    "ghcr_week": 147,
+    "ghcr_week_start": "2026-10-24",
+    "ghcr_week_end": "2026-10-30"
   }
 }
