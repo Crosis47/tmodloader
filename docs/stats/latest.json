@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-01 18:59 UTC",
+  "updated_at": "2026-11-01 22:54 UTC",
   "repository": "Crosis47/tmodloader",
   "docker_image": "crosis47/tmodloader",
   "ghcr_image": "ghcr.io/crosis47/tmodloader",
@@ -12,9 +12,9 @@
     "issues_closed": 0,
     "prs_open": 0,
     "prs_merged": 52,
-    "ghcr_pulls": 4306,
-    "ghcr_day": 17,
-    "ghcr_week": 104,
+    "ghcr_pulls": 4309,
+    "ghcr_day": 20,
+    "ghcr_week": 107,
     "ghcr_week_start": "2026-10-26",
     "ghcr_week_end": "2026-11-01"
   }
