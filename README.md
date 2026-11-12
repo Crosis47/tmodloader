@@ -17,12 +17,11 @@
 [![Issues closed](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/issues_closed-b2e439a556d248d3.svg)](https://github.com/Crosis47/tmodloader/issues?q=is%3Aissue+is%3Aclosed)
 [![PRs open](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_open-bea1ff39483dae9f.svg)](https://github.com/Crosis47/tmodloader/pulls)
 [![PRs merged](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_merged-1e181c4c58d985a9.svg)](https://github.com/Crosis47/tmodloader/pulls?q=is%3Apr+is%3Amerged)
+[![Available on TrueNAS Community Apps](https://img.shields.io/badge/TrueNAS-Community%20Apps-0095D5?style=for-the-badge&logo=truenas&logoColor=white)](https://apps.truenas.com/catalog/tmodloader_community/)
+[![Available on Unraid Community Apps](https://img.shields.io/badge/Unraid-Community%20Apps-F15A2C?style=for-the-badge&logo=unraid&logoColor=white)](https://ca.unraid.net/apps/tmodloader-web-managed-server-0gtn9yh0fn7v39)
 
 Updated **2026-11-11 22:47 UTC** · Refreshed hourly · [Metric definitions](docs/repository-stats.md)
 <!-- repository-stats:end -->
-
-[![Available on TrueNAS Community Apps](https://img.shields.io/badge/TrueNAS-Community%20Apps-0095D5?style=for-the-badge&logo=truenas&logoColor=white)](https://apps.truenas.com/catalog/tmodloader_community/)
-[![Available on Unraid Community Apps](https://img.shields.io/badge/Unraid-Community%20Apps-F15A2C?style=for-the-badge&logo=unraid&logoColor=white)](https://ca.unraid.net/apps/tmodloader-web-managed-server-0gtn9yh0fn7v39)
 
 Run a modded Terraria server in Docker, with a built-in web dashboard for managing
 worlds, Workshop mods, players, and backups. Keep your server's data across
