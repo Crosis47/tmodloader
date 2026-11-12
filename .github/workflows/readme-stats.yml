@@ -2,7 +2,7 @@ name: Refresh README statistics
 
 on:
   schedule:
-    - cron: '23 * * * *'
+    - cron: '0 23 * * *'
   workflow_dispatch:
   pull_request:
     paths:
