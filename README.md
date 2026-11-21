@@ -9,10 +9,10 @@
 <!-- repository-stats:start -->
 [![Docker pulls](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/docker_pulls-6c3a02fb55b275d1.svg)](https://hub.docker.com/r/crosis47/tmodloader)
 [![Docker stars](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/docker_stars-24ed5757f6c84e3d.svg)](https://hub.docker.com/r/crosis47/tmodloader)
-[![GHCR pulls](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_pulls-58c36dd014fb91a5.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
-[![GHCR pulls / 7d](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_week-e080d156559f4caf.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
+[![GHCR pulls](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_pulls-7cbab9053dd95173.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
+[![GHCR pulls / 7d](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_week-397b748410c54d1a.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
 
-[![GHCR pulls today](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_day-cf776b5a0147f015.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
+[![GHCR pulls today](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/ghcr_day-84993c4528c39b31.svg)](https://github.com/Crosis47/tmodloader/pkgs/container/tmodloader)
 [![GitHub stars](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/github_stars-21c734db33e9c996.svg)](https://github.com/Crosis47/tmodloader/stargazers)
 [![GitHub forks](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/github_forks-49845a00a10bcd1d.svg)](https://github.com/Crosis47/tmodloader/forks)
 
@@ -21,7 +21,7 @@
 [![PRs open](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_open-bea1ff39483dae9f.svg)](https://github.com/Crosis47/tmodloader/pulls)
 [![PRs merged](https://raw.githubusercontent.com/Crosis47/tmodloader/master/docs/stats/badges/prs_merged-1e181c4c58d985a9.svg)](https://github.com/Crosis47/tmodloader/pulls?q=is%3Apr+is%3Amerged)
 
-Updated **2026-11-20 20:34 UTC** · Refreshed hourly · [Metric definitions](docs/repository-stats.md)
+Updated **2026-11-21 02:33 UTC** · Refreshed hourly · [Metric definitions](docs/repository-stats.md)
 <!-- repository-stats:end -->
 
 Run a modded Terraria server in Docker, with a built-in web dashboard for managing
